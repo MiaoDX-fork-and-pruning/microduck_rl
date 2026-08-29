@@ -82,3 +82,23 @@ setsid nohup scripts/monitor_cloudml_job.sh <JOB_ID> 1800 \
 
 The monitor writes a summary to `cloudml/monitor-<JOB_ID>.log` and stops
 automatically when the job reaches a terminal state.
+
+## Video gallery
+
+Collect rollout videos from one or more task directories and build a standalone
+HTML review page (no server or Python package required). Put each task under a
+separate child directory so its task name is retained in the gallery:
+
+```bash
+python scripts/build_video_gallery.py /path/to/rollouts/<TASK_ID> \
+  -o artifacts/video-gallery --title "Microduck policy review"
+```
+
+You can pass several task directories in one command. The resulting
+`index.html` provides task filtering, filename search, and native video
+controls; copy the complete `artifacts/video-gallery/` directory to the LAN
+machine and open the HTML file directly.
+
+Open `artifacts/video-gallery/index.html` locally, or copy that directory to
+the LAN machine. The page provides task filtering, filename search, and native
+video controls.
