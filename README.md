@@ -51,12 +51,34 @@ uv run train Mjlab-Velocity-Flat-MicroDuck --env.scene.num-envs 4096 \
     --agent.run-name resume --agent.load-checkpoint model_29999.pt --agent.resume True
 ```
 
+### Visualizing a checkpoint
+
+`play` opens the interactive MuJoCo viewer by default and does not write a
+video. Add `--video True` to record an MP4. The checkpoint directory must be
+writable because mjlab creates `videos/play/` beside the checkpoint:
+
+```bash
+uv run play Mjlab-Velocity-Flat-MicroDuck \
+    --checkpoint-file /path/to/model_4000.pt \
+    --num-envs 1 --video True --video-length 300
+```
+
+After ONNX export, use `scripts/infer_policy.py` for a deployment-style CPU
+MuJoCo rehearsal and runtime policy hot-swapping:
+
+```bash
+uv run scripts/infer_policy.py --walking /path/to/walking.onnx --new-cmd-obs
+```
+
 No GPU? Add `--hf-jobs` to any train command to run it on Hugging Face Jobs
 instead of locally (see [scripts/hf/README.md](scripts/hf/README.md)).
 
 ## Tasks
 
 `uv run list-envs` prints the live registry. Flat/Rough variants exist where noted.
+The registry lists buildable configurations; it is not a record of completed
+training runs or reviewed rollout videos. Reproduce tasks one at a time with a
+smoke test, full training, and post-training validation.
 
 <!-- SHOWCASE GRID — one short GIF per task family (sim or real), 3 per row.
      Priority order if you only record a few: Velocity, VelStand (fall+recover),
