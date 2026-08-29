@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "seed": 20260829,
+  "duration_s": 75,
+  "command_rate_hz": 50,
+  "transitions": [
+    {"at_s": 0, "from": "stand", "to": "stand"},
+    {"at_s": 8, "from": "stand", "to": "velocity_flat", "command": [0.15, 0.0, 0.0]},
+    {"at_s": 24, "from": "velocity_flat", "to": "stand", "command": [0.0, 0.0, 0.0]},
+    {"at_s": 34, "from": "stand", "to": "sitstand_flat"},
+    {"at_s": 45, "from": "sitstand_flat", "to": "stand"},
+    {"at_s": 55, "from": "stand", "to": "ground_pick_flat"},
+    {"at_s": 66, "from": "ground_pick_flat", "to": "stand"},
+    {"at_s": 70, "from": "kick_flat", "to": "stand", "unsupported_reason": "kick teacher not yet accepted"}
+  ]
+}

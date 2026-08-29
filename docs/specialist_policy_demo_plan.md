@@ -89,6 +89,19 @@ Unsupported transitions are listed explicitly rather than silently attempted.
 
 ## Deliverables and completion gate
 
+The handoff is validated offline with:
+
+```bash
+python scripts/validate_specialist_artifacts.py \
+  docs/specialist_artifact_manifest.example.json \
+  docs/specialist_demo_scenario.json
+```
+
+Copy the example manifest, replace artifact paths and SHA-256 values after each
+accepted export, then run the same command before producing the gallery. The
+scenario file is the single source for seed, timing, and legal/unsupported
+switches; runners must consume it rather than embedding a second schedule.
+
 The specialist track is complete when every included task has:
 
 1. an accepted checkpoint and immutable manifest;
@@ -108,4 +121,3 @@ checkpoint/ONNX manifest becomes the teacher/fallback input to
 - teacher rollout datasets, Behavior Cloning, or DAgger;
 - multi-task PPO, MoE, or transition-curriculum training;
 - hardware deployment or runtime repository changes.
-
