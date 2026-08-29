@@ -1,0 +1,33 @@
+{
+  "version": 1,
+  "policies": [
+    {
+      "id": "stand",
+      "task": "Mjlab-StandUp-Flat-MicroDuck",
+      "observation_dim": 61,
+      "artifacts": {"checkpoint": "artifacts/stand/model_accepted.pt", "onnx": "artifacts/stand/policy.onnx"},
+      "sha256": {"checkpoint": "", "onnx": ""}
+    },
+    {
+      "id": "velocity_flat",
+      "task": "Mjlab-Velocity-Flat-MicroDuck",
+      "observation_dim": 61,
+      "artifacts": {"checkpoint": "artifacts/velocity_flat/model_accepted.pt", "onnx": "artifacts/velocity_flat/policy.onnx"},
+      "sha256": {"checkpoint": "", "onnx": ""}
+    },
+    {
+      "id": "sitstand_flat",
+      "task": "Mjlab-SitStand-Flat-MicroDuck",
+      "observation_dim": 61,
+      "artifacts": {"checkpoint": "artifacts/sitstand_flat/model_accepted.pt", "onnx": "artifacts/sitstand_flat/policy.onnx"},
+      "sha256": {"checkpoint": "", "onnx": ""}
+    },
+    {
+      "id": "ground_pick_flat",
+      "task": "Mjlab-GroundPick-Flat-MicroDuck",
+      "observation_dim": 61,
+      "artifacts": {"checkpoint": "artifacts/ground_pick_flat/model_accepted.pt", "onnx": "artifacts/ground_pick_flat/policy.onnx"},
+      "sha256": {"checkpoint": "", "onnx": ""}
+    }
+  ]
+}
