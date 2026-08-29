@@ -70,3 +70,15 @@ the resolved image, source snapshot, output path, task ID, and training size.
 WandB and Hugging Face are not required. `--agent.logger tensorboard` avoids
 WandB authentication, and checkpoints persist directly on the writable JuiceFS
 mount under `logs/rsl_rl/<experiment>/<run>/model_*.pt`.
+
+## Background monitor
+
+Run a detached monitor that checks the job and JuiceFS every 30 minutes:
+
+```bash
+setsid nohup scripts/monitor_cloudml_job.sh <JOB_ID> 1800 \
+  </dev/null >>/tmp/microduck-monitor.out 2>&1 &
+```
+
+The monitor writes a summary to `cloudml/monitor-<JOB_ID>.log` and stops
+automatically when the job reaches a terminal state.
