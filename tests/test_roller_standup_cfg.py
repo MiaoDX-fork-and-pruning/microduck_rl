@@ -119,20 +119,13 @@ def test_task_is_registered():
     assert "Mjlab-RollerStandUp-Flat-MicroDuck" in list_tasks()
 
 
-def test_joint_indices_match_actual_roller_model():
-    """Verrou : les roues passives sont intercalées dans l'ordre des joints.
-
-    Réutiliser les indices du standup ([0-4, 9-13]) donnerait des récompenses
-    qui pointent sur des roues. Ce test compile le vrai MjSpec du robot rollers
-    et vérifie les noms aux indices utilisés. Pur CPU, pas de sim.
-    """
+def test_reward_indices_match_servo_view_of_actual_roller_model():
+    """Reward indices address the passive-filtered 14-servo view."""
     import mujoco
 
     from mjlab_microduck.robot.microduck_constants import get_walk_rollers_spec
     from mjlab_microduck.tasks.microduck_roller_standup_env_cfg import (
-        _LEG_JOINTS,
-        _NECK_JOINTS,
-        _WHEEL_JOINTS,
+        _LEG_SERVO_INDICES,
     )
 
     model = get_walk_rollers_spec().compile()
@@ -142,18 +135,12 @@ def test_joint_indices_match_actual_roller_model():
         if model.jnt_type[j] != mujoco.mjtJoint.mjJNT_FREE
     ]
 
-    assert [articulated[i] for i in _LEG_JOINTS] == [
+    servos = [name for name in articulated if not name.startswith("passive_")]
+    assert len(servos) == 14
+    assert [servos[i] for i in _LEG_SERVO_INDICES] == [
         "left_hip_yaw", "left_hip_roll", "left_hip_pitch", "left_knee", "left_ankle",
         "right_hip_yaw", "right_hip_roll", "right_hip_pitch", "right_knee", "right_ankle",
     ]
-    assert [articulated[i] for i in _NECK_JOINTS] == [
-        "neck_pitch", "head_pitch", "head_yaw", "head_roll",
-    ]
-    assert [articulated[i] for i in _WHEEL_JOINTS] == [
-        "passive_LF_wheel", "passive_LR_wheel", "passive_RF_wheel", "passive_RR_wheel",
-    ]
-    # Aucun recouvrement, et les trois listes couvrent tous les joints.
-    assert len(set(_LEG_JOINTS) | set(_NECK_JOINTS) | set(_WHEEL_JOINTS)) == len(articulated)
 
 
 def test_recovery_rewards_present_with_expected_weights():
@@ -202,11 +189,11 @@ def test_recovery_rewards_use_roller_heights_not_walker_heights():
 
 
 def test_pose_rewards_target_legs_only_at_roller_indices():
-    from mjlab_microduck.tasks.microduck_roller_standup_env_cfg import _LEG_JOINTS
+    from mjlab_microduck.tasks.microduck_roller_standup_env_cfg import _LEG_SERVO_INDICES
 
     cfg = make_microduck_roller_standup_env_cfg()
     for name in ("pose_stand_legs", "pose_stand_l1", "standing_composite"):
-        assert cfg.rewards[name].params["joint_indices"] == _LEG_JOINTS
+        assert cfg.rewards[name].params["joint_indices"] == _LEG_SERVO_INDICES
         # target_overrides=None → la cible est HOME (default_joint_pos).
         assert cfg.rewards[name].params["target_overrides"] is None
 
