@@ -9,7 +9,7 @@ require rebuilding the image.
 Build once:
 
 ```bash
-docker build -t microduck-rl:cuda129 .
+docker build -t microduck-rl:cuda128 .
 ```
 
 Run the repository's required smoke test with the current working tree mounted
@@ -21,7 +21,7 @@ docker run --rm --gpus all \
   -e PYTHONPATH=/workspace/src \
   -v "$PWD:/workspace:ro" \
   -v "$PWD/docker-output:/outputs" \
-  microduck-rl:cuda129 \
+  microduck-rl:cuda128 \
   Mjlab-Velocity-Flat-MicroDuck \
   --env.scene.num-envs 64 \
   --agent.max_iterations 5 \
