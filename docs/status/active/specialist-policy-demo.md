@@ -5,8 +5,8 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session
 Latest intent: implement the approved specialist policy plan via intuitive-flow
 
-Current slice: S0 local preflight is complete. S1 CloudML submission is the
-next boundary.
+Current slice: S0 local preflight is complete; S1 P0 CloudML training is
+running.
 
 Last proven evidence:
 
@@ -55,23 +55,21 @@ rehearsal. A full MuJoCo/Xvfb check using the S0 ONNX in all roles executed all
 12 events and 4,500 frames, then exited at `Scenario complete`. Full CPU suite:
 180 passed, 1 skipped.
 
-Next slice: upload the prepared immutable source snapshot, then submit the P0
-Velocity + RollerStandUp pilots after explicit authorization.
+Next slice: monitor and accept the P0 Velocity + RollerStandUp pilots, then
+launch the remaining Track A and Track B waves.
 
-Prepared P0 launch package:
+Prepared and live P0 launch package:
 
-- source commit: `104d1308f050788f949aba5747baefe7a2f564f2`;
-- local snapshot directory:
-  `/tmp/microduck-source-104d1308f050-20260829T133725Z` (240 files, 29 MB);
-- snapshot tar SHA-256:
-  `75c470b0c902417f6c9028f6500160420504a06fbd72fb014ae275abf5bcc4ea`;
-- proposed immutable source destination:
-  `/dongxu/microduck_rl/source/104d1308f050-20260829T133725Z`;
+- source commit: `652b7ce1b19f6c889b5683b60e439a29880605ce`;
+- uploaded snapshot tar SHA-256:
+  `c06bc12a138d10ff245bd6cdc4fcf469e830d357382692d96d223b15c0e4c253`;
+- uploaded source destination:
+  `/dongxu/microduck_rl/source/652b7ce-20260829T140000Z/`;
 - shared image:
   `micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503`;
 - job specifications:
-  `cloudml/microduck-specialist-p0-velocity-104d130.yaml` and
-  `cloudml/microduck-specialist-p0-roller-standup-104d130.yaml`;
+  `cloudml/microduck-specialist-p0-velocity-652b7ce.yaml` and
+  `cloudml/microduck-specialist-p0-roller-standup-652b7ce.yaml`;
 - CloudML context/workspace: `executor` / `10076`;
 - lane: queue `11759`, guaranteed single-GPU
   `r49-24g | 13 CPU | 107 GiB`, priority 5, non-preemptible;
@@ -81,16 +79,29 @@ Prepared P0 launch package:
 - prior lineage `t-20260829173040-5fdmx` succeeded and is terminal; no active
   Microduck job was found during the preflight query.
 
+Live P0 jobs:
+
+- Velocity: `t-20260829233250-qzkbi`, output
+  `/dongxu/microduck_rl/runs/specialist-p0/velocity-652b7ce-v2`;
+- RollerStandUp: `t-20260829233248-jaq6f`, output
+  `/dongxu/microduck_rl/runs/specialist-p0/roller-standup-652b7ce-v2`.
+
+These are only the P0 calibration pair. The complete initial coverage is 13
+independent tasks: 6 Track A teachers and 7 Track B showcase policies. After
+P0 acceptance, the remaining 11 tasks will be submitted in bounded waves,
+subject to fresh queue/quota checks and independent output prefixes.
+
 The snapshot is a `git archive` of the recorded commit. It excludes the
 unrelated untracked `tmp/` directory and the local submission-control files.
 Both YAML files parse successfully. The installed CML client has no submission
 dry-run, so schema validation deliberately stops before `custom_train submit`.
 
-Next proof: record the uploaded snapshot URI/hash and the two CloudML job IDs,
-then verify their resolved mounts, resource lanes, and writable output prefixes.
+Next proof: verify both P0 checkpoints and acceptance reports, then record the
+remaining wave job IDs, resolved mounts, resource lanes, and output prefixes.
 
-Stop condition: do not consume shared/paid CloudML capacity or upload a large
-image/source artifact without explicit authorization and resolved destinations.
+Stop condition: do not launch later waves without recording P0 acceptance and a
+fresh queue/quota check; failed tasks remain isolated and do not overwrite
+completed lineages.
 
 No-touch scope: Generalist 71D schema, distillation, runtime repository, robot
 hardware, Rough/Backlash variants.
