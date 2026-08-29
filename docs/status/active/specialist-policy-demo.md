@@ -42,6 +42,11 @@ penalties, a numeric success rate and main-task metric, and a non-empty video
 review. The example manifest remains a placeholder template until real
 checkpoints exist; it is intentionally not a valid handoff.
 
+`scripts/build_video_gallery.py --manifest ...` now consumes that same evidence
+contract. It discovers diagnostic clips and renders acceptance status, success
+and main-task metrics, penalties, video review, failure note, and all artifact
+hashes in the standalone HTML index. Full CPU suite: 175 passed, 1 skipped.
+
 Next slice: upload the prepared immutable source snapshot, then submit the P0
 Velocity + RollerStandUp pilots after explicit authorization.
 

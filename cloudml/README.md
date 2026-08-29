@@ -132,10 +132,20 @@ python scripts/build_video_gallery.py /path/to/rollouts/<TASK_ID> \
   -o artifacts/video-gallery --title "Microduck policy review"
 ```
 
-You can pass several task directories in one command. The resulting
-`index.html` provides task filtering, filename search, and native video
-controls; copy the complete `artifacts/video-gallery/` directory to the LAN
-machine and open the HTML file directly.
+For the specialist handoff, build from the validated manifest so each clip is
+indexed with its task, acceptance metrics, penalty values, video review,
+failure note, and artifact hashes:
+
+```bash
+python scripts/build_video_gallery.py \
+  --manifest artifacts/specialist/manifest.json \
+  -o artifacts/video-gallery --title "Microduck specialist policy review"
+```
+
+You can also pass several task directories in one command. The resulting
+`index.html` provides task filtering, filename search, native video controls,
+and manifest evidence; copy the complete `artifacts/video-gallery/` directory
+to the LAN machine and open the HTML file directly.
 
 Open `artifacts/video-gallery/index.html` locally, or copy that directory to
 the LAN machine. The page provides task filtering, filename search, and native
