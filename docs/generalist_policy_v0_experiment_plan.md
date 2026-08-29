@@ -1,9 +1,13 @@
-# Generalist policy v0: local experiment and implementation plan
+# Generalist policy v0: distillation and integration plan
 
 Status: **proposed execution plan**  
 Architecture reference: [`generalist_policy_v0_design.md`](generalist_policy_v0_design.md)
 
-This plan is written for long-running local development with Codex or another coding agent. It separates deterministic engineering from empirical policy work, limits each experiment to one primary question, and preserves specialist baselines throughout.
+This plan starts after the independent specialist execution plan has produced
+accepted checkpoints, ONNX files, evaluation reports, and manifests. It covers
+only distillation and Generalist integration; specialist training and the long
+switching demo live in [`specialist_policy_demo_plan.md`](specialist_policy_demo_plan.md).
+Each milestone below can be stopped and evaluated independently.
 
 ## 1. Working principles
 
@@ -117,11 +121,13 @@ Recommended reviewable patches:
 
 Avoid one branch that simultaneously changes observation layout, rewards, runner, exporter, and runtime assumptions.
 
-## 5. Milestone M0 — freeze teacher and baseline evidence
+## 5. Milestone M0 — import and freeze specialist evidence
 
 ### Objective
 
-Create a reproducible baseline against which every generalist candidate is compared.
+Import the outputs of the independent specialist plan and freeze the exact
+teacher baseline against which every Generalist candidate is compared. Do not
+retrain specialists here.
 
 ### Deliverables
 
@@ -799,7 +805,7 @@ A practical first queue:
 
 | Order | ID | Scope | Main variable | Required decision |
 |---:|---|---|---|---|
-| 1 | M0 | specialists | none | freeze reproducible baselines |
+| 1 | M0 | specialist manifest | none | import and freeze reproducible baselines |
 | 2 | SCHEMA-00 | infrastructure | v2 71D | adapters/golden vectors correct? |
 | 3 | DATA-G0-00 | G0 | small dataset | collector/replay correct? |
 | 4 | BC-00 | G0 | random init | can dense H1 fit? |
@@ -815,7 +821,11 @@ A practical first queue:
 | 14 | PPO-00 | smallest failing set | RL fine-tune | only if distillation misses gates |
 | 15 | EXPORT-00 | candidate | ONNX/metadata | reproducible runtime handoff? |
 
-This queue is intentionally sequential. Large grid sweeps before the pipeline is trustworthy will produce expensive but ambiguous results.
+P0 is intentionally sequential because it calibrates the infrastructure. Once
+P0 passes, A1 and B1 are parallel waves; do not serialize independent policy
+runs. Large hyperparameter sweeps are still forbidden until the baseline
+pipeline is trustworthy, but independent task IDs should fill the available
+GPU lanes.
 
 ## 19. Completion definition for the local program
 

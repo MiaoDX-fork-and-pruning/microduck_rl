@@ -67,6 +67,44 @@ placeholders, then inspect and submit it using the Executor CML passthrough:
 Submitting consumes CloudML resources and should only be done after reviewing
 the resolved image, source snapshot, output path, task ID, and training size.
 
+### Parallel specialist waves
+
+Specialist policies are independent jobs and should be submitted in parallel
+after one gait and one episodic pilot has established the real throughput. The
+current target for the R49 queue is up to **8 GUARANTEED single-GPU jobs**,
+with a best-effort expansion to **16 total jobs** when queue capacity and
+workspace quota are confirmed.
+
+Before each wave, inspect both queue capacity and quota through the Executor
+CloudML passthrough:
+
+```bash
+/home/mi/executor/exe compute cloudml cml -- \
+  queue list --format RESOURCETYPE,RESOURCEPRIORITY,RESOURCESPEC,RESOURCEFREE,RESOURCETOTAL
+/home/mi/executor/exe compute cloudml cml -- \
+  resource quota list --output json
+```
+
+`RESOURCEFREE` is queue-wide capacity, not a guarantee that this workspace can
+consume it. `BEST_EFFORT_PUBLIC` jobs can be preempted; do not also set the
+training task's `--preemptible` flag. Use a separate immutable JuiceFS source
+snapshot and output prefix per task/run, and resume only from a verified latest
+checkpoint after preemption.
+
+Recommended wave order:
+
+```text
+P0  1 gait + 1 episodic pilot
+A1  remaining Track A teachers (up to 8 guaranteed slots)
+B1  Track B specialists in unused guaranteed/best-effort slots
+R1  targeted retries/resumes for failed or preempted jobs
+```
+
+Each submitted job must be recorded with its job ID, lane, resource name,
+source snapshot, output path, checkpoint, and retry count. The detached monitor
+should poll every 30 minutes and stop launching new jobs when queue/quota
+preconditions fail; it must not stop jobs already running.
+
 WandB and Hugging Face are not required. `--agent.logger tensorboard` avoids
 WandB authentication, and checkpoints persist directly on the writable JuiceFS
 mount under `logs/rsl_rl/<experiment>/<run>/model_*.pt`.
