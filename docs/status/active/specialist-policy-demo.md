@@ -20,11 +20,39 @@ Completed slices: deterministic scenario and manifest contract; artifact
 validator and tests; full task coverage; PyPI lock repair; RollerStandUp
 servo-index fix; S0 host/container proof.
 
-Next slice: create and upload an immutable source snapshot, verify CloudML
-queue/quota and output ownership, then submit the P0 gait + episodic pilots.
+Next slice: upload the prepared immutable source snapshot, then submit the P0
+Velocity + RollerStandUp pilots after explicit authorization.
 
-Next proof: record snapshot URI/hash, shared image reference, CloudML job IDs,
-resource lanes, and writable output prefixes.
+Prepared P0 launch package:
+
+- source commit: `104d1308f050788f949aba5747baefe7a2f564f2`;
+- local snapshot directory:
+  `/tmp/microduck-source-104d1308f050-20260829T133725Z` (240 files, 29 MB);
+- snapshot tar SHA-256:
+  `75c470b0c902417f6c9028f6500160420504a06fbd72fb014ae275abf5bcc4ea`;
+- proposed immutable source destination:
+  `/dongxu/microduck_rl/source/104d1308f050-20260829T133725Z`;
+- shared image:
+  `micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503`;
+- job specifications:
+  `cloudml/microduck-specialist-p0-velocity-104d130.yaml` and
+  `cloudml/microduck-specialist-p0-roller-standup-104d130.yaml`;
+- CloudML context/workspace: `executor` / `10076`;
+- lane: queue `11759`, guaranteed single-GPU
+  `r49-24g | 13 CPU | 107 GiB`, priority 5, non-preemptible;
+- read-only capacity check: 95 of 176 queue-wide slots free; quota reports
+  the 176-slot guaranteed allocation with `leftNumber: 0`, so queue capacity
+  is the actionable availability signal for this existing allocation;
+- prior lineage `t-20260829173040-5fdmx` succeeded and is terminal; no active
+  Microduck job was found during the preflight query.
+
+The snapshot is a `git archive` of the recorded commit. It excludes the
+unrelated untracked `tmp/` directory and the local submission-control files.
+Both YAML files parse successfully. The installed CML client has no submission
+dry-run, so schema validation deliberately stops before `custom_train submit`.
+
+Next proof: record the uploaded snapshot URI/hash and the two CloudML job IDs,
+then verify their resolved mounts, resource lanes, and writable output prefixes.
 
 Stop condition: do not consume shared/paid CloudML capacity or upload a large
 image/source artifact without explicit authorization and resolved destinations.
