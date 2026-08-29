@@ -2,6 +2,27 @@
 
 Status: **independent execution plan**
 
+Execution status: **S0 local preflight complete; CloudML submission pending**
+
+Local evidence at commit `e7b4f50`:
+
+- live registry resolved all 13 initial tasks;
+- CPU suite: 157 passed, 1 hardware-dependent skip;
+- every initial task completed the required 64-env, 5-iteration CUDA smoke
+  test with a 61D actor and zero NaN terminations;
+- the smoke matrix exposed and fixed RollerStandUp's raw-joint/servo-index
+  mismatch in commit `e7b4f50`;
+- representative plain and roller checkpoints exported through
+  `scripts/export.py`; both ONNX graphs are `61 -> 14`, produce finite CPU
+  actions, and contain the baked normalizer operations;
+- clean image `microduck-rl:specialist-s0` built and passed a fresh container
+  smoke test. Local digest:
+  `sha256:246aadb0cc9c2cda0f54dba9b97f7a007d088adb59874f18b2b1395ea788aa32`.
+
+The local tag/digest is not a shared registry artifact. S1 remains gated on an
+immutable JuiceFS source snapshot, an agreed output prefix, queue/quota review,
+and explicit authorization to consume CloudML training capacity.
+
 This plan is deliberately separate from the Generalist distillation research.
 It produces stable specialist artifacts and a long, reviewable demo. It does
 not require implementing a 71D Generalist schema, collecting distillation
