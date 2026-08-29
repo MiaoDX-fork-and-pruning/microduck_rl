@@ -1,16 +1,19 @@
 {
   "version": 1,
   "seed": 20260829,
-  "duration_s": 75,
+  "duration_s": 90,
   "command_rate_hz": 50,
   "transitions": [
-    {"at_s": 0, "from": "stand", "to": "stand"},
-    {"at_s": 8, "from": "stand", "to": "velocity_flat", "command": [0.15, 0.0, 0.0]},
-    {"at_s": 24, "from": "velocity_flat", "to": "stand", "command": [0.0, 0.0, 0.0]},
-    {"at_s": 34, "from": "stand", "to": "sitstand_flat"},
-    {"at_s": 45, "from": "sitstand_flat", "to": "stand"},
-    {"at_s": 55, "from": "stand", "to": "ground_pick_flat"},
-    {"at_s": 66, "from": "ground_pick_flat", "to": "stand"},
-    {"at_s": 70, "from": "kick_flat", "to": "stand", "unsupported_reason": "kick teacher not yet accepted"}
+    {"at_s": 0, "from": "stand", "to": "stand", "expected_outcome": "upright idle"},
+    {"at_s": 8, "from": "stand", "to": "velocity_flat", "command": [0.15, 0.0, 0.0], "expected_outcome": "walk forward without falling"},
+    {"at_s": 22, "from": "velocity_flat", "to": "stand", "command": [0.0, 0.0, 0.0], "expected_outcome": "stop upright"},
+    {"at_s": 30, "from": "stand", "to": "sitstand_flat", "expected_outcome": "sit and rise on command"},
+    {"at_s": 42, "from": "sitstand_flat", "to": "stand", "expected_outcome": "settle upright"},
+    {"at_s": 48, "from": "stand", "to": "ground_pick_flat", "expected_outcome": "touch ground and recover"},
+    {"at_s": 58, "from": "ground_pick_flat", "to": "stand", "expected_outcome": "settle upright"},
+    {"at_s": 64, "from": "stand", "to": "ball_kick_flat", "expected_outcome": "kick ball forward and remain recoverable"},
+    {"at_s": 70, "from": "ball_kick_flat", "to": "stand", "expected_outcome": "recover upright"},
+    {"at_s": 76, "from": "stand", "to": "roulade_flat", "expected_outcome": "complete forward roll and land"},
+    {"at_s": 84, "from": "roulade_flat", "to": "stand", "expected_outcome": "finish upright"}
   ]
 }
