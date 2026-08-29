@@ -12,6 +12,13 @@ import argparse
 import hashlib
 import json
 from pathlib import Path
+import sys
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from specialist_scenario import compile_scenario
 
 EXPECTED_OBS_DIM = 61
 REQUIRED_ARTIFACTS = {"checkpoint", "onnx"}
@@ -52,33 +59,22 @@ def validate(manifest_path: Path, scenario_path: Path) -> dict:
             if expected and sha256(path) != expected:
                 errors.append(f"{policy_id}: sha256 mismatch for {name}")
 
-    transitions = scenario.get("transitions", [])
-    if not transitions:
-        errors.append("scenario.transitions must contain at least one transition")
-    duration_s = scenario.get("duration_s")
-    if not isinstance(duration_s, (int, float)) or duration_s <= 0:
-        errors.append("scenario.duration_s must be positive")
     if scenario.get("command_rate_hz") != 50:
         errors.append("scenario.command_rate_hz must be 50")
-    previous_time = -1.0
+    transitions = scenario.get("transitions", [])
     for index, transition in enumerate(transitions):
-        for key in ("from", "to", "at_s", "expected_outcome"):
-            if key not in transition:
-                errors.append(f"scenario.transitions[{index}] missing {key}")
-        at_s = transition.get("at_s")
-        if not isinstance(at_s, (int, float)) or at_s <= previous_time:
-            errors.append(f"scenario.transitions[{index}].at_s must increase")
-        elif isinstance(duration_s, (int, float)) and at_s >= duration_s:
-            errors.append(f"scenario.transitions[{index}].at_s exceeds duration")
-        else:
-            previous_time = at_s
         if transition.get("from") not in policy_ids or transition.get("to") not in policy_ids:
             if not transition.get("unsupported_reason"):
                 errors.append(f"scenario.transitions[{index}] references unknown policy")
+    try:
+        frames = compile_scenario(scenario)
+    except ValueError as exc:
+        errors.append(str(exc))
     if errors:
         raise ValueError("\n".join(errors))
     return {"manifest": str(manifest_path), "scenario": str(scenario_path),
-            "policies": len(policies), "transitions": len(transitions), "valid": True}
+            "policies": len(policies), "transitions": len(transitions),
+            "frames": len(frames), "valid": True}
 
 
 def main() -> int:
