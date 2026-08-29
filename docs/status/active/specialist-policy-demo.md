@@ -35,6 +35,13 @@ and writes hashes plus per-case error metrics. An end-to-end check against the
 S0 Velocity ONNX passed all three boundary cases. Full CPU suite after this
 slice: 170 passed, 1 skipped.
 
+The offline manifest gate now requires, per accepted policy, checkpoint, ONNX,
+metadata, evaluation JSON, diagnostic video, and parity JSON. It verifies every
+SHA-256, the 61D/14D ABI in metadata and parity, finite evaluation, non-positive
+penalties, a numeric success rate and main-task metric, and a non-empty video
+review. The example manifest remains a placeholder template until real
+checkpoints exist; it is intentionally not a valid handoff.
+
 Next slice: upload the prepared immutable source snapshot, then submit the P0
 Velocity + RollerStandUp pilots after explicit authorization.
 
