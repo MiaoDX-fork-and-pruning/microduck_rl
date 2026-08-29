@@ -23,7 +23,7 @@ terminal_state() {
 while :; do
   describe=$($EXECUTOR compute cloudml cml -- custom_train describe "$JOB_ID" 2>&1)
   state=$(printf '%s\n' "$describe" | awk -F'"' '/"state"/{print $4; exit}')
-  runtime=$(printf '%s\n' "$describe" | awk -F'"' '/"runTime"/{print $4; exit}')
+  runtime=$(printf '%s\n' "$describe" | sed -n 's/.*"runTime": *\([^,}]*\).*/\1/p' | head -1)
   pod=${POD_NAME:-$(printf '%s\n' "$describe" | awk -F'"' '/"podName"/{print $4; exit}')}
   log "job=$JOB_ID state=${state:-unknown} runtime=${runtime:-unknown} pod=${pod:-unknown}"
 
