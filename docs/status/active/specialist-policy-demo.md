@@ -20,6 +20,13 @@ Completed slices: deterministic scenario and manifest contract; artifact
 validator and tests; full task coverage; PyPI lock repair; RollerStandUp
 servo-index fix; S0 host/container proof.
 
+Deterministic scenario slice is now executable: `scripts/specialist_scenario.py`
+expands the canonical 90-second, 50 Hz scenario to exactly 4,500 frames,
+zero-pads 3D twists into the 13D command ABI, and rejects discontinuous policy
+chains or off-grid switch times. The scenario now includes explicit sit-hold
+and rise commands at 30 s and 36 s. The validator consumes the same compiler.
+Full CPU suite after this change: 165 passed, 1 skipped.
+
 Next slice: upload the prepared immutable source snapshot, then submit the P0
 Velocity + RollerStandUp pilots after explicit authorization.
 
