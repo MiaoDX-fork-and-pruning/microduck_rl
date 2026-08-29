@@ -109,6 +109,26 @@ WandB and Hugging Face are not required. `--agent.logger tensorboard` avoids
 WandB authentication, and checkpoints persist directly on the writable JuiceFS
 mount under `logs/rsl_rl/<experiment>/<run>/model_*.pt`.
 
+## Deterministic specialist rehearsal
+
+The ONNX deployment rehearsal consumes the same canonical 50 Hz schedule used
+by the artifact validator. Supply every Track A policy referenced by the
+scenario; the runner rejects missing sessions before the first simulation step:
+
+```bash
+uv run scripts/infer_policy.py --new-cmd-obs \
+  --scenario docs/specialist_demo_scenario.json \
+  --standing artifacts/stand/policy.onnx \
+  --walking artifacts/velocity_flat/policy.onnx \
+  --sitstand artifacts/sitstand_flat/policy.onnx \
+  --ground-pick artifacts/ground_pick_flat/policy.onnx \
+  --kick-right artifacts/ball_kick_flat/policy.onnx \
+  --roulade artifacts/roulade_flat/policy.onnx
+```
+
+Add `--no-realtime` for an accelerated automated rehearsal. It still runs all
+4,500 MuJoCo control frames and ONNX calls, but skips wall-clock sleeps.
+
 ## Background monitor
 
 Run a detached monitor that checks the job and JuiceFS every 30 minutes:

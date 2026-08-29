@@ -3,6 +3,7 @@
 
 import argparse
 import csv
+import json
 import math
 import os
 import pickle
@@ -13,10 +14,17 @@ import termios
 import threading
 import time
 import tty
+from pathlib import Path
 import numpy as np
 import mujoco
 import mujoco.viewer
 import onnxruntime as ort
+
+SCRIPT_DIR = Path(__file__).resolve().parent
+if str(SCRIPT_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPT_DIR))
+
+from specialist_scenario import load_scenario, scenario_events
 
 MICRODUCK_XML = "src/mjlab_microduck/robot/microduck/scene.xml"
 # MICRODUCK_XML = "src/mjlab_microduck/robot/microduck/scene_ramps.xml"
@@ -633,14 +641,16 @@ class PolicyInference:
         self._update_command()
         print(f"Ground pick: done → back to {self.current_policy}")
 
-    def update_ground_pick_phase(self, dt: float):
+    def update_ground_pick_phase(self, dt: float, *, auto_exit: bool = True):
         """Advance the ground pick phase; auto-exit when one full cycle completes."""
         if not self.ground_pick_mode:
             return
         new_phase = self.ground_pick_phase + dt / self.ground_pick_period
         if new_phase >= 0.7:
-            self._end_ground_pick()
-            return
+            if auto_exit:
+                self._end_ground_pick()
+                return
+            new_phase = 0.7
         self.ground_pick_phase = new_phase
         # ground_pick policies use the first 3 slots (twist) as phase encoding.
         # Higher slots (head/body) stay at whatever _update_command set them to.
@@ -800,6 +810,70 @@ class PolicyInference:
         if not self.new_cmd_obs:
             self.data.ctrl[5:9] += self.head_offset
 
+    def activate_specialist_policy(self, policy_id, command):
+        """Apply one canonical scenario event to the deployment policy router."""
+        if not self.new_cmd_obs:
+            raise ValueError("specialist scenarios require the unified 61D observation ABI")
+        command = np.asarray(command, dtype=np.float32)
+        if command.shape != (13,) or not np.isfinite(command).all():
+            raise ValueError("specialist scenario command must be a finite 13D block")
+
+        sessions = self._specialist_sessions()
+        if policy_id not in sessions:
+            raise ValueError(f"unsupported specialist scenario policy: {policy_id}")
+        session = sessions[policy_id]
+        if session is None:
+            raise ValueError(f"scenario policy {policy_id!r} was not loaded")
+
+        self.ground_pick_mode = policy_id == "ground_pick_flat"
+        if self.ground_pick_mode:
+            self.ground_pick_phase = 0.0
+        self.behavior_mode = {
+            "ball_kick_flat": "kick_right",
+            "roulade_flat": "roulade",
+        }.get(policy_id)
+        self.sit_mode = bool(policy_id == "sitstand_flat" and command[0] >= 0.5)
+        self.slope_mode = False
+        self.vel_cmd = command[:3].copy() if policy_id == "velocity_flat" else np.zeros(3, dtype=np.float32)
+        self.head_offset = command[3:7].copy()
+        self.body_cmd = command[7:13].copy()
+        self.current_policy = {
+            "stand": "standing",
+            "velocity_flat": "walking",
+            "sitstand_flat": "sit",
+            "ground_pick_flat": "ground_pick",
+            "ball_kick_flat": "kick_right",
+            "roulade_flat": "roulade",
+        }[policy_id]
+        self.ort_session = session
+        self.input_name = session.get_inputs()[0].name
+        self.output_name = session.get_outputs()[0].name
+        if policy_id == "ball_kick_flat":
+            self._place_ball("kick_right")
+        self._update_command()
+        print(f"Scenario policy: {policy_id} command={command.tolist()}")
+
+    def _specialist_sessions(self):
+        return {
+            "stand": self.standing_session,
+            "velocity_flat": self.walking_session,
+            "sitstand_flat": self.sit_session if self.is_sitstand else None,
+            "ground_pick_flat": self.ground_pick_session,
+            "ball_kick_flat": self.behavior_sessions.get("kick_right"),
+            "roulade_flat": self.behavior_sessions.get("roulade"),
+        }
+
+    def validate_specialist_policies(self, policy_ids):
+        sessions = self._specialist_sessions()
+        policy_ids = set(policy_ids)
+        unknown = sorted(policy_ids - sessions.keys())
+        missing = sorted(policy_id for policy_id in policy_ids
+                         if policy_id in sessions and sessions[policy_id] is None)
+        if unknown:
+            raise ValueError(f"unsupported specialist scenario policies: {', '.join(unknown)}")
+        if missing:
+            raise ValueError(f"scenario policies were not loaded: {', '.join(missing)}")
+
 
 def main():
     parser = argparse.ArgumentParser(description="Run ONNX policy in MuJoCo")
@@ -824,6 +898,10 @@ def main():
     parser.add_argument("--debug", action="store_true", help="Print observations and actions")
     parser.add_argument("--save-csv", type=str, default=None, help="Save observations and actions to CSV file")
     parser.add_argument("--record", type=str, default=None, help="Enable recording mode: save observations to pickle file on Ctrl+C")
+    parser.add_argument("--scenario", type=Path, default=None,
+                        help="Canonical deterministic specialist scenario JSON")
+    parser.add_argument("--no-realtime", action="store_true",
+                        help="Do not sleep between control steps (for automated scenario rehearsal)")
     parser.add_argument("--switch-threshold", type=float, default=0.05, help="Vel command magnitude threshold for walking/standing switch (default: 0.05)")
     parser.add_argument("--ground-pick-period", type=float, default=4.0, help="Ground pick phase period in seconds (default: 4.0)")
     parser.add_argument("--new-cmd-obs", action="store_true",
@@ -852,6 +930,18 @@ def main():
         parser.error("--kick-left/--kick-right/--roulade policies use the unified 13D command obs (61D); add --new-cmd-obs")
     if (args.kick_left or args.kick_right or args.roulade) and args.roller:
         parser.error("kick/roulade policies are trained on the walking robot, not the roller model")
+    if args.scenario and not args.new_cmd_obs:
+        parser.error("--scenario requires --new-cmd-obs for the shared 61D ABI")
+
+    scenario_frames = None
+    scheduled_events = {}
+    if args.scenario:
+        try:
+            scenario, scenario_frames = load_scenario(args.scenario)
+            scheduled_events = {frame.step: frame for frame in scenario_events(scenario_frames)}
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        np.random.seed(scenario["seed"])
 
     # Parse delay arguments
     delay_min_lag = 0
@@ -939,6 +1029,11 @@ def main():
         kick_duration=args.kick_duration,
         roulade_duration=args.roulade_duration,
     )
+    if scenario_frames is not None:
+        try:
+            policy.validate_specialist_policies(frame.policy_id for frame in scenario_frames)
+        except ValueError as exc:
+            parser.error(str(exc))
     policy.set_vel_cmd(args.lin_vel_x, args.lin_vel_y, args.ang_vel_z)
 
     # Set realistic wheel bearing friction for roller inference (must be done
@@ -1020,6 +1115,8 @@ def main():
         print(f"{_name} policy: loaded  (press {_behavior_keys[_name]}, "
               f"auto-return after {policy.behavior_durations[_name]:.1f}s)")
     print(f"Active policy: {policy.current_policy}")
+    if scenario_frames is not None:
+        print(f"Scenario: {args.scenario} ({len(scenario_frames)} fixed 50 Hz frames)")
     print("Close viewer window to exit")
     print()
 
@@ -1237,6 +1334,14 @@ def main():
             while viewer.is_running() and not quit_requested:
                 step_start = time.time()
 
+                if scenario_frames is not None:
+                    if control_step_count >= len(scenario_frames):
+                        print("Scenario complete")
+                        break
+                    event = scheduled_events.get(control_step_count)
+                    if event is not None:
+                        policy.activate_specialist_policy(event.policy_id, event.command)
+
                 for key in term.get_keys():
                     handle_key(key)
 
@@ -1254,8 +1359,12 @@ def main():
                 actual_dt = step_start - prev_step_time
                 prev_step_time = step_start
 
-                policy.update_ground_pick_phase(actual_dt)
-                policy.update_behavior(actual_dt)
+                policy.update_ground_pick_phase(
+                    control_dt if scenario_frames is not None else actual_dt,
+                    auto_exit=scenario_frames is None,
+                )
+                if scenario_frames is None:
+                    policy.update_behavior(actual_dt)
 
                 if policy_enabled:
                     action = policy.infer()
@@ -1351,7 +1460,7 @@ def main():
 
                 elapsed = time.time() - step_start
                 sleep_time = control_dt - elapsed
-                if sleep_time > 0:
+                if sleep_time > 0 and not args.no_realtime:
                     time.sleep(sleep_time)
 
         except KeyboardInterrupt:

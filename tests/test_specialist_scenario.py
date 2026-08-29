@@ -14,6 +14,7 @@ _MODULE = importlib.util.module_from_spec(_SPEC)
 sys.modules[_SPEC.name] = _MODULE
 _SPEC.loader.exec_module(_MODULE)
 compile_scenario = _MODULE.compile_scenario
+scenario_events = _MODULE.scenario_events
 
 
 def _scenario() -> dict:
@@ -38,6 +39,24 @@ def test_accepts_full_13d_command_without_remapping():
     command = [float(index) for index in range(13)]
     scenario["transitions"][0]["command"] = command
     assert compile_scenario(scenario)[0].command == tuple(command)
+
+
+def test_events_include_policy_and_same_policy_command_changes():
+    events = scenario_events(compile_scenario(_scenario()))
+    assert [(event.step, event.policy_id, event.command[0]) for event in events] == [
+        (0, "stand", 0.0),
+        (400, "velocity_flat", 0.15),
+        (1100, "stand", 0.0),
+        (1500, "sitstand_flat", 1.0),
+        (1800, "sitstand_flat", 0.0),
+        (2100, "stand", 0.0),
+        (2400, "ground_pick_flat", 0.0),
+        (2900, "stand", 0.0),
+        (3200, "ball_kick_flat", 0.0),
+        (3500, "stand", 0.0),
+        (3800, "roulade_flat", 0.0),
+        (4200, "stand", 0.0),
+    ]
 
 
 def test_rejects_discontinuous_policy_chain():

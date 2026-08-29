@@ -47,6 +47,14 @@ contract. It discovers diagnostic clips and renders acceptance status, success
 and main-task metrics, penalties, video review, failure note, and all artifact
 hashes in the standalone HTML index. Full CPU suite: 175 passed, 1 skipped.
 
+`scripts/infer_policy.py --scenario ...` now routes the canonical schedule
+through deployment-style ONNX inference. It preflights every referenced policy,
+uses fixed 50 Hz timing for scenario phases, honors explicit switch times rather
+than interactive auto-return timers, and supports accelerated `--no-realtime`
+rehearsal. A full MuJoCo/Xvfb check using the S0 ONNX in all roles executed all
+12 events and 4,500 frames, then exited at `Scenario complete`. Full CPU suite:
+180 passed, 1 skipped.
+
 Next slice: upload the prepared immutable source snapshot, then submit the P0
 Velocity + RollerStandUp pilots after explicit authorization.
 
