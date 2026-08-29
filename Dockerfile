@@ -1,4 +1,4 @@
-FROM nvidia/cuda:12.9.1-devel-ubuntu22.04
+FROM nvidia/cuda:12.8.1-devel-ubuntu22.04
 
 ARG UV_VERSION=0.8.19
 
@@ -17,8 +17,13 @@ RUN apt-get update \
     && uv python install 3.12
 
 WORKDIR /opt/microduck_rl
+COPY pyproject.toml uv.lock README.md LICENSE ./
+RUN uv sync --frozen --no-dev --no-install-project --python 3.12
+RUN apt-get update \
+    && apt-get install -y --no-install-recommends libegl1 libgl1 \
+    && rm -rf /var/lib/apt/lists/*
 COPY . .
-RUN uv sync --frozen --no-dev --python 3.12
+RUN uv sync --frozen --no-dev --offline --python 3.12
 
 # Training writes logs relative to cwd. Keep image contents immutable and use
 # /outputs as the local bind mount or CloudML JuiceFS output mount.
