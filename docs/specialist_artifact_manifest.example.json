@@ -3,7 +3,7 @@
   "policies": [
     {
       "id": "stand",
-      "task": "Mjlab-StandUp-Flat-MicroDuck",
+      "task": "Mjlab-VelStand-Flat-MicroDuck",
       "observation_dim": 61,
       "artifacts": {"checkpoint": "artifacts/stand/model_accepted.pt", "onnx": "artifacts/stand/policy.onnx"},
       "sha256": {"checkpoint": "", "onnx": ""}
@@ -22,12 +22,15 @@
       "artifacts": {"checkpoint": "artifacts/sitstand_flat/model_accepted.pt", "onnx": "artifacts/sitstand_flat/policy.onnx"},
       "sha256": {"checkpoint": "", "onnx": ""}
     },
-    {
-      "id": "ground_pick_flat",
-      "task": "Mjlab-GroundPick-Flat-MicroDuck",
-      "observation_dim": 61,
-      "artifacts": {"checkpoint": "artifacts/ground_pick_flat/model_accepted.pt", "onnx": "artifacts/ground_pick_flat/policy.onnx"},
-      "sha256": {"checkpoint": "", "onnx": ""}
-    }
+    {"id": "ground_pick_flat", "task": "Mjlab-GroundPick-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/ground_pick_flat/model_accepted.pt", "onnx": "artifacts/ground_pick_flat/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "ball_kick_flat", "task": "Mjlab-BallKick-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/ball_kick_flat/model_accepted.pt", "onnx": "artifacts/ball_kick_flat/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "roulade_flat", "task": "Mjlab-Roulade-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/roulade_flat/model_accepted.pt", "onnx": "artifacts/roulade_flat/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "standup_flat", "task": "Mjlab-StandUp-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/standup_flat/model_accepted.pt", "onnx": "artifacts/standup_flat/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "velocity_rollers", "task": "Mjlab-Velocity-Flat-MicroDuck-Rollers", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/velocity_rollers/model_accepted.pt", "onnx": "artifacts/velocity_rollers/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "swizzle", "task": "Mjlab-Velocity-Swizzle-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/swizzle/model_accepted.pt", "onnx": "artifacts/swizzle/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "roller_crouch", "task": "Mjlab-RollerCrouch-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/roller_crouch/model_accepted.pt", "onnx": "artifacts/roller_crouch/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "roller_slope", "task": "Mjlab-RollerSlope-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/roller_slope/model_accepted.pt", "onnx": "artifacts/roller_slope/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "roller_standup", "task": "Mjlab-RollerStandUp-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/roller_standup/model_accepted.pt", "onnx": "artifacts/roller_standup/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}},
+    {"id": "spin", "task": "Mjlab-Spin-Flat-MicroDuck", "observation_dim": 61, "artifacts": {"checkpoint": "artifacts/spin/model_accepted.pt", "onnx": "artifacts/spin/policy.onnx"}, "sha256": {"checkpoint": "", "onnx": ""}}
   ]
 }
