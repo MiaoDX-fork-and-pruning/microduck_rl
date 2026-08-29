@@ -95,6 +95,12 @@ Every dataset/run manifest should include:
 - start/end timestamps;
 - WandB run ids when used.
 
+For teacher/DAgger data, the manifest must also identify the replay-state
+format: command values and timers, phase state, previous action, delay/history
+buffers, episode time, and task latches. A sample is not reproducible from
+qpos/qvel alone. The schema manifest also freezes the v2 normalization transform
+and field mask before M2 collection begins.
+
 The manifest is part of the result. A run without provenance is not reusable evidence.
 
 ## 4. Branch and patch strategy
@@ -229,6 +235,11 @@ repeat/chained request stability
 
 M0 is complete only when the same evaluation command reproduces stable results from the frozen teacher artifacts.
 
+The M0 manifest must freeze episode counts per behavior/state bucket, seed
+lists, DR/reset settings, success definitions, and the confidence-interval
+method used by later gates. For baseline rates below 5%, gates use an absolute
+floor and report the raw rate.
+
 ## 6. Milestone M1 — schema and adapters, no policy training
 
 ### Objective
@@ -333,6 +344,10 @@ Dynamic skills should be balanced by phase/state bucket rather than given equal 
 ### Exit gate
 
 A dataset shard can be loaded, replayed, and traced back to an immutable teacher and repository commit. Golden samples reproduce the stored teacher action within tolerance.
+
+Replay tests must restore the recorded command-manager/episode state and prove
+that the teacher emits the stored observation and action. Physical state alone
+is not an acceptable replay fixture.
 
 ## 8. Milestone M3 — offline student baseline
 
@@ -531,6 +546,12 @@ Primary questions:
 ### Objective
 
 Move from “one file containing isolated modes” to a controller that safely changes modes in one episode.
+
+Before building the full superset environment, pass a two-behavior CPU proof
+slice showing per-environment behavior state, command/phase updates, reset and
+termination routing, reward masking, and episode accounting. If this cannot be
+implemented without shared-manager mutation, stop and use separate task
+collectors with a transition harness.
 
 ### Transition scheduler in simulation
 

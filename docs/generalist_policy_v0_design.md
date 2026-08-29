@@ -276,6 +276,15 @@ A later experiment may train one common action scale and gain. Do not make that 
 
 Every training/evaluation path must apply the same control profile that deployment will apply. A model is not a candidate if it only works with an undocumented simulator-side scale or filter.
 
+The profile table is part of the v0 contract, not an implementation detail. For
+each behavior it must name action scale, gains/gain ratios, filtering, target
+slew limits, and one-shot duration. On a behavior switch, the runtime and the
+training scheduler keep the previous filter state, slew the target from its
+current value, and change gains only at the documented switch boundary. A
+profile change must never reset `previous_action` or create an unbounded target
+step. Transition tests record both the raw policy output and the post-profile
+target so a continuous network cannot hide a discontinuous actuator handoff.
+
 ## 8. Model architecture
 
 ### 8.1 Dense MLP first
@@ -322,6 +331,11 @@ Requirements:
 
 The v0 baseline may normalize the full 71D input. If one-hot or bounded condition fields prove sensitive to dataset composition, introduce a custom split normalizer that normalizes continuous proprioception/commands and leaves categorical fields unchanged. That is a measured follow-up, not an initial complexity.
 
+This choice is frozen before teacher collection: M1 records the exact
+normalization transform and field mask in the schema manifest, and M2 uses that
+same transform for dataset statistics. A later split-normalizer experiment is a
+new dataset/checkpoint lineage, never an in-place reinterpretation of v0 data.
+
 ## 10. Teacher distillation
 
 ### 10.1 Offline dataset schema
@@ -352,6 +366,15 @@ The collector should also record a manifest with:
 - DR toggles and ranges;
 - collector version;
 - sample counts by behavior and outcome.
+
+Teacher replay has a second, required state contract. Alongside each sample (or
+in a restorable episode-state record), capture the command-manager state needed
+to reproduce the teacher label: command values and resampling timers, phase
+origin/progress, previous raw action, observation-delay/history buffers, episode
+time, and task latches such as one-shot busy/completion state. DAgger must restore
+this state before querying a teacher; physical qpos/qvel alone is insufficient.
+The collector must either restore a complete snapshot or explicitly advance the
+same state machine and prove equivalence with golden vectors.
 
 Use versioned, chunked local shards with a simple manifest. Do not commit datasets or checkpoints to Git.
 
@@ -429,6 +452,14 @@ For online joint training and in-episode transitions, the preferred v0 architect
 - behavior-masked rewards, resets, and terminations;
 - shared BAM/DR/noise stack inherited from the proven velocity/VelStand base.
 
+Before implementing this environment, M6 must pass a CPU proof slice with two
+behavior IDs in the same batch. The slice must demonstrate per-env condition
+storage, command/phase updates, reset selection, reward masking, termination
+handling, and episode accounting without mutating shared manager config. If that
+slice cannot be made correct with the existing managers, stop the superset path
+and use separate collectors/tasks plus an explicit transition harness; do not
+hide per-env routing in ad-hoc global term mutation.
+
 Reuse existing MDP functions and configs. Do not copy reward implementations into a parallel “generalist” version unless their semantics actually differ.
 
 ### 12.2 Why not start with a custom multi-env runner
@@ -484,6 +515,12 @@ Transition failures should first be treated as missing training distribution, no
 
 All comparisons use fixed seeds and specialist baselines captured before generalist code changes. Report distributions or confidence intervals, not one showcase rollout.
 
+The evaluation protocol fixes the battery seed list, episode count per
+behavior/bucket, DR and reset configuration, success definition, and confidence
+interval method in the M0 manifest. Relative gates are evaluated against the
+same battery; if a specialist success rate is below 5%, use an absolute floor
+and report the raw rate instead of a misleading relative ratio.
+
 ### 14.1 Per-skill metrics
 
 - locomotion: velocity tracking, yaw tracking, fall rate, command buckets, turn-in-place;
@@ -506,6 +543,12 @@ These are starting thresholds and may be revised once baseline variance is measu
 - exported ONNX agrees with PyTorch on the fixed observation battery;
 - candidate meets the eventual board inference budget with comfortable margin inside the 20 ms tick;
 - specialists remain available as fallback.
+
+Kick mirroring is not assumed for collection. Before using mirrored samples,
+run a symmetry validation on the actual all-collision model covering joint
+permutation/signs, ball reset geometry, contact-foot selection, and measured
+teacher outcomes. If any check fails, collect left and right episodes
+independently and record the side-specific teacher in the manifest.
 
 A weighted average cannot waive a failed individual skill.
 
