@@ -5,10 +5,42 @@ from __future__ import annotations
 
 import argparse
 import html
+import json
 import shutil
 from pathlib import Path
+from typing import Any
 
 VIDEO_SUFFIXES = {".mp4", ".webm", ".mov", ".m4v", ".avi"}
+
+
+def collect_manifest_videos(manifest_path: Path) -> tuple[list[tuple[str, Path]], dict[Path, dict[str, Any]]]:
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    entries: list[tuple[str, Path]] = []
+    evidence: dict[Path, dict[str, Any]] = {}
+    for policy in manifest.get("policies", []):
+        policy_id = policy.get("id")
+        artifacts = policy.get("artifacts", {})
+        raw_video = artifacts.get("diagnostic_video")
+        if not isinstance(policy_id, str) or not policy_id or not isinstance(raw_video, str):
+            raise ValueError("each manifest policy needs an id and diagnostic_video")
+        video = Path(raw_video).expanduser().resolve()
+        if not video.is_file() or video.suffix.lower() not in VIDEO_SUFFIXES:
+            raise ValueError(f"{policy_id}: diagnostic video is missing or unsupported: {video}")
+        evaluation: dict[str, Any] = {}
+        raw_evaluation = artifacts.get("evaluation_report")
+        if isinstance(raw_evaluation, str):
+            evaluation_path = Path(raw_evaluation).expanduser().resolve()
+            evaluation = json.loads(evaluation_path.read_text(encoding="utf-8"))
+        entries.append((policy_id, video))
+        evidence[video] = {
+            "task": policy.get("task", ""),
+            "accepted": policy.get("accepted"),
+            "evaluation": evaluation,
+            "hashes": policy.get("sha256", {}),
+        }
+    if not entries:
+        raise ValueError("manifest.policies must contain at least one policy")
+    return entries, evidence
 
 
 def collect_videos(inputs: list[Path]) -> list[tuple[str, Path]]:
@@ -42,7 +74,45 @@ def safe_name(value: str) -> str:
     return cleaned.strip().replace(" ", "_") or "untitled"
 
 
-def build_gallery(entries: list[tuple[str, Path]], output: Path, title: str) -> Path:
+def _evidence_html(data: dict[str, Any]) -> str:
+    if not data:
+        return ""
+    evaluation = data.get("evaluation", {})
+    accepted = "accepted" if data.get("accepted") is True else "not accepted"
+    metrics = [f"status: {accepted}"]
+    if isinstance(evaluation.get("success_rate"), (int, float)):
+        metrics.append(f"success: {evaluation['success_rate']:.1%}")
+    if isinstance(evaluation.get("main_task_metric"), (int, float)):
+        metrics.append(f"main metric: {evaluation['main_task_metric']:.4g}")
+    penalties = evaluation.get("penalty_terms", {})
+    penalty_text = ", ".join(
+        f"{name}={value:.4g}" for name, value in sorted(penalties.items())
+        if isinstance(value, (int, float))
+    )
+    review = evaluation.get("video_review", "")
+    failure = evaluation.get("failure_note", "none") or "none"
+    hashes = data.get("hashes", {})
+    hash_rows = "".join(
+        f"<dt>{html.escape(str(name))}</dt><dd><code>{html.escape(str(value))}</code></dd>"
+        for name, value in sorted(hashes.items())
+    )
+    task = html.escape(str(data.get("task", "")))
+    return (
+        f'<dl class="metrics"><dt>Task</dt><dd>{task}</dd>'
+        f'<dt>Metrics</dt><dd>{html.escape(" | ".join(metrics))}</dd>'
+        f'<dt>Penalties</dt><dd>{html.escape(penalty_text or "none")}</dd>'
+        f'<dt>Video review</dt><dd>{html.escape(str(review))}</dd>'
+        f'<dt>Failure note</dt><dd>{html.escape(str(failure))}</dd>'
+        f'{hash_rows}</dl>'
+    )
+
+
+def build_gallery(
+    entries: list[tuple[str, Path]],
+    output: Path,
+    title: str,
+    evidence: dict[Path, dict[str, Any]] | None = None,
+) -> Path:
     video_root = output / "videos"
     video_root.mkdir(parents=True, exist_ok=True)
     cards: list[str] = []
@@ -58,10 +128,11 @@ def build_gallery(entries: list[tuple[str, Path]], output: Path, title: str) -> 
         rel = destination.relative_to(output).as_posix()
         label = html.escape(task)
         filename = html.escape(source.name)
+        details = _evidence_html((evidence or {}).get(source.resolve(), {}))
         cards.append(
             f'<article class="card" data-task="{label.lower()}">'
             f'<h2>{label}</h2><video controls preload="metadata" src="{html.escape(rel)}"></video>'
-            f'<p>{filename}</p></article>'
+            f'<p>{filename}</p>{details}</article>'
         )
 
     tasks = sorted({task for task, _ in entries}, key=str.casefold)
@@ -82,6 +153,9 @@ select,input {{ background:#1f2937; color:inherit; border:1px solid #4b5563; pad
 .card h2 {{ margin:0 0 8px; font-size:1rem; }}
 video {{ display:block; width:100%; aspect-ratio:4/3; background:#000; object-fit:contain; }}
 .card p {{ color:#9ca3af; font-size:.8rem; overflow-wrap:anywhere; }}
+.metrics {{ display:grid; grid-template-columns:max-content 1fr; gap:5px 10px; font-size:.78rem; }}
+.metrics dt {{ color:#9ca3af; }} .metrics dd {{ margin:0; min-width:0; overflow-wrap:anywhere; }}
+code {{ font-size:.72rem; }}
 </style></head><body>
 <header><h1>{html.escape(title)}</h1>
 <label>Task <select id="task"><option value="">All</option>{options}</select></label>
@@ -100,14 +174,23 @@ task.onchange=search.oninput=filter; filter();
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("inputs", nargs="+", type=Path, help="video files or directories")
+    parser.add_argument("inputs", nargs="*", type=Path, help="video files or directories")
+    parser.add_argument("--manifest", type=Path, help="validated specialist artifact manifest")
     parser.add_argument("-o", "--output", type=Path, default=Path("artifacts/video-gallery"))
     parser.add_argument("--title", default="Microduck Policy Video Review")
     args = parser.parse_args()
-    entries = collect_videos(args.inputs)
+    entries = collect_videos(args.inputs) if args.inputs else []
+    evidence: dict[Path, dict[str, Any]] = {}
+    if args.manifest:
+        try:
+            manifest_entries, evidence = collect_manifest_videos(args.manifest)
+        except (OSError, ValueError, json.JSONDecodeError) as exc:
+            parser.error(str(exc))
+        known = {source.resolve() for _, source in entries}
+        entries.extend(entry for entry in manifest_entries if entry[1].resolve() not in known)
     if not entries:
-        raise SystemExit("no videos found (supported: mp4, webm, mov, m4v, avi)")
-    index = build_gallery(entries, args.output.expanduser().resolve(), args.title)
+        parser.error("provide video inputs or --manifest")
+    index = build_gallery(entries, args.output.expanduser().resolve(), args.title, evidence)
     print(f"built {len(entries)} video(s) in {index.parent}")
     print(f"open: {index}")
     return 0
