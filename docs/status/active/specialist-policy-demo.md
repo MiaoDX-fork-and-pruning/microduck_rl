@@ -27,6 +27,14 @@ chains or off-grid switch times. The scenario now includes explicit sit-hold
 and rise commands at 30 s and 36 s. The validator consumes the same compiler.
 Full CPU suite after this change: 165 passed, 1 skipped.
 
+ONNX parity evidence is also executable through
+`scripts/compare_specialist_onnx.py`. It compares fixed-seed PyTorch golden
+observations/actions with CPU ONNX Runtime one sample at a time (the exporter
+uses a fixed batch size of 1), requires zero-command and command-extreme cases,
+and writes hashes plus per-case error metrics. An end-to-end check against the
+S0 Velocity ONNX passed all three boundary cases. Full CPU suite after this
+slice: 170 passed, 1 skipped.
+
 Next slice: upload the prepared immutable source snapshot, then submit the P0
 Velocity + RollerStandUp pilots after explicit authorization.
 
