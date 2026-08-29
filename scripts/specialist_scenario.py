@@ -107,6 +107,18 @@ def load_scenario(path: Path) -> tuple[dict[str, Any], list[ScenarioFrame]]:
     return scenario, compile_scenario(scenario)
 
 
+def scenario_events(frames: list[ScenarioFrame]) -> list[ScenarioFrame]:
+    """Return only frames that change the selected policy or command block."""
+    events: list[ScenarioFrame] = []
+    previous: tuple[str, tuple[float, ...]] | None = None
+    for frame in frames:
+        state = (frame.policy_id, frame.command)
+        if state != previous:
+            events.append(frame)
+            previous = state
+    return events
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("scenario", type=Path)
