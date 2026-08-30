@@ -47,7 +47,7 @@ def render(job: dict) -> dict:
         ],
         "queueId": "11759",
         "priority": 5,
-        "preemptible": False,
+        "preemptible": bool(job.get("preemptible", False)),
         "framework": "pytorch",
         "resourceConfigs": [{
             "nodeRole": "worker", "nodeNumber": 1,

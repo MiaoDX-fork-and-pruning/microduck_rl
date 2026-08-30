@@ -20,7 +20,7 @@ juiceFsMountConfigs:
   readOnly: false
 queueId: '11759'
 priority: 5
-preemptible: false
+preemptible: true
 framework: pytorch
 resourceConfigs:
 - nodeRole: worker
