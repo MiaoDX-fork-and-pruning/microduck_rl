@@ -75,6 +75,12 @@ current target for the R49 queue is up to **8 GUARANTEED single-GPU jobs**,
 with a best-effort expansion to **16 total jobs** when queue capacity and
 workspace quota are confirmed.
 
+The current workspace may impose a lower account-level concurrent cap even
+when queue-wide `RESOURCEFREE` is high. In this workspace the guaranteed R49
+cap is 8 instances; treat a submit-time quota rejection as a scheduling signal,
+wait for a running job to reach a terminal state, then roll the next task into
+the released slot.
+
 Before each wave, inspect both queue capacity and quota through the Executor
 CloudML passthrough:
 
