@@ -1,0 +1,10 @@
+[
+  {"slug":"velstand","task":"Mjlab-VelStand-Flat-MicroDuck","iterations":6000,"track":"A"},
+  {"slug":"sitstand","task":"Mjlab-SitStand-Flat-MicroDuck","iterations":15000,"track":"A"},
+  {"slug":"ground-pick","task":"Mjlab-GroundPick-Flat-MicroDuck","iterations":20000,"track":"A"},
+  {"slug":"ball-kick","task":"Mjlab-BallKick-Flat-MicroDuck","iterations":10000,"track":"A"},
+  {"slug":"roulade","task":"Mjlab-Roulade-Flat-MicroDuck","iterations":10000,"track":"A"},
+  {"slug":"standup","task":"Mjlab-StandUp-Flat-MicroDuck","iterations":15000,"track":"B"},
+  {"slug":"velocity-rollers","task":"Mjlab-Velocity-Flat-MicroDuck-Rollers","iterations":6000,"track":"B"},
+  {"slug":"swizzle","task":"Mjlab-Velocity-Swizzle-MicroDuck","iterations":6000,"track":"B"}
+]

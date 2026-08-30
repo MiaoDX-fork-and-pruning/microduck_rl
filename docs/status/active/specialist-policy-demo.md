@@ -5,8 +5,8 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session
 Latest intent: implement the approved specialist policy plan via intuitive-flow
 
-Current slice: S0 local preflight is complete; S1 P0 CloudML training is
-running.
+Current slice: S0 local preflight is complete; P0 is complete and the first
+8-slot A1 CloudML wave is deploying.
 
 Last proven evidence:
 
@@ -91,6 +91,24 @@ independent tasks: 6 Track A teachers and 7 Track B showcase policies. After
 P0 acceptance, the remaining 11 tasks will be submitted in bounded waves,
 subject to fresh queue/quota checks and independent output prefixes.
 
+A1 wave jobs (all created 2026-08-30, currently `deploying`):
+
+- VelStand `t-20260830214918-gxien`
+- SitStand `t-20260830214918-p98ty`
+- GroundPick `t-20260830214918-77usp`
+- BallKick `t-20260830214918-kgjma`
+- Roulade `t-20260830214918-mkrjo`
+- StandUp `t-20260830214918-5cmql`
+- Velocity-Rollers `t-20260830214918-weych`
+- Swizzle `t-20260830214918-0sllb`
+
+The account-level quota is 8 concurrent guaranteed R49 instances. Queue-wide
+capacity is ample (`107/176` free at the latest check), but that does not raise
+the personal cap. B1 RollerCrouch, RollerSlope, and Spin were prepared and
+their output prefixes were created, but submission was correctly rejected by
+the 8-instance personal quota. They will be submitted one-for-one as A1 jobs
+reach terminal states; no A1 job will be stopped just to make room.
+
 The snapshot is a `git archive` of the recorded commit. It excludes the
 unrelated untracked `tmp/` directory and the local submission-control files.
 Both YAML files parse successfully. The installed CML client has no submission
@@ -99,9 +117,9 @@ dry-run, so schema validation deliberately stops before `custom_train submit`.
 Next proof: verify both P0 checkpoints and acceptance reports, then record the
 remaining wave job IDs, resolved mounts, resource lanes, and output prefixes.
 
-Stop condition: do not launch later waves without recording P0 acceptance and a
-fresh queue/quota check; failed tasks remain isolated and do not overwrite
-completed lineages.
+Stop condition: launch B1 only after an A1 slot is released and a fresh quota
+check passes; failed tasks remain isolated and do not overwrite completed
+lineages.
 
 No-touch scope: Generalist 71D schema, distillation, runtime repository, robot
 hardware, Rough/Backlash variants.
