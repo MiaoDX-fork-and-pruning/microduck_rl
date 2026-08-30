@@ -102,12 +102,19 @@ A1 wave jobs (all created 2026-08-30, currently `deploying`):
 - Velocity-Rollers `t-20260830214918-weych`
 - Swizzle `t-20260830214918-0sllb`
 
-The account-level quota is 8 concurrent guaranteed R49 instances. Queue-wide
-capacity is ample (`107/176` free at the latest check), but that does not raise
-the personal cap. B1 RollerCrouch, RollerSlope, and Spin were prepared and
-their output prefixes were created, but submission was correctly rejected by
-the 8-instance personal quota. They will be submitted one-for-one as A1 jobs
-reach terminal states; no A1 job will be stopped just to make room.
+The account-level quota is 8 concurrent non-preemptible guaranteed R49
+instances. Queue-wide capacity is ample, and the idle-resource query showed
+borrowable guaranteed R49 capacity. After ordinary B1 submissions were rejected
+by the 8-instance cap, all three were successfully submitted through the
+independent `GUARANTEED + preemptible=true` path:
+
+- RollerCrouch `t-20260830220033-au07o`
+- RollerSlope `t-20260830220052-rs8dx`
+- Spin `t-20260830220052-afcbg`
+
+All three were initially `deploying`. They may be evicted; monitor them
+independently and resume only from a verified latest checkpoint. Do not combine
+`preemptible=true` with a `BEST_EFFORT_PUBLIC` resource priority.
 
 The snapshot is a `git archive` of the recorded commit. It excludes the
 unrelated untracked `tmp/` directory and the local submission-control files.
@@ -117,9 +124,8 @@ dry-run, so schema validation deliberately stops before `custom_train submit`.
 Next proof: verify both P0 checkpoints and acceptance reports, then record the
 remaining wave job IDs, resolved mounts, resource lanes, and output prefixes.
 
-Stop condition: launch B1 only after an A1 slot is released and a fresh quota
-check passes; failed tasks remain isolated and do not overwrite completed
-lineages.
+Stop condition: failed or preempted tasks remain isolated and never overwrite
+completed lineages; resume only from a verified checkpoint.
 
 No-touch scope: Generalist 71D schema, distillation, runtime repository, robot
 hardware, Rough/Backlash variants.
