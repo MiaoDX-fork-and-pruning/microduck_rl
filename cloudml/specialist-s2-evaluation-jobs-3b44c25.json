@@ -1,0 +1,14 @@
+[
+  {"id": "roller_standup", "job_id": "t-20260831111713-bdhxt", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/roller-standup-3b44c25-v1"},
+  {"id": "velstand_flat", "job_id": "t-20260831111713-avb91", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/velstand-flat-3b44c25-v1"},
+  {"id": "sitstand_flat", "job_id": "t-20260831111713-sf12q", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/sitstand-flat-3b44c25-v1"},
+  {"id": "ground_pick_flat", "job_id": "t-20260831111713-nnuzx", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/ground-pick-flat-3b44c25-v1"},
+  {"id": "ball_kick_flat", "job_id": "t-20260831111713-bojog", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/ball-kick-flat-3b44c25-v1"},
+  {"id": "roulade_flat", "job_id": "t-20260831111713-zj9n9", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/roulade-flat-3b44c25-v1"},
+  {"id": "standup_flat", "job_id": "t-20260831111734-uoedg", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/standup-flat-3b44c25-v1"},
+  {"id": "velocity_rollers", "job_id": "t-20260831111713-wmkvu", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/velocity-rollers-3b44c25-v1"},
+  {"id": "swizzle", "job_id": "t-20260831111713-grkry", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/swizzle-3b44c25-v1"},
+  {"id": "roller_crouch", "job_id": "t-20260831111713-nhcer", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/roller-crouch-3b44c25-v1"},
+  {"id": "roller_slope", "job_id": "t-20260831111742-rfgcb", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/roller-slope-3b44c25-v1"},
+  {"id": "spin", "job_id": "t-20260831111713-f4ihj", "output_prefix": "/dongxu/microduck_rl/runs/specialist-s2-eval/spin-3b44c25-v1"}
+]
