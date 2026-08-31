@@ -2,7 +2,7 @@
 
 Status: **independent execution plan**
 
-Execution status: **S1 specialist training complete; S2 evaluation in progress**
+Execution status: **S1 complete; S2 has 11 accepted policies and 2 in remediation**
 
 Local evidence at commit `e7b4f50`:
 
@@ -23,6 +23,12 @@ S1 used immutable source snapshot `652b7ce-20260829T140000Z`. All 13 jobs
 completed successfully, and every final checkpoint was verified in its unique
 JuiceFS lineage. The resolved S2 inputs are recorded in
 `cloudml/specialist-final-checkpoints-652b7ce.json`.
+
+S2 accepted Velocity plus 10 policies from the `3b44c25` evaluation batch.
+VelStand was rejected after 12/32 `fallen_too_long` terminations (success rate
+0.625), and RollerSlope after 22/32 `fell_over` terminations (success rate
+0.3125). Both remain in scope for checkpoint audit or retraining; their failed
+reports and videos are retained rather than weakened by threshold changes.
 
 This plan is deliberately separate from the Generalist distillation research.
 It produces stable specialist artifacts and a long, reviewable demo. It does

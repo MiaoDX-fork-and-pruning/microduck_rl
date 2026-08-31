@@ -1,0 +1,86 @@
+[
+  {
+    "id": "roller_standup",
+    "success_threshold": 85.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 87.0,
+    "video_review": "Across three six-second episodes, the roller policy rises or remains upright with supported feet and a stable head, including recovery after the visible reset near 12 seconds. No fall, freeze, penetration, or incoherent contact is visible; this matches episode 0 timing out with standing_composite=89.6603."
+  },
+  {
+    "id": "velstand_flat",
+    "success_threshold": 15.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 18.0,
+    "video_review": "Episode 0 initially tracks upright motion but falls around the middle of the clip and remains prone until its automatic reset at 14.42 seconds. The visible failure matches fallen_too_long for episode 0 and 12 of 32 battery episodes, so the policy is not accepted."
+  },
+  {
+    "id": "sitstand_flat",
+    "success_threshold": 28.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 30.0,
+    "video_review": "The policy holds controlled upright and seated-height postures through the first 12-second episode and continues coherently after reset, without a fall or unstable contact. This matches episode 0 timing out with posture_composite=30.5488."
+  },
+  {
+    "id": "ground_pick_flat",
+    "success_threshold": 44.5,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 44.5,
+    "video_review": "The robot repeatedly lowers its mouth/head toward the ground and returns to an upright supported pose during the 15-second clip. No fall or incoherent contact is visible; this matches episode 0 timing out with ground_pick_return_pose_legs=44.8418."
+  },
+  {
+    "id": "ball_kick_flat",
+    "success_threshold": 55.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 57.0,
+    "video_review": "In each of the three five-second episodes the ball moves decisively forward while the robot remains upright and recoverable. The clip matches episode 0 timing out with ball_forward_velocity=58.8000 and contains no visible fall or incoherent contact."
+  },
+  {
+    "id": "roulade_flat",
+    "success_threshold": 2.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 4.0,
+    "video_review": "Across three five-second episodes the robot enters a forward roll, passes through ground contact, and returns upright rather than parking at an intermediate pose. This matches episode 0 timing out with roulade_progress=6.4407 and shows no frozen or incoherent state."
+  },
+  {
+    "id": "standup_flat",
+    "success_threshold": 18.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 19.0,
+    "video_review": "The robot starts low or prone, rises to a supported upright pose, and repeats after automatic resets without head-tripod parking or visible penetration. This matches the full six-second episode structure and the battery's dominant standing_composite cluster."
+  },
+  {
+    "id": "velocity_rollers",
+    "success_threshold": 10.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 30.0,
+    "video_review": "The roller policy remains upright and translates coherently with the sampled command over the full 15-second clip, without falls or unstable contact. This matches episode 0 timing out with wheel_speed=47.0099."
+  },
+  {
+    "id": "swizzle",
+    "success_threshold": 3.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 30.0,
+    "video_review": "The robot remains upright while alternating the expected swizzle leg/wheel motion and changing position with the command. No fall occurs in episode 0; its wheel_speed=11.0185 and timeout agree with the clip."
+  },
+  {
+    "id": "roller_crouch",
+    "success_threshold": 16.5,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 17.0,
+    "video_review": "The roller policy glides while transitioning into and holding a visibly lower crouched posture with both feet supported. The 15-second clip has no fall or incoherent contact and matches episode 0 timing out with forward_speed=17.7451."
+  },
+  {
+    "id": "roller_slope",
+    "success_threshold": 5.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 7.0,
+    "video_review": "Episode 0 stays upright through the recorded 15 seconds on the slope, but the full episode falls at 17.56 seconds and 22 of 32 battery episodes terminate fell_over. The short clip therefore does not justify acceptance despite wheel_glide=11.8291."
+  },
+  {
+    "id": "spin",
+    "success_threshold": 119.0,
+    "minimum_success_rate": 0.95,
+    "minimum_main_task_metric": 119.2,
+    "video_review": "The robot rotates in place under the spin command while remaining upright and grounded for the full 15-second clip. No fall, drift catastrophe, or incoherent contact is visible; this matches episode 0 timing out with spin_rate_track=119.3489."
+  }
+]
