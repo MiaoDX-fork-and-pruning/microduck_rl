@@ -1,0 +1,58 @@
+{
+  "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "source_commit": "facd4f4",
+  "checkpoint": "model_10750.pt",
+  "checkpoint_sha256": "49dfcda507be25cefcdd96299785c9bbc13e2705e3c54e32075b51a8ace18f6d",
+  "seed": 42,
+  "episodes_per_battery": 32,
+  "formal_random_difficulty": {
+    "success_rate": 0.65625,
+    "main_task_metric": 8.548725954652776,
+    "termination_counts": {"fell_over": 11, "time_out": 21}
+  },
+  "fixed_difficulty": [
+    {
+      "difficulty": 0.0,
+      "success_rate": 0.59375,
+      "main_task_metric": 11.848754699668918,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 12, "time_out": 19}
+    },
+    {
+      "difficulty": 0.25,
+      "success_rate": 0.46875,
+      "main_task_metric": 7.964943693998236,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 15, "time_out": 15}
+    },
+    {
+      "difficulty": 0.5,
+      "success_rate": 0.84375,
+      "main_task_metric": 8.60502146745715,
+      "termination_counts": {"fell_over": 5, "time_out": 27}
+    },
+    {
+      "difficulty": 0.75,
+      "success_rate": 0.5,
+      "main_task_metric": 7.139778757040446,
+      "termination_counts": {"fell_over": 16, "time_out": 16}
+    },
+    {
+      "difficulty": 1.0,
+      "success_rate": 0.21875,
+      "main_task_metric": 5.965890178013583,
+      "termination_counts": {"fell_over": 25, "time_out": 7}
+    }
+  ],
+  "velocity_push_ablation": {
+    "enabled_success_rate": 0.65625,
+    "disabled_success_rate": 0.59375,
+    "disabled_main_task_metric": 8.551724204988446,
+    "disabled_termination_counts": {"fell_over": 13, "time_out": 19},
+    "conclusion": "Inherited interval velocity pushes are not the primary cause of the stability failures."
+  },
+  "observations": [
+    "The terrain curriculum is active: training logs report a mean terrain level near 4.2 across ten levels.",
+    "The policy passes the middle fixed difficulty but fails both endpoints and adjacent bands.",
+    "The 61D actor contract contains no wheel-speed or explicit slope observation; slope must be inferred from deployment-available proprioception and dynamics.",
+    "No configuration change is justified until the R3 terminal checkpoint curve is complete."
+  ]
+}
