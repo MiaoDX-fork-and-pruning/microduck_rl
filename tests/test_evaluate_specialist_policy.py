@@ -3,6 +3,8 @@ import json
 from pathlib import Path
 import sys
 
+import torch
+
 
 _SPEC = importlib.util.spec_from_file_location(
     "evaluate_specialist_policy",
@@ -133,3 +135,15 @@ def test_report_only_is_explicit_and_disabled_by_default():
 
     assert parser.parse_args(common).report_only is False
     assert parser.parse_args([*common, "--report-only"]).report_only is True
+
+
+def test_cuda_tensor_state_check_does_not_call_numpy():
+    class SimData:
+        qpos = torch.ones(1, device="cuda" if torch.cuda.is_available() else "cpu")
+        qvel = torch.ones(1, device=qpos.device)
+        ctrl = torch.ones(1, device=qpos.device)
+
+    class Env:
+        sim = type("Sim", (), {"data": SimData()})()
+
+    assert _MODULE._sim_state_finite(Env()) is True

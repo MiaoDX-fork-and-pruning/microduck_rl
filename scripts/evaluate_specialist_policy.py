@@ -153,12 +153,23 @@ def _tensors_finite(value: Any) -> bool:
 
 
 def _sim_state_finite(env: Any) -> bool:
-    import numpy as np
-
     data = env.sim.data
     for name in ("qpos", "qvel", "ctrl"):
         value = getattr(data, name, None)
-        if value is not None and not np.isfinite(value.numpy()).all():
+        if value is None:
+            continue
+        try:
+            import torch
+
+            if isinstance(value, torch.Tensor):
+                if not bool(torch.isfinite(value).all().item()):
+                    return False
+                continue
+        except ImportError:
+            pass
+        import numpy as np
+
+        if not bool(np.isfinite(value).all()):
             return False
     return True
 
