@@ -3537,6 +3537,21 @@ def terrain_levels_slope(env: ManagerBasedRlEnv, env_ids: torch.Tensor) -> torch
     return torch.mean(terrain.terrain_levels.float())
 
 
+def randomize_slope_terrain_levels(
+    env: ManagerBasedRlEnv, env_ids: torch.Tensor
+) -> torch.Tensor:
+    """Resample slope difficulty uniformly for every completed episode.
+
+    RollerSlope evaluation samples the full terrain difficulty range.  An
+    adaptive promote/demote curriculum concentrated training around a narrow
+    middle band, so the policy never became robust at either endpoint.
+    """
+    terrain = env.scene.terrain
+    assert terrain is not None
+    terrain.randomize_env_origins(env_ids)
+    return torch.mean(terrain.terrain_levels.float())
+
+
 def velocity_command_ranges_curriculum(
     env: ManagerBasedRlEnv,
     env_ids: torch.Tensor,
