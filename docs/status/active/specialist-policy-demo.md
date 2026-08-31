@@ -24,8 +24,8 @@ Last proven evidence:
   workspace guaranteed quota allocation.
 - local EGL smoke completed with a real checkpoint: one finite rollout, reward
   terms and `fell_over` termination captured, and a 10-frame MP4 written;
-- the prior JuiceFS upload dry-run passed with zero uploaded; rerun it against
-  the final `9dece54` snapshot immediately before confirmed upload.
+- final JuiceFS upload dry-run passed for `9dece54`: 268 files and 28,968,051
+  bytes planned, zero uploaded, with the exact pilot source prefix.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
