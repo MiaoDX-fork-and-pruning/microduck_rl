@@ -5,8 +5,9 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S2 evaluator is implemented and locally verified; the bounded
-Velocity pilot is rendered and awaiting explicit CloudML submission approval.
+Current slice: S2 evaluator is implemented and locally verified; the first
+Velocity pilot exposed and fixed a mujoco-warp CUDA tensor-view bug, and the
+repinned retry is ready for submission.
 
 Last proven evidence:
 
@@ -15,11 +16,11 @@ Last proven evidence:
 - every checkpoint probe completed without truncation;
 - resolved task, job, output, run prefix, and checkpoint inputs are frozen in
   `cloudml/specialist-final-checkpoints-652b7ce.json`;
-- evaluator contract tests pass (`15 passed`), including a real CUDA tensor
+- evaluator contract tests pass (`16 passed`), including a real CUDA tensor
   finite/NaN check; CLI help and compilation pass;
 - all 13 task configs resolve their active reward terms and episode durations;
 - pilot YAML is prepared at
-  `cloudml/generated/microduck-specialist-s2-velocity-pilot-9dece54.yaml`;
+  `cloudml/generated/microduck-specialist-s2-velocity-pilot-e76b22f.yaml`;
 - CloudML read-only checks show 114 free GUARANTEED R49 GPUs and no remaining
   workspace guaranteed quota allocation.
 - local EGL smoke completed with a real checkpoint: one finite rollout, reward
@@ -34,7 +35,7 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: upload the immutable `9dece54` source snapshot and submit the
+Next slice: upload the immutable `e76b22f` source snapshot and submit the
 bounded Velocity pilot after the CloudML confirmation gate; then review its
 report/video before rendering the 12 remaining evaluation jobs.
 
@@ -49,7 +50,7 @@ the completed training lineages.
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 
-Parked work: CloudML upload/submission awaits explicit user confirmation;
+Parked work: retry after the failed `t-20260831104511-dagok` pilot; Track A/B
 Track A/B
 integrated reels and gallery wait for S2 acceptance; Generalist teacher
 ingestion waits for the completed specialist manifest.
