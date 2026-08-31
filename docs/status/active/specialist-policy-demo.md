@@ -21,6 +21,11 @@ Last proven evidence:
   `cloudml/generated/microduck-specialist-s2-velocity-pilot-6d5a353.yaml`;
 - CloudML read-only checks show 114 free GUARANTEED R49 GPUs and no remaining
   workspace guaranteed quota allocation.
+- local EGL smoke completed with a real checkpoint: one finite rollout, reward
+  terms and `fell_over` termination captured, and a 10-frame MP4 written;
+- JuiceFS upload dry-run passed for the committed `6d5a353` snapshot: 267 files,
+  28,964,837 bytes planned, zero uploaded, target prefix
+  `/dongxu/microduck_rl/source/6d5a353-20260831T1006/`.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -44,6 +49,7 @@ the completed training lineages.
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 
-Parked work: CloudML upload/submission awaits user confirmation; Track A/B
+Parked work: CloudML upload/submission awaits explicit user confirmation;
+Track A/B
 integrated reels and gallery wait for S2 acceptance; Generalist teacher
 ingestion waits for the completed specialist manifest.
