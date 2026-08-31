@@ -1,0 +1,62 @@
+{
+  "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "source_commit": "facd4f4",
+  "seed": 42,
+  "episodes": 32,
+  "main_task_term": "wheel_glide",
+  "success_threshold": 5.0,
+  "minimum_success_rate": 0.8,
+  "minimum_main_task_metric": 7.0,
+  "candidates": [
+    {
+      "checkpoint": "model_7750.pt",
+      "checkpoint_sha256": "c5f374e9c6cad190be1d662e332d452440f1f319238ef1fe963c19a92b9dae31",
+      "success_rate": 0.625,
+      "main_task_metric": 7.188538560916408,
+      "termination_counts": {"fell_over": 10, "time_out": 22},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8000.pt",
+      "checkpoint_sha256": "42dc7738ac36dadc954fe3ecf9e8a43e665b5d2532ccd30b744adfff4da87055",
+      "success_rate": 0.34375,
+      "main_task_metric": 8.05572168376532,
+      "termination_counts": {"fell_into_void": 3, "fell_over": 18, "time_out": 11},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8250.pt",
+      "checkpoint_sha256": "fa455bf7c36e4ac976b10742e9a5a0bd587201e10fb44bb39af1392137f85034",
+      "success_rate": 0.15625,
+      "main_task_metric": 8.360547601708674,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 25, "time_out": 5},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8500.pt",
+      "checkpoint_sha256": "ca27b3e3aecbb215f6de5a7765e6ebb173e551347efc52fb2a34c990fa1c5eee",
+      "success_rate": 0.125,
+      "main_task_metric": 8.59981239960878,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 26, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8750.pt",
+      "checkpoint_sha256": "193a80fbf4347e62a481654eecee49c1e4137048c6c5a6f10c203e168e9d07a5",
+      "success_rate": 0.59375,
+      "main_task_metric": 7.928752653698531,
+      "termination_counts": {"fell_over": 13, "time_out": 19},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    }
+  ]
+}
