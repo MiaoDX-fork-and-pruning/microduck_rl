@@ -5,9 +5,9 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S2 accepted 11 of 13 policies. VelStand and RollerSlope are in
-remediation after their final checkpoints failed the termination-aware success
-rate gate.
+Current slice: S2 accepted 11 of 13 policies. VelStand and RollerSlope
+remediation is locally proven and prepared for CloudML continuation, pending
+the storage-upload and two-job submission confirmation gate.
 
 Last proven evidence:
 
@@ -37,6 +37,21 @@ Last proven evidence:
   with non-positive penalties and are published back to JuiceFS;
 - reviewed thresholds and rationale are frozen in
   `cloudml/specialist-s2-thresholds-3b44c25.json`.
+- formal re-evaluation rejected VelStand `model_4000.pt` at 0.6875 success;
+  RollerSlope checkpoints 7250/7500/7750 reached only
+  0.1875/0.3125/0.28125, so neither lineage has a defensible replacement;
+- RollerSlope per-difficulty evaluation proved a narrow middle-band policy:
+  success was 0.2188/0.6562/0.5312/0.1875/0.0 from difficulty 0.0 to 1.0;
+- commit `facd4f4` makes RollerSlope resample all ten slope levels every
+  episode, matching the S2/play distribution; focused tests pass (41 passed),
+  and the 64-env/5-iteration smoke kept terrain level near the uniform mean
+  with a 61D actor and zero NaN terminations;
+- VelStand also passed its required 64-env/5-iteration smoke; its configured
+  20,000-iteration budget was previously overridden to 6,000, so continuation
+  is prepared without another reward change;
+- immutable source upload dry-run for `facd4f4-20260831T1152` passed: 288
+  files, 29,026,755 bytes; two isolated GUARANTEED R49 continuation YAMLs are
+  ready under `cloudml/generated/`.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -45,13 +60,14 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: inspect the existing VelStand and RollerSlope training lineages for
-earlier checkpoints that satisfy the same fixed S2 battery. If no defensible
-candidate exists, launch isolated remediation training without changing the 11
-accepted lineages.
+Next slice: after explicit confirmation, upload source and output markers,
+submit VelStand for 14,000 additional iterations from `model_5999.pt` and
+RollerSlope for 5,000 additional uniform-difficulty iterations from
+`model_7000.pt`, then monitor both jobs to terminal state.
 
-Next proof: termination-aware 32-episode reports/videos for replacement
-VelStand and RollerSlope checkpoints, each reaching success rate >= 0.8.
+Next proof: CloudML logs must prove the requested bootstrap checkpoint loaded;
+after training, termination-aware 32-episode reports/videos for both replacement
+checkpoints must each reach success rate >= 0.8.
 
 Stop condition: do not mark a checkpoint accepted from training reward alone;
 accept only finite rollouts with non-positive penalties and video review that
