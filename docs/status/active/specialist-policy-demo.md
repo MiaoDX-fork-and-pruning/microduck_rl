@@ -56,9 +56,9 @@ Last proven evidence:
   both `running` on queue `11759`, with the expected read-only checkpoint,
   source, and writable output mounts; job inventory is frozen in
   `cloudml/specialist-s2-remediation-jobs-facd4f4.json`.
-- subsequent log verification shows VelStand reached iteration 6024/19999 and
-  RollerSlope reached 7012/12000; both bootstrap continuations are actively
-  training with no traceback or NaN failure observed.
+- subsequent log verification shows both bootstrap loads explicitly
+  (`model_5999.pt` and `model_7000.pt`); latest sampled logs reached VelStand
+  6056/19999 and RollerSlope 7050/12000 with no traceback or NaN failure.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
