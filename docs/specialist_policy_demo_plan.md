@@ -2,7 +2,7 @@
 
 Status: **independent execution plan**
 
-Execution status: **S0 local preflight complete; CloudML submission pending**
+Execution status: **S1 specialist training complete; S2 evaluation in progress**
 
 Local evidence at commit `e7b4f50`:
 
@@ -19,9 +19,10 @@ Local evidence at commit `e7b4f50`:
   smoke test. Local digest:
   `sha256:246aadb0cc9c2cda0f54dba9b97f7a007d088adb59874f18b2b1395ea788aa32`.
 
-The local tag/digest is not a shared registry artifact. S1 remains gated on an
-immutable JuiceFS source snapshot, an agreed output prefix, queue/quota review,
-and explicit authorization to consume CloudML training capacity.
+S1 used immutable source snapshot `652b7ce-20260829T140000Z`. All 13 jobs
+completed successfully, and every final checkpoint was verified in its unique
+JuiceFS lineage. The resolved S2 inputs are recorded in
+`cloudml/specialist-final-checkpoints-652b7ce.json`.
 
 This plan is deliberately separate from the Generalist distillation research.
 It produces stable specialist artifacts and a long, reviewable demo. It does
