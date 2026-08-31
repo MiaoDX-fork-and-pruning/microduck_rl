@@ -18,7 +18,7 @@ Last proven evidence:
 - evaluator contract tests pass (`14 passed`), CLI help and compilation pass;
 - all 13 task configs resolve their active reward terms and episode durations;
 - pilot YAML is prepared at
-  `cloudml/generated/microduck-specialist-s2-velocity-pilot-ad1c104.yaml`;
+  `cloudml/generated/microduck-specialist-s2-velocity-pilot-6d5a353.yaml`;
 - CloudML read-only checks show 114 free GUARANTEED R49 GPUs and no remaining
   workspace guaranteed quota allocation.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
@@ -29,7 +29,7 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: upload the immutable `ad1c104` source snapshot and submit the
+Next slice: upload the immutable `6d5a353` source snapshot and submit the
 bounded Velocity pilot after the CloudML confirmation gate; then review its
 report/video before rendering the 12 remaining evaluation jobs.
 
