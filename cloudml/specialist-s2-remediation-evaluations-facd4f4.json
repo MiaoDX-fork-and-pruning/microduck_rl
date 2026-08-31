@@ -107,6 +107,46 @@
       "finite": true,
       "penalties_non_positive": true,
       "accepted": false
+    },
+    {
+      "checkpoint": "model_10500.pt",
+      "checkpoint_sha256": "5a0f8f35661983643600ecfa838c607a38b4a27acfb40fcfd00d241678c5085e",
+      "success_rate": 0.53125,
+      "main_task_metric": 8.581874823824018,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 14, "time_out": 17},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11000.pt",
+      "checkpoint_sha256": "175d20fc459f16f9f5fd7a2d60a60357c9d2cff22705469f4050569c7828ef5b",
+      "success_rate": 0.25,
+      "main_task_metric": 8.537536065801502,
+      "termination_counts": {"fell_into_void": 4, "fell_over": 20, "time_out": 8},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11500.pt",
+      "checkpoint_sha256": "88bae5f0838460f4c8d5903f02bf50a0f79af6ea9030b1fc5ee47f7ed0efdef9",
+      "success_rate": 0.125,
+      "main_task_metric": 8.569716422165945,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 27, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11999.pt",
+      "checkpoint_sha256": "819bcc109060eebaaa1b6bb9be074b742e18fcae01322bad692d57160c9db5ff",
+      "success_rate": 0.375,
+      "main_task_metric": 8.007567186154642,
+      "termination_counts": {"fell_over": 20, "time_out": 12},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
     }
   ]
 }
