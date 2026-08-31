@@ -87,6 +87,16 @@
       "finite": true,
       "penalties_non_positive": true,
       "accepted": false
+    },
+    {
+      "checkpoint": "model_9750.pt",
+      "checkpoint_sha256": "8a87e4eda6dd9669f349116a2a75727ce6db2a549bec17723c337fdecf45d048",
+      "success_rate": 0.125,
+      "main_task_metric": 8.020850980477274,
+      "termination_counts": {"fell_into_void": 3, "fell_over": 25, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
     }
   ]
 }
