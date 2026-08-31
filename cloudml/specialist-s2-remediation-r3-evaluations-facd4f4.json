@@ -75,6 +75,61 @@
       "penalties_non_positive": true,
       "video_review_passed": null,
       "accepted": false
+    },
+    {
+      "checkpoint": "model_12250.pt",
+      "checkpoint_sha256": "3644e59677c50e8d031990b21c0b558a643a7486de54f95429bff25d3bdc7698",
+      "success_rate": 0.5625,
+      "main_task_metric": 7.902323450158618,
+      "termination_counts": {"fell_over": 14, "time_out": 18},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12500.pt",
+      "checkpoint_sha256": "8200c511954e6a9f9f46b6e14bb5d402b5ef02fee7c3db76856f2eddf71e0035",
+      "success_rate": 0.3125,
+      "main_task_metric": 9.038882532696103,
+      "termination_counts": {"fell_over": 22, "time_out": 10},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12750.pt",
+      "checkpoint_sha256": "200b794ae3eacfaebf72358c4ec8c0b6aa2dc5a401b05827b8639a3a47a3c5a2",
+      "success_rate": 0.1875,
+      "main_task_metric": 8.2448601253821,
+      "termination_counts": {"fell_over": 26, "time_out": 6},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_13000.pt",
+      "checkpoint_sha256": "766ff0c3971d935623c1e10f2291cb2cb043a411ad873f9d70bc236505fd76d2",
+      "success_rate": 0.5,
+      "main_task_metric": 7.764672160435266,
+      "termination_counts": {"fell_over": 16, "time_out": 16},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_13250.pt",
+      "checkpoint_sha256": "39a16f47c5fd0db46b4bb82def1044cb17f7f69307fa966c63df6415aae3db47",
+      "success_rate": 0.4375,
+      "main_task_metric": 7.541809694832361,
+      "termination_counts": {"fell_over": 18, "time_out": 14},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
     }
   ]
 }
