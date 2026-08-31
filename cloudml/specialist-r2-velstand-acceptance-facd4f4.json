@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "task_id": "Mjlab-VelStand-Flat-MicroDuck",
+  "policy_id": "velstand_flat",
+  "source_commit": "facd4f4",
+  "accepted": true,
+  "training": {
+    "origin": "CloudML remediation R2",
+    "job_id": "t-20260831123941-k7hts",
+    "lineage": "/dongxu/microduck_rl/runs/specialist-r2/velstand-facd4f4-v1",
+    "bootstrap": "model_5999.pt"
+  },
+  "checkpoint": {
+    "filename": "model_10750.pt",
+    "sha256": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5"
+  },
+  "evaluation": {
+    "seed": 42,
+    "episodes": 32,
+    "main_task_term": "track_linear_velocity",
+    "success_threshold": 15.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 18.0,
+    "success_rate": 0.875,
+    "main_task_metric": 23.561818493333224,
+    "termination_counts": {
+      "time_out": 28,
+      "fallen_too_long": 4
+    },
+    "finite": true,
+    "penalties_non_positive": true,
+    "report_sha256": "5799b8725c6502de7a30ac53eddcdc1eab92507e1b70026eb5134a3fc73f0cad"
+  },
+  "video": {
+    "filename": "diagnostic-model-10750.mp4",
+    "duration_seconds": 15.0,
+    "sha256": "0760fa281f9c2bbfbd1f90f97ffb9e37083e9b91bbef4721da304f5805391ed1",
+    "review_passed": true,
+    "review": "Episode 0 remains upright and coherent throughout the full 15-second diagnostic clip with no fall or prone interval. Its full 20-second rollout terminates by time_out, matching the visible behavior and the 28/32 timeout battery result."
+  },
+  "onnx": {
+    "filename": "model_10750.onnx",
+    "sha256": "1b7b6330121e62cf1c90c7303be48ceea62a5cb90d9c5608454abc2d16e7abde",
+    "input_shape": [1, 61],
+    "output_shape": [1, 14],
+    "normalizer_baked": true,
+    "onnx_checker_passed": true,
+    "golden_sha256": "ec1e8d732ae0e1d46ac6b8da38cedf1e2229736b5cd7d019330bdf9181c83354",
+    "parity_report_sha256": "0622fbc1f00f55bfdd80ecc3419c8d8a973f6b558a0edf65f5320135f5dc659c",
+    "parity_samples": 8,
+    "parity_failed_values": 0,
+    "parity_max_abs_error": 0.0000019073486328125,
+    "parity_passed": true
+  },
+  "artifact_prefix": "/dongxu/microduck_rl/runs/specialist-r2/velstand-facd4f4-accepted-v1"
+}
