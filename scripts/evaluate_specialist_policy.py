@@ -57,6 +57,7 @@ def build_evaluation_report(
     video_path: Path,
     video_frame_count: int,
     video_fps: float,
+    video_reset_count: int,
     video_review: str,
 ) -> dict[str, Any]:
     """Build the stable validator-facing report from raw per-episode evidence."""
@@ -123,14 +124,30 @@ def build_evaluation_report(
         "total_reward_mean": sum(float(ep["total_reward"]) for ep in episodes)
         / len(episodes),
         "diagnostic_video": str(video_path),
-        "diagnostic_video_episode_id": 0,
+        "diagnostic_video_env_id": 0,
+        "diagnostic_video_first_episode_id": 0,
         "diagnostic_video_frame_count": video_frame_count,
         "diagnostic_video_duration_seconds": video_frame_count / video_fps,
         "diagnostic_video_fps": video_fps,
+        "diagnostic_video_reset_count": video_reset_count,
         "video_review": video_review,
         "acceptance_checks": acceptance_checks,
         "episodes": episodes,
     }
+
+
+def apply_video_review(report: dict[str, Any], review: str) -> dict[str, Any]:
+    """Apply the human video gate without weakening any computed check."""
+    review = review.strip()
+    if not review:
+        raise ValueError("video review must not be empty")
+    checks = report.get("acceptance_checks")
+    if not isinstance(checks, dict):
+        raise ValueError("report is missing acceptance_checks")
+    checks["video_reviewed"] = True
+    report["video_review"] = review
+    report["accepted"] = all(value is True for value in checks.values())
+    return report
 
 
 def _sha256(path: Path) -> str:
@@ -254,14 +271,20 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     completed: dict[int, dict[str, Any]] = {}
     frames: list[Any] = []
     video_steps = round(args.video_seconds / raw_env.step_dt)
+    video_reset_count = 0
+    rollout_steps = 0
+    rollout_step_limit = max(raw_env.max_episode_length + 1, video_steps + 1)
     fatal_reason: str | None = None
 
     try:
-        while active.any() and max(lengths) < raw_env.max_episode_length + 1:
+        while (
+            (active.any() or len(frames) < video_steps)
+            and rollout_steps < rollout_step_limit
+        ):
             if not _tensors_finite(observation) or not _sim_state_finite(raw_env):
                 fatal_reason = "nonfinite_state"
                 break
-            if bool(active[0].item()) and len(frames) < video_steps:
+            if len(frames) < video_steps:
                 frame = raw_env.render()
                 if frame is not None:
                     frames.append(np.asarray(frame[0] if frame.ndim == 4 else frame))
@@ -272,6 +295,9 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                 break
 
             observation, reward, dones, _ = env.step(action)
+            rollout_steps += 1
+            if len(frames) < video_steps and bool(dones[0].item()):
+                video_reset_count += 1
             step_finite = (
                 _tensors_finite(observation)
                 and _tensors_finite(reward)
@@ -345,6 +371,7 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         video_path=video_path,
         video_frame_count=len(frames),
         video_fps=video_fps,
+        video_reset_count=video_reset_count,
         video_review=args.video_review,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
