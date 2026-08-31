@@ -1,0 +1,20 @@
+[
+  {
+    "id": "velstand",
+    "job_id": "t-20260831123941-k7hts",
+    "state": "running",
+    "lineage": "/dongxu/microduck_rl/runs/specialist-r2/velstand-facd4f4-v1",
+    "bootstrap": "model_5999.pt",
+    "extra_iterations": 14000,
+    "source_snapshot": "/dongxu/microduck_rl/source/facd4f4-20260831T1152"
+  },
+  {
+    "id": "roller_slope",
+    "job_id": "t-20260831124001-s8mmr",
+    "state": "running",
+    "lineage": "/dongxu/microduck_rl/runs/specialist-r2/roller-slope-facd4f4-v1",
+    "bootstrap": "model_7000.pt",
+    "extra_iterations": 5000,
+    "source_snapshot": "/dongxu/microduck_rl/source/facd4f4-20260831T1152"
+  }
+]
