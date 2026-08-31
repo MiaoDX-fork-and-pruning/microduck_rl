@@ -9,6 +9,9 @@ a ~800 g, ~25 cm tall bipedal robot — built on
 Policies are trained here at 50 Hz, exported to ONNX, and deployed on the real
 robot by the runtime in [pollen-robotics/microduck](https://github.com/pollen-robotics/microduck).
 
+For the reproducible specialist experiment record, see
+[docs/human/training-reproducibility.md](docs/human/training-reproducibility.md).
+
 <!-- HERO VIDEO — real robot montage: walking, standup, roulade, roller skating.
      Keep it short (~30 s) and real-robot-first: this is the "why should I care" shot. -->
 
