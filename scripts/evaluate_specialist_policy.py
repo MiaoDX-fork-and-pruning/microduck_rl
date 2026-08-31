@@ -194,6 +194,8 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     env_cfg.scene.num_envs = args.episodes
     env_cfg.viewer.width = args.video_width
     env_cfg.viewer.height = args.video_height
+    env_cfg.viewer.env_idx = 0
+    env_cfg.viewer.max_extra_envs = 0
 
     raw_env = ManagerBasedRlEnv(cfg=env_cfg, device=device, render_mode="rgb_array")
     env = RslRlVecEnvWrapper(raw_env, clip_actions=agent_cfg.clip_actions)
