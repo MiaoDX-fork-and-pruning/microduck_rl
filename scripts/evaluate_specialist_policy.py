@@ -21,6 +21,12 @@ _PENALTY_MARKERS = (
     "penalty",
     "tax",
 )
+_FAILURE_TERMINATIONS = {
+    "fell_over",
+    "fallen_too_long",
+    "nan_state",
+    "out_of_terrain_bounds",
+}
 
 
 def is_penalty_term(name: str, weight: float, explicit: Iterable[str] = ()) -> bool:
@@ -40,6 +46,14 @@ def diagnostic_video_path(report_path: Path, requested: Path | None) -> Path:
 
 def episode_is_finite(step_finite: bool, termination_reasons: Iterable[str]) -> bool:
     return step_finite and "nan_state" not in termination_reasons
+
+
+def episode_is_success(
+    main_value: float, success_threshold: float, termination_reasons: Iterable[str]
+) -> bool:
+    return main_value >= success_threshold and not (
+        set(termination_reasons) & _FAILURE_TERMINATIONS
+    )
 
 
 def build_evaluation_report(
@@ -181,7 +195,9 @@ def reassess_evaluation_report(
             raise ValueError(f"episode is missing main task term {main_task_term!r}")
         main_value = float(reward_terms[main_task_term])
         main_values.append(main_value)
-        episode["success"] = main_value >= success_threshold
+        episode["success"] = episode_is_success(
+            main_value, success_threshold, episode.get("termination_reasons", [])
+        )
 
     penalty_names = sorted(report.get("penalty_terms", {}))
     penalty_terms = {
@@ -409,7 +425,9 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                         "total_reward": totals[env_id],
                         "reward_terms": term_sums[env_id],
                         "termination_reasons": sorted(reasons),
-                        "success": main_value >= args.success_threshold,
+                        "success": episode_is_success(
+                            main_value, args.success_threshold, reasons
+                        ),
                         "finite": episode_finite,
                     }
                     active[env_id] = False

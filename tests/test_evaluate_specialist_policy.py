@@ -104,6 +104,13 @@ def test_nan_termination_is_nonfinite_even_after_auto_reset():
     assert not _MODULE.episode_is_finite(False, [])
 
 
+def test_failure_termination_cannot_count_as_success():
+    assert _MODULE.episode_is_success(2.0, 1.0, ["time_out"])
+    assert not _MODULE.episode_is_success(2.0, 1.0, ["fell_over"])
+    assert not _MODULE.episode_is_success(2.0, 1.0, ["fallen_too_long"])
+    assert not _MODULE.episode_is_success(2.0, 1.0, ["out_of_terrain_bounds"])
+
+
 def test_penalty_discovery_covers_both_repository_conventions():
     assert _MODULE.is_penalty_term("joint_torques_l2", -0.01)
     assert _MODULE.is_penalty_term("height_stand_l1", 1.0)
@@ -202,6 +209,24 @@ def test_reassessment_cannot_hide_positive_penalty_or_missing_video_review():
     assert result["positive_penalty_terms"] == {"action_rate_l2": 0.1}
     assert result["acceptance_checks"]["penalties_non_positive"] is False
     assert result["acceptance_checks"]["video_reviewed"] is False
+    assert result["accepted"] is False
+
+
+def test_reassessment_rejects_high_metric_episode_with_failure_termination():
+    episode = _episode(main=10.0)
+    episode["termination_reasons"] = ["fell_over"]
+    report = _report([episode])
+
+    result = _MODULE.reassess_evaluation_report(
+        report,
+        success_threshold=1.0,
+        minimum_success_rate=1.0,
+        minimum_main_task_metric=1.0,
+    )
+
+    assert result["episodes"][0]["success"] is False
+    assert result["success_rate"] == 0.0
+    assert result["acceptance_checks"]["success_rate"] is False
     assert result["accepted"] is False
 
 
