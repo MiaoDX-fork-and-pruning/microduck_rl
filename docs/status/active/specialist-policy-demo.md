@@ -58,7 +58,7 @@ Last proven evidence:
   `cloudml/specialist-s2-remediation-jobs-facd4f4.json`.
 - subsequent log verification shows both bootstrap loads explicitly
   (`model_5999.pt` and `model_7000.pt`); latest sampled logs reached VelStand
-  6087/19999 and RollerSlope 7086/12000 with mean rewards 64.70 and 52.49,
+  6108/19999 and RollerSlope 7111/12000 with mean rewards 64.20 and 53.44,
   and no traceback or NaN failure.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
