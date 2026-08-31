@@ -6,8 +6,7 @@ Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
 Current slice: S2 accepted 11 of 13 policies. VelStand and RollerSlope
-remediation is locally proven and prepared for CloudML continuation, pending
-the storage-upload and two-job submission confirmation gate.
+remediation jobs are running in isolated new lineages.
 
 Last proven evidence:
 
@@ -52,6 +51,11 @@ Last proven evidence:
 - immutable source upload dry-run for `facd4f4-20260831T1152` passed: 288
   files, 29,026,755 bytes; two isolated GUARANTEED R49 continuation YAMLs are
   ready under `cloudml/generated/`.
+- source snapshot and both `_READY` output markers were uploaded; VelStand job
+  `t-20260831123941-k7hts` and RollerSlope job `t-20260831124001-s8mmr` are
+  both `running` on queue `11759`, with the expected read-only checkpoint,
+  source, and writable output mounts; job inventory is frozen in
+  `cloudml/specialist-s2-remediation-jobs-facd4f4.json`.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -60,10 +64,8 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: after explicit confirmation, upload source and output markers,
-submit VelStand for 14,000 additional iterations from `model_5999.pt` and
-RollerSlope for 5,000 additional uniform-difficulty iterations from
-`model_7000.pt`, then monitor both jobs to terminal state.
+Next slice: monitor both remediation jobs to terminal state and verify their
+bootstrap checkpoints loaded before running the fixed S2 battery.
 
 Next proof: CloudML logs must prove the requested bootstrap checkpoint loaded;
 after training, termination-aware 32-episode reports/videos for both replacement
