@@ -109,3 +109,23 @@ def test_default_video_path_is_stable():
     )
     requested = Path("artifacts/policy/clip.mp4")
     assert _MODULE.diagnostic_video_path(output, requested) == requested
+
+
+def test_report_only_is_explicit_and_disabled_by_default():
+    parser = _MODULE.make_parser()
+    common = [
+        "task",
+        "--checkpoint",
+        "model.pt",
+        "--output",
+        "evaluation.json",
+        "--main-task-term",
+        "task_progress",
+        "--success-threshold",
+        "1",
+        "--minimum-success-rate",
+        "0.5",
+    ]
+
+    assert parser.parse_args(common).report_only is False
+    assert parser.parse_args([*common, "--report-only"]).report_only is True

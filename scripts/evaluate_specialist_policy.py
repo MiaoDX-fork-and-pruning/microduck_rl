@@ -345,6 +345,11 @@ def make_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
     parser.add_argument("--video-review", default="", help="human clip review; acceptance stays false when empty")
+    parser.add_argument(
+        "--report-only",
+        action="store_true",
+        help="exit successfully after writing evidence even when acceptance is false",
+    )
     return parser
 
 
@@ -364,7 +369,7 @@ def main() -> int:
         raise SystemExit("--video-width and --video-height must be positive")
     report = run_evaluation(args)
     print(json.dumps(report, indent=2, sort_keys=True))
-    return 0 if report["accepted"] else 2
+    return 0 if report["accepted"] or args.report_only else 2
 
 
 if __name__ == "__main__":
