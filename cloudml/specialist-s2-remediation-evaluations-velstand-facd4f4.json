@@ -41,6 +41,18 @@
       "video_review_passed": false,
       "video_review": "The robot remains upright for roughly six seconds, then falls onto its back and stays prone until the automatic reset near 14.3 seconds. This matches episode 0 terminating fallen_too_long and is not acceptable final video evidence.",
       "accepted": false
+    },
+    {
+      "checkpoint": "model_8000.pt",
+      "checkpoint_sha256": "8157516d543e69c5997678616635d8daabaeb6ac60ea1da2378f00a621c7decf",
+      "success_rate": 0.8125,
+      "main_task_metric": 22.4653009471644,
+      "termination_counts": {"fallen_too_long": 6, "time_out": 26},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": false,
+      "video_review": "The robot remains upright for roughly six seconds, then falls onto its back and remains prone through the end of the clip. Episode 0 terminates fallen_too_long at 14.28 seconds, so the diagnostic video does not support final acceptance.",
+      "accepted": false
     }
   ]
 }
