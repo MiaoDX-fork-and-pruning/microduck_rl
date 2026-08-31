@@ -1,6 +1,7 @@
 from mjlab_microduck.tasks.microduck_roller_slope_env_cfg import (
     make_microduck_roller_slope_env_cfg,
 )
+from mjlab_microduck.tasks import mdp as microduck_mdp
 from mjlab_microduck.tasks.slope_terrain import FlatRampTerrainCfg
 
 
@@ -90,11 +91,16 @@ def test_obs_nan_policy_sanitize():
     assert cfg.observations["critic"].nan_policy == "sanitize"
 
 
-def test_curriculum_present_and_starts_gentle():
-    # curriculum doux->raide : démarre sur la rampe la plus douce, promotion active
+def test_curriculum_present_and_seeds_full_difficulty_range():
+    # S2/play samples every slope difficulty, so training must start with the
+    # same coverage before per-environment curriculum updates adapt the level.
     cfg = make_microduck_roller_slope_env_cfg()  # play=False (entraînement)
     assert "terrain_levels" in cfg.curriculum
-    assert cfg.scene.terrain.max_init_terrain_level == 0
+    assert (
+        cfg.curriculum["terrain_levels"].func
+        is microduck_mdp.randomize_slope_terrain_levels
+    )
+    assert cfg.scene.terrain.max_init_terrain_level is None
 
 
 def test_terrain_tile_fits_geometry():
