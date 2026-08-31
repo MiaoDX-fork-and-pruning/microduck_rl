@@ -5,8 +5,8 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S2 accepted 11 of 13 policies. VelStand and RollerSlope
-remediation jobs are running in isolated new lineages.
+Current slice: S2 accepted 12 of 13 policies. VelStand `model_10750.pt` is
+accepted; RollerSlope R3 remains in training and evaluation.
 
 Last proven evidence:
 
@@ -60,6 +60,16 @@ Last proven evidence:
   (`model_5999.pt` and `model_7000.pt`); latest sampled logs reached VelStand
   6108/19999 and RollerSlope 7111/12000 with mean rewards 64.20 and 53.44,
   and no traceback or NaN failure.
+- VelStand R2 `model_10750.pt` is accepted after a fresh 32-episode battery:
+  success rate 0.875, main metric 23.5618, finite rollouts, non-positive
+  penalties, and 28/32 timeouts. Its reviewed 15-second episode-0 video stays
+  upright throughout and the full episode terminates by timeout.
+- RollerSlope R3 checkpoints through `model_13250.pt` remain below the 0.8
+  success gate; the best is `model_10750.pt` at 0.65625. Fixed-difficulty
+  diagnostics pass the middle difficulty at 0.84375 but fail 0.0/0.25/0.75/1.0
+  at 0.59375/0.46875/0.5/0.21875. Disabling inherited velocity pushes does not
+  improve success, and training logs confirm full-range terrain sampling is
+  active.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -68,8 +78,9 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: monitor both remediation jobs to terminal state and verify their
-bootstrap checkpoints loaded before running the fixed S2 battery.
+Next slice: monitor RollerSlope R3 to terminal state, evaluate every remaining
+checkpoint, and prepare a new remediation only if no checkpoint passes. Keep
+the accepted VelStand checkpoint frozen while its training job runs to terminal.
 
 Next proof: CloudML logs must prove the requested bootstrap checkpoint loaded;
 after training, termination-aware 32-episode reports/videos for both replacement
