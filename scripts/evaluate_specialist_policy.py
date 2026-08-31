@@ -153,6 +153,8 @@ def _tensors_finite(value: Any) -> bool:
 
 
 def _sim_state_finite(env: Any) -> bool:
+    import numpy as np
+
     data = env.sim.data
     for name in ("qpos", "qvel", "ctrl"):
         value = getattr(data, name, None)
@@ -161,15 +163,17 @@ def _sim_state_finite(env: Any) -> bool:
         try:
             import torch
 
-            if isinstance(value, torch.Tensor):
-                if not bool(torch.isfinite(value).all().item()):
-                    return False
-                continue
+            # mujoco-warp may expose a CUDA tensor-like view whose concrete
+            # class is not torch.Tensor; torch.isfinite avoids CUDA -> NumPy.
+            finite = torch.isfinite(value)
+            if not bool(finite.all().item()):
+                return False
+            continue
         except ImportError:
             pass
-        import numpy as np
-
-        if not bool(np.isfinite(value).all()):
+        except (TypeError, RuntimeError):
+            pass
+        if not bool(np.isfinite(np.asarray(value)).all()):
             return False
     return True
 

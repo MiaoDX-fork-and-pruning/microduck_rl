@@ -147,3 +147,25 @@ def test_cuda_tensor_state_check_does_not_call_numpy():
         sim = type("Sim", (), {"data": SimData()})()
 
     assert _MODULE._sim_state_finite(Env()) is True
+
+
+def test_tensor_like_cuda_state_uses_torch_finiteness():
+    class TensorLike:
+        def __init__(self, value):
+            self.value = value
+
+        def __torch_function__(self, func, types, args=(), kwargs=None):
+            del types
+            kwargs = kwargs or {}
+            converted = [arg.value if isinstance(arg, TensorLike) else arg for arg in args]
+            return func(*converted, **kwargs)
+
+    class SimData:
+        qpos = TensorLike(torch.ones(1, device="cuda" if torch.cuda.is_available() else "cpu"))
+        qvel = TensorLike(qpos.value.clone())
+        ctrl = TensorLike(qpos.value.clone())
+
+    class Env:
+        sim = type("Sim", (), {"data": SimData()})()
+
+    assert _MODULE._sim_state_finite(Env()) is True
