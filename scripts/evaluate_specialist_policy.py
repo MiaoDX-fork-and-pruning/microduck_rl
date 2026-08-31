@@ -65,7 +65,9 @@ def build_evaluation_report(
         raise ValueError("episodes must not be empty")
 
     penalty_names = sorted(set(penalty_names))
-    main_values = [float(ep["reward_terms"].get(main_task_term, 0.0)) for ep in episodes]
+    main_values = [
+        float(ep["reward_terms"].get(main_task_term, 0.0)) for ep in episodes
+    ]
     successes = [bool(ep.get("success", False)) for ep in episodes]
     finite = all(bool(ep.get("finite", False)) for ep in episodes)
     success_rate = sum(successes) / len(successes)
@@ -147,6 +149,83 @@ def apply_video_review(report: dict[str, Any], review: str) -> dict[str, Any]:
     checks["video_reviewed"] = True
     report["video_review"] = review
     report["accepted"] = all(value is True for value in checks.values())
+    return report
+
+
+def reassess_evaluation_report(
+    report: dict[str, Any],
+    *,
+    success_threshold: float,
+    minimum_success_rate: float,
+    minimum_main_task_metric: float,
+) -> dict[str, Any]:
+    """Recompute automatic acceptance gates from raw episode evidence."""
+    thresholds = (success_threshold, minimum_success_rate, minimum_main_task_metric)
+    if not all(math.isfinite(value) for value in thresholds):
+        raise ValueError("reassessment thresholds must be finite")
+    if not 0.0 <= minimum_success_rate <= 1.0:
+        raise ValueError("minimum success rate must be in [0, 1]")
+
+    battery = report.get("battery")
+    episodes = report.get("episodes")
+    if not isinstance(battery, dict) or not isinstance(episodes, list) or not episodes:
+        raise ValueError("report is missing battery or episode evidence")
+    main_task_term = battery.get("main_task_term")
+    if not isinstance(main_task_term, str) or not main_task_term:
+        raise ValueError("report is missing battery.main_task_term")
+
+    main_values: list[float] = []
+    for episode in episodes:
+        reward_terms = episode.get("reward_terms")
+        if not isinstance(reward_terms, dict) or main_task_term not in reward_terms:
+            raise ValueError(f"episode is missing main task term {main_task_term!r}")
+        main_value = float(reward_terms[main_task_term])
+        main_values.append(main_value)
+        episode["success"] = main_value >= success_threshold
+
+    penalty_names = sorted(report.get("penalty_terms", {}))
+    penalty_terms = {
+        name: sum(float(ep["reward_terms"].get(name, 0.0)) for ep in episodes)
+        / len(episodes)
+        for name in penalty_names
+    }
+    positive_penalties = {
+        name: max(values)
+        for name in penalty_names
+        if (
+            values := [
+                float(ep["reward_terms"].get(name, 0.0))
+                for ep in episodes
+                if float(ep["reward_terms"].get(name, 0.0)) > 1.0e-8
+            ]
+        )
+    }
+    finite = all(bool(ep.get("finite", False)) for ep in episodes)
+    success_rate = sum(bool(ep["success"]) for ep in episodes) / len(episodes)
+    main_task_metric = sum(main_values) / len(main_values)
+    video_reviewed = bool(str(report.get("video_review", "")).strip())
+    checks = {
+        "finite": finite,
+        "main_task_metric": main_task_metric >= minimum_main_task_metric,
+        "penalties_non_positive": not positive_penalties,
+        "success_rate": success_rate >= minimum_success_rate,
+        "video_reviewed": video_reviewed,
+    }
+
+    battery.update(
+        success_threshold=success_threshold,
+        minimum_success_rate=minimum_success_rate,
+        minimum_main_task_metric=minimum_main_task_metric,
+    )
+    report.update(
+        accepted=all(checks.values()),
+        finite=finite,
+        success_rate=success_rate,
+        main_task_metric=main_task_metric,
+        penalty_terms=penalty_terms,
+        positive_penalty_terms=positive_penalties,
+        acceptance_checks=checks,
+    )
     return report
 
 
@@ -256,7 +335,9 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         )
     unknown_penalties = sorted(set(args.penalty_term) - set(reward_names))
     if unknown_penalties:
-        raise ValueError(f"unknown --penalty-term values: {', '.join(unknown_penalties)}")
+        raise ValueError(
+            f"unknown --penalty-term values: {', '.join(unknown_penalties)}"
+        )
     penalty_names = [
         name
         for name in reward_names
@@ -278,9 +359,8 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
 
     try:
         while (
-            (active.any() or len(frames) < video_steps)
-            and rollout_steps < rollout_step_limit
-        ):
+            active.any() or len(frames) < video_steps
+        ) and rollout_steps < rollout_step_limit:
             if not _tensors_finite(observation) or not _sim_state_finite(raw_env):
                 fatal_reason = "nonfinite_state"
                 break
@@ -307,14 +387,18 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
             for env_id in active.nonzero(as_tuple=False).squeeze(-1).cpu().tolist():
                 lengths[env_id] += 1
                 totals[env_id] += float(reward[env_id].item())
-                step_terms = dict(raw_env.reward_manager.get_active_iterable_terms(env_id))
+                step_terms = dict(
+                    raw_env.reward_manager.get_active_iterable_terms(env_id)
+                )
                 for name in reward_names:
                     term_sums[env_id][name] += float(step_terms[name][0]) * scale
                 if bool(dones[env_id].item()):
                     reasons = [
                         name
                         for name in raw_env.termination_manager.active_terms
-                        if bool(raw_env.termination_manager.get_term(name)[env_id].item())
+                        if bool(
+                            raw_env.termination_manager.get_term(name)[env_id].item()
+                        )
                     ]
                     episode_finite = episode_is_finite(step_finite, reasons)
                     main_value = term_sums[env_id][args.main_task_term]
@@ -382,21 +466,51 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("task", help="registered mjlab task id")
-    parser.add_argument("--checkpoint", type=Path, required=True, help="final model_*.pt")
-    parser.add_argument("--output", type=Path, required=True, help="evaluation JSON path")
+    parser.add_argument(
+        "--checkpoint", type=Path, required=True, help="final model_*.pt"
+    )
+    parser.add_argument(
+        "--output", type=Path, required=True, help="evaluation JSON path"
+    )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--episodes", type=int, default=32)
-    parser.add_argument("--device", help="torch device (default: cuda:0 when available)")
-    parser.add_argument("--main-task-term", required=True, help="active reward term used as the task metric")
-    parser.add_argument("--success-threshold", type=float, required=True, help="per-episode main-term threshold")
+    parser.add_argument(
+        "--device", help="torch device (default: cuda:0 when available)"
+    )
+    parser.add_argument(
+        "--main-task-term",
+        required=True,
+        help="active reward term used as the task metric",
+    )
+    parser.add_argument(
+        "--success-threshold",
+        type=float,
+        required=True,
+        help="per-episode main-term threshold",
+    )
     parser.add_argument("--minimum-success-rate", type=float, required=True)
-    parser.add_argument("--minimum-main-task-metric", type=float, help="mean main-term gate (default: success threshold)")
-    parser.add_argument("--penalty-term", action="append", default=[], help="additional self-negating penalty term; repeatable")
-    parser.add_argument("--video-output", type=Path, help="default: OUTPUT with .mp4 suffix")
+    parser.add_argument(
+        "--minimum-main-task-metric",
+        type=float,
+        help="mean main-term gate (default: success threshold)",
+    )
+    parser.add_argument(
+        "--penalty-term",
+        action="append",
+        default=[],
+        help="additional self-negating penalty term; repeatable",
+    )
+    parser.add_argument(
+        "--video-output", type=Path, help="default: OUTPUT with .mp4 suffix"
+    )
     parser.add_argument("--video-seconds", type=float, default=15.0)
     parser.add_argument("--video-width", type=int, default=640)
     parser.add_argument("--video-height", type=int, default=480)
-    parser.add_argument("--video-review", default="", help="human clip review; acceptance stays false when empty")
+    parser.add_argument(
+        "--video-review",
+        default="",
+        help="human clip review; acceptance stays false when empty",
+    )
     parser.add_argument(
         "--report-only",
         action="store_true",

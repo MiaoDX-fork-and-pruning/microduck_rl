@@ -164,6 +164,47 @@ def test_video_review_cannot_override_a_failed_computed_check():
     assert result["accepted"] is False
 
 
+def test_reassessment_recomputes_episode_and_report_gates_from_raw_evidence():
+    report = _report([_episode(0, main=2.0), _episode(1, main=1.5)])
+
+    result = _MODULE.reassess_evaluation_report(
+        report,
+        success_threshold=1.75,
+        minimum_success_rate=0.5,
+        minimum_main_task_metric=1.7,
+    )
+
+    assert [episode["success"] for episode in result["episodes"]] == [True, False]
+    assert result["success_rate"] == 0.5
+    assert result["main_task_metric"] == 1.75
+    assert result["battery"]["success_threshold"] == 1.75
+    assert result["acceptance_checks"] == {
+        "finite": True,
+        "main_task_metric": True,
+        "penalties_non_positive": True,
+        "success_rate": True,
+        "video_reviewed": True,
+    }
+    assert result["accepted"] is True
+
+
+def test_reassessment_cannot_hide_positive_penalty_or_missing_video_review():
+    report = _report([_episode(penalty=0.1)])
+    report["video_review"] = ""
+
+    result = _MODULE.reassess_evaluation_report(
+        report,
+        success_threshold=0.0,
+        minimum_success_rate=0.0,
+        minimum_main_task_metric=0.0,
+    )
+
+    assert result["positive_penalty_terms"] == {"action_rate_l2": 0.1}
+    assert result["acceptance_checks"]["penalties_non_positive"] is False
+    assert result["acceptance_checks"]["video_reviewed"] is False
+    assert result["accepted"] is False
+
+
 def test_cuda_tensor_state_check_does_not_call_numpy():
     class SimData:
         qpos = torch.ones(1, device="cuda" if torch.cuda.is_available() else "cpu")
@@ -184,11 +225,15 @@ def test_tensor_like_cuda_state_uses_torch_finiteness():
         def __torch_function__(self, func, types, args=(), kwargs=None):
             del types
             kwargs = kwargs or {}
-            converted = [arg.value if isinstance(arg, TensorLike) else arg for arg in args]
+            converted = [
+                arg.value if isinstance(arg, TensorLike) else arg for arg in args
+            ]
             return func(*converted, **kwargs)
 
     class SimData:
-        qpos = TensorLike(torch.ones(1, device="cuda" if torch.cuda.is_available() else "cpu"))
+        qpos = TensorLike(
+            torch.ones(1, device="cuda" if torch.cuda.is_available() else "cpu")
+        )
         qvel = TensorLike(qpos.value.clone())
         ctrl = TensorLike(qpos.value.clone())
 
