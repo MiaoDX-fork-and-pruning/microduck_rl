@@ -1,0 +1,112 @@
+{
+  "schema_version": 1,
+  "accepted_count": 13,
+  "expected_count": 13,
+  "source_inventory": "cloudml/specialist-final-checkpoints-652b7ce.json",
+  "entries": [
+    {
+      "id": "velocity_flat",
+      "task": "Mjlab-Velocity-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-p0/velocity-652b7ce-v2/logs/rsl_rl/velocity/2026-08-29_23-34-01_p0-velocity-652b7ce/model_5999.pt",
+      "checkpoint_sha256": "a71c6c26ff369cb3c2a093649467d3a10bb2dd818dd75f21fb29918ae2cbae3c",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/velocity-e76b22f-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "roller_standup",
+      "task": "Mjlab-RollerStandUp-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-p0/roller-standup-652b7ce-v2/logs/rsl_rl/roller_standup/2026-08-29_23-39-56_p0-roller-standup-652b7ce/model_14999.pt",
+      "checkpoint_sha256": "a0ef49763bf9512169220d1a53a718a240b59a69cc193ca8c8d4b7e49b90c48d",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/roller-standup-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "velstand_flat",
+      "task": "Mjlab-VelStand-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-r2/velstand-facd4f4-v1/logs/rsl_rl/velstand/2026-08-31_12-40-48_r2-velstand-facd4f4/model_10750.pt",
+      "checkpoint_sha256": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5",
+      "acceptance_report": "cloudml/specialist-r2-velstand-acceptance-facd4f4.json",
+      "accepted": true
+    },
+    {
+      "id": "sitstand_flat",
+      "task": "Mjlab-SitStand-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/sitstand-652b7ce-v1/logs/rsl_rl/microduck_sitstand/2026-08-30_21-53-10_a1-sitstand-652b7ce/model_14999.pt",
+      "checkpoint_sha256": "81550d1a8f90c9b83abaaee4359929ba02fb1eb8ee3bfcf5db95aff5a5a0c581",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/sitstand-flat-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "ground_pick_flat",
+      "task": "Mjlab-GroundPick-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/ground-pick-652b7ce-v1/logs/rsl_rl/ground_pick/2026-08-30_21-52-38_a1-ground-pick-652b7ce/model_19999.pt",
+      "checkpoint_sha256": "051d3b3c2062314f31b12da5a641ead635b46c67f1dd611cac96028da846950e",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/ground-pick-flat-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "ball_kick_flat",
+      "task": "Mjlab-BallKick-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/ball-kick-652b7ce-v1/logs/rsl_rl/ball_kick_right/2026-08-30_21-52-59_a1-ball-kick-652b7ce/model_9999.pt",
+      "checkpoint_sha256": "add8764869a1303bc2d1547eb7f57c8dea64e37035f9ecd4a17169c37f5092c2",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/ball-kick-flat-3b44c25-v2/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "roulade_flat",
+      "task": "Mjlab-Roulade-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/roulade-652b7ce-v1/logs/rsl_rl/microduck_roulade/2026-08-30_21-53-10_a1-roulade-652b7ce/model_9999.pt",
+      "checkpoint_sha256": "07b2cf7898395679c16f6217c6e71850703c77867a84fb0ad51eeb0070d560ef",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/roulade-flat-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "standup_flat",
+      "task": "Mjlab-StandUp-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/standup-652b7ce-v1/logs/rsl_rl/microduck_stand/2026-08-30_21-52-38_a1-standup-652b7ce/model_14999.pt",
+      "checkpoint_sha256": "3a87625b26592b891333fa72c4c7827301c02dcce6577c5ea0e04983f4032700",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/standup-flat-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "velocity_rollers",
+      "task": "Mjlab-Velocity-Flat-MicroDuck-Rollers",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/velocity-rollers-652b7ce-v1/logs/rsl_rl/velocity_rollers/2026-08-30_21-53-01_a1-velocity-rollers-652b7ce/model_5999.pt",
+      "checkpoint_sha256": "f6442ac3bb8d6937948fdf0a42b785efe1eff436af8bb957ff90228d37ea7a9b",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/velocity-rollers-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "swizzle",
+      "task": "Mjlab-Velocity-Swizzle-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-a1/swizzle-652b7ce-v1/logs/rsl_rl/velocity_swizzle/2026-08-30_21-52-38_a1-swizzle-652b7ce/model_5999.pt",
+      "checkpoint_sha256": "fab6b9d061573ad4da2e8ade171cbe338e94f3ec1297c2c726a7fcf0017bf700",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/swizzle-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "roller_crouch",
+      "task": "Mjlab-RollerCrouch-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-b1/roller-crouch-652b7ce-v1/logs/rsl_rl/roller_crouch/2026-08-30_22-03-27_b1-roller-crouch-652b7ce/model_7999.pt",
+      "checkpoint_sha256": "7fa080a44023eb4b32da4fdc044b4899feef9750c50f7bbde7d2a1a4ba0263c8",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/roller-crouch-3b44c25-v1/evaluation.json",
+      "accepted": true
+    },
+    {
+      "id": "roller_slope",
+      "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-r4/roller-slope-facd4f4-v1/artifacts/model_11748.pt",
+      "checkpoint_sha256": "044b8e20b9d7608f378fd5f0075d349d109cb02446696ba96affa9efd0feb241",
+      "acceptance_report": "cloudml/specialist-r4-roller-slope-acceptance-facd4f4.json",
+      "accepted": true
+    },
+    {
+      "id": "spin",
+      "task": "Mjlab-Spin-Flat-MicroDuck",
+      "checkpoint": "/dongxu/microduck_rl/runs/specialist-b1/spin-652b7ce-v1/logs/rsl_rl/spin/2026-08-30_22-03-27_b1-spin-652b7ce/model_7999.pt",
+      "checkpoint_sha256": "e62fb077edbcca7a2c90b06feae8e206939f67a1ddaea8dd7f8c92d9ad034e43",
+      "acceptance_report": "/dongxu/microduck_rl/runs/specialist-s2-eval/spin-3b44c25-v1/evaluation.json",
+      "accepted": true
+    }
+  ]
+}

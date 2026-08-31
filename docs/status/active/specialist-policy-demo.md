@@ -5,8 +5,9 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S2 accepted 12 of 13 policies. VelStand `model_10750.pt` is
-accepted; RollerSlope R3 remains in training and evaluation.
+Current slice: S2 complete with 13 of 13 policies accepted. VelStand
+`model_10750.pt` and RollerSlope `model_11748.pt` are the two remediated final
+checkpoints.
 
 Last proven evidence:
 
@@ -72,19 +73,35 @@ Last proven evidence:
   active.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
+- RollerSlope R3 job `t-20260831152607-wxmy9` completed successfully, but its
+  standard-PPO checkpoints never passed the acceptance gate. A local RTX 3090
+  R4 continuation used learning rate `0.0001` and entropy coefficient `0.001`;
+  `model_11748.pt` passed at 0.84375 success and wheel_glide 7.3004, with
+  27/32 timeouts, finite rollouts, non-positive penalties, and a reviewed
+  15-second video that reaches the flat runout upright.
+- both remediated checkpoints were exported through `scripts/export.py` and
+  passed 61D-to-14D PyTorch/ONNX parity on zero-command and command-extreme
+  cases. Their isolated bundles were uploaded to JuiceFS and downloaded again;
+  all 16 returned files match their local SHA-256 values.
+- the remediation-aware final inventory is frozen in
+  `cloudml/specialist-final-checkpoints-remediated-facd4f4.json`. A fresh
+  CloudML and JuiceFS audit proved 13/13 original jobs in `succeed`, exactly
+  one remote hit for every accepted checkpoint, and exactly one remote report
+  and diagnostic video for every policy.
 
 Completed slices: S0 host/container proof; 13-task smoke matrix; immutable
 source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: monitor RollerSlope R3 to terminal state, evaluate every remaining
-checkpoint, and prepare a new remediation only if no checkpoint passes. Keep
-the accepted VelStand checkpoint frozen while its training job runs to terminal.
+Next slice: S3/S4 packaging and the integrated switching demo. The specialist
+training and per-policy acceptance objective is complete; no additional model
+training is required. VelStand remediation job `t-20260831123941-k7hts` may
+continue to its configured terminal iteration, but its later checkpoints do
+not replace accepted `model_10750.pt` without a new formal evaluation.
 
-Next proof: CloudML logs must prove the requested bootstrap checkpoint loaded;
-after training, termination-aware 32-episode reports/videos for both replacement
-checkpoints must each reach success rate >= 0.8.
+Next proof: validate the final artifact manifest and produce the Track A/B
+switching reels and gallery without changing the accepted checkpoint inventory.
 
 Stop condition: do not mark a checkpoint accepted from training reward alone;
 accept only finite rollouts with non-positive penalties and video review that

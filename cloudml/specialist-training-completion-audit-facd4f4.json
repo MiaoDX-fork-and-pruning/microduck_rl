@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "audited_at": "2026-08-31T18:09:01+08:00",
+  "objective": "Train and formally accept all 13 Microduck specialist policies",
+  "completed": true,
+  "counts": {
+    "expected_policies": 13,
+    "accepted_policies": 13,
+    "distinct_policy_ids": 13,
+    "original_training_jobs_succeeded": 13,
+    "accepted_checkpoints_with_exactly_one_remote_hit": 13,
+    "policies_with_exactly_one_remote_evaluation_report": 13,
+    "policies_with_exactly_one_remote_diagnostic_video": 13
+  },
+  "evidence": {
+    "final_inventory": "cloudml/specialist-final-checkpoints-remediated-facd4f4.json",
+    "original_job_inventory": "cloudml/specialist-final-checkpoints-652b7ce.json",
+    "velstand_acceptance": "cloudml/specialist-r2-velstand-acceptance-facd4f4.json",
+    "roller_slope_acceptance": "cloudml/specialist-r4-roller-slope-acceptance-facd4f4.json",
+    "cloudml_workspace_id": "10076",
+    "cloudml_query": "cml custom_train describe <job_id>",
+    "juicefs_volume": "robot-intelligent-planning-data",
+    "juicefs_cluster": "wlcb-cloudml"
+  },
+  "remediation_jobs": [
+    {
+      "job_id": "t-20260831152607-wxmy9",
+      "purpose": "RollerSlope R3 standard-PPO continuation",
+      "state": "succeed",
+      "accepted_checkpoint_from_job": false
+    },
+    {
+      "job_id": "t-20260831123941-k7hts",
+      "purpose": "VelStand R2 continuation",
+      "state_at_audit": "running",
+      "accepted_checkpoint": "model_10750.pt",
+      "accepted_checkpoint_frozen": true,
+      "blocks_completion": false
+    }
+  ],
+  "remaining_training_required": 0,
+  "notes": [
+    "All penalty terms in every accepted formal battery are non-positive and all rollouts are finite.",
+    "Every accepted policy has a human-reviewed diagnostic video matching its task metric.",
+    "VelStand and RollerSlope isolated bundles contain checkpoint, evaluation, video, mandatory-path ONNX export, golden actions, parity report, and training parameters; both bundles were downloaded after upload and matched local SHA-256 hashes.",
+    "The still-running VelStand job is a bounded continuation of an already accepted lineage and does not imply a missing policy. Later checkpoints require a new formal evaluation before replacing model_10750.pt."
+  ]
+}
