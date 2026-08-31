@@ -20,5 +20,16 @@
     "bootstrap": "model_7000.pt",
     "extra_iterations": 5000,
     "source_snapshot": "/dongxu/microduck_rl/source/facd4f4-20260831T1152"
+  },
+  {
+    "id": "roller_slope_r3",
+    "job_id": "t-20260831152607-wxmy9",
+    "state": "enqueued",
+    "last_verified_iteration": 0,
+    "last_verified_mean_reward": null,
+    "lineage": "/dongxu/microduck_rl/runs/specialist-r3/roller-slope-facd4f4-v1",
+    "bootstrap": "model_10500.pt",
+    "extra_iterations": 5000,
+    "source_snapshot": "/dongxu/microduck_rl/source/facd4f4-20260831T1152"
   }
 ]
