@@ -15,17 +15,17 @@ Last proven evidence:
 - every checkpoint probe completed without truncation;
 - resolved task, job, output, run prefix, and checkpoint inputs are frozen in
   `cloudml/specialist-final-checkpoints-652b7ce.json`;
-- evaluator contract tests pass (`14 passed`), CLI help and compilation pass;
+- evaluator contract tests pass (`15 passed`), including a real CUDA tensor
+  finite/NaN check; CLI help and compilation pass;
 - all 13 task configs resolve their active reward terms and episode durations;
 - pilot YAML is prepared at
-  `cloudml/generated/microduck-specialist-s2-velocity-pilot-6d5a353.yaml`;
+  `cloudml/generated/microduck-specialist-s2-velocity-pilot-9dece54.yaml`;
 - CloudML read-only checks show 114 free GUARANTEED R49 GPUs and no remaining
   workspace guaranteed quota allocation.
 - local EGL smoke completed with a real checkpoint: one finite rollout, reward
   terms and `fell_over` termination captured, and a 10-frame MP4 written;
-- JuiceFS upload dry-run passed for the committed `6d5a353` snapshot: 267 files,
-  28,964,837 bytes planned, zero uploaded, target prefix
-  `/dongxu/microduck_rl/source/6d5a353-20260831T1006/`.
+- the prior JuiceFS upload dry-run passed with zero uploaded; rerun it against
+  the final `9dece54` snapshot immediately before confirmed upload.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -34,7 +34,7 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: upload the immutable `6d5a353` source snapshot and submit the
+Next slice: upload the immutable `9dece54` source snapshot and submit the
 bounded Velocity pilot after the CloudML confirmation gate; then review its
 report/video before rendering the 12 remaining evaluation jobs.
 
