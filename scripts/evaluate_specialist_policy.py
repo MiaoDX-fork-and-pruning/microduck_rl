@@ -23,6 +23,7 @@ _PENALTY_MARKERS = (
 )
 _FAILURE_TERMINATIONS = {
     "fell_over",
+    "fell_into_void",
     "fallen_too_long",
     "nan_state",
     "out_of_terrain_bounds",

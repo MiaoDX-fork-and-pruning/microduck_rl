@@ -107,6 +107,7 @@ def test_nan_termination_is_nonfinite_even_after_auto_reset():
 def test_failure_termination_cannot_count_as_success():
     assert _MODULE.episode_is_success(2.0, 1.0, ["time_out"])
     assert not _MODULE.episode_is_success(2.0, 1.0, ["fell_over"])
+    assert not _MODULE.episode_is_success(2.0, 1.0, ["fell_into_void"])
     assert not _MODULE.episode_is_success(2.0, 1.0, ["fallen_too_long"])
     assert not _MODULE.episode_is_success(2.0, 1.0, ["out_of_terrain_bounds"])
 
