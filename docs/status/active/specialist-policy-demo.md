@@ -5,8 +5,8 @@ Source plan: `docs/specialist_policy_demo_plan.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S1 is complete; implement and run S2 fixed-seed per-policy
-evaluation, acceptance reports, and diagnostic videos.
+Current slice: S2 evaluator is implemented and locally verified; the bounded
+Velocity pilot is rendered and awaiting explicit CloudML submission approval.
 
 Last proven evidence:
 
@@ -15,6 +15,12 @@ Last proven evidence:
 - every checkpoint probe completed without truncation;
 - resolved task, job, output, run prefix, and checkpoint inputs are frozen in
   `cloudml/specialist-final-checkpoints-652b7ce.json`;
+- evaluator contract tests pass (`14 passed`), CLI help and compilation pass;
+- all 13 task configs resolve their active reward terms and episode durations;
+- pilot YAML is prepared at
+  `cloudml/generated/microduck-specialist-s2-velocity-pilot-ad1c104.yaml`;
+- CloudML read-only checks show 114 free GUARANTEED R49 GPUs and no remaining
+  workspace guaranteed quota allocation.
 - the offline artifact contract, ONNX comparator, canonical scenario runner,
   and gallery builder already have focused tests.
 
@@ -23,11 +29,12 @@ source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: land the real MuJoCo S2 evaluator, verify it locally, then render
-and submit bounded evaluation jobs against the frozen checkpoint inventory.
+Next slice: upload the immutable `ad1c104` source snapshot and submit the
+bounded Velocity pilot after the CloudML confirmation gate; then review its
+report/video before rendering the 12 remaining evaluation jobs.
 
-Next proof: focused evaluator tests and CLI proof, followed by one live
-fixed-seed evaluation report/video before scaling to all 13 policies.
+Next proof: one live fixed-seed Velocity evaluation report/video, followed by
+human review and threshold calibration before scaling to all 13 policies.
 
 Stop condition: do not mark a checkpoint accepted from training reward alone;
 accept only finite rollouts with non-positive penalties and video review that
@@ -37,5 +44,6 @@ the completed training lineages.
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 
-Parked work: Track A/B integrated reels and gallery wait for S2 acceptance;
-Generalist teacher ingestion waits for the completed specialist manifest.
+Parked work: CloudML upload/submission awaits user confirmation; Track A/B
+integrated reels and gallery wait for S2 acceptance; Generalist teacher
+ingestion waits for the completed specialist manifest.
