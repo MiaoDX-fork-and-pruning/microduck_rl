@@ -40,6 +40,8 @@ def _report(episodes):
         minimum_main_task_metric=1.0,
         penalty_names=["action_rate_l2"],
         video_path=Path("evaluation.mp4"),
+        video_frame_count=500,
+        video_fps=50.0,
         video_review="Motion matches the task metric without a fall.",
     )
 
@@ -55,6 +57,8 @@ def test_report_is_deterministic_and_has_validator_contract():
     assert first["main_task_metric"] == 1.75
     assert first["penalty_terms"] == {"action_rate_l2": -0.2}
     assert first["termination_counts"] == {"time_out": 2}
+    assert first["diagnostic_video_episode_id"] == 0
+    assert first["diagnostic_video_duration_seconds"] == 10.0
     assert len(first["episodes"]) == 2
 
 

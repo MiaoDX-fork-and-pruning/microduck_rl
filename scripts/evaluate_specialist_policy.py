@@ -55,6 +55,8 @@ def build_evaluation_report(
     minimum_main_task_metric: float,
     penalty_names: Iterable[str],
     video_path: Path,
+    video_frame_count: int,
+    video_fps: float,
     video_review: str,
 ) -> dict[str, Any]:
     """Build the stable validator-facing report from raw per-episode evidence."""
@@ -121,6 +123,10 @@ def build_evaluation_report(
         "total_reward_mean": sum(float(ep["total_reward"]) for ep in episodes)
         / len(episodes),
         "diagnostic_video": str(video_path),
+        "diagnostic_video_episode_id": 0,
+        "diagnostic_video_frame_count": video_frame_count,
+        "diagnostic_video_duration_seconds": video_frame_count / video_fps,
+        "diagnostic_video_fps": video_fps,
         "video_review": video_review,
         "acceptance_checks": acceptance_checks,
         "episodes": episodes,
@@ -240,6 +246,10 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
             if not _tensors_finite(observation) or not _sim_state_finite(raw_env):
                 fatal_reason = "nonfinite_state"
                 break
+            if bool(active[0].item()) and len(frames) < video_steps:
+                frame = raw_env.render()
+                if frame is not None:
+                    frames.append(np.asarray(frame[0] if frame.ndim == 4 else frame))
             with torch.inference_mode():
                 action = policy(observation)
             if not _tensors_finite(action):
@@ -252,11 +262,6 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                 and _tensors_finite(reward)
                 and _sim_state_finite(raw_env)
             )
-            if len(frames) < video_steps:
-                frame = raw_env.render()
-                if frame is not None:
-                    frames.append(np.asarray(frame[0] if frame.ndim == 4 else frame))
-
             scale = raw_env.step_dt if raw_env.cfg.scale_rewards_by_dt else 1.0
             for env_id in active.nonzero(as_tuple=False).squeeze(-1).cpu().tolist():
                 lengths[env_id] += 1
@@ -304,7 +309,8 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
             }
 
     video_path = diagnostic_video_path(args.output, args.video_output).resolve()
-    _write_video(video_path, frames, fps=1.0 / raw_env.step_dt)
+    video_fps = 1.0 / raw_env.step_dt
+    _write_video(video_path, frames, fps=video_fps)
     minimum_main = (
         args.success_threshold
         if args.minimum_main_task_metric is None
@@ -322,6 +328,8 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         minimum_main_task_metric=minimum_main,
         penalty_names=penalty_names,
         video_path=video_path,
+        video_frame_count=len(frames),
+        video_fps=video_fps,
         video_review=args.video_review,
     )
     args.output.parent.mkdir(parents=True, exist_ok=True)
