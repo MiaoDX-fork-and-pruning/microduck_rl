@@ -44,6 +44,7 @@ def _report(episodes):
         video_path=Path("evaluation.mp4"),
         video_frame_count=500,
         video_fps=50.0,
+        video_reset_count=0,
         video_review="Motion matches the task metric without a fall.",
     )
 
@@ -59,8 +60,10 @@ def test_report_is_deterministic_and_has_validator_contract():
     assert first["main_task_metric"] == 1.75
     assert first["penalty_terms"] == {"action_rate_l2": -0.2}
     assert first["termination_counts"] == {"time_out": 2}
-    assert first["diagnostic_video_episode_id"] == 0
+    assert first["diagnostic_video_env_id"] == 0
+    assert first["diagnostic_video_first_episode_id"] == 0
     assert first["diagnostic_video_duration_seconds"] == 10.0
+    assert first["diagnostic_video_reset_count"] == 0
     assert len(first["episodes"]) == 2
 
 
@@ -135,6 +138,30 @@ def test_report_only_is_explicit_and_disabled_by_default():
 
     assert parser.parse_args(common).report_only is False
     assert parser.parse_args([*common, "--report-only"]).report_only is True
+
+
+def test_video_review_recomputes_acceptance_from_existing_checks():
+    report = _report([_episode()])
+    report["video_review"] = ""
+    report["acceptance_checks"]["video_reviewed"] = False
+    report["accepted"] = False
+
+    result = _MODULE.apply_video_review(report, "  Motion matches metrics.  ")
+
+    assert result["video_review"] == "Motion matches metrics."
+    assert result["acceptance_checks"]["video_reviewed"] is True
+    assert result["accepted"] is True
+
+
+def test_video_review_cannot_override_a_failed_computed_check():
+    report = _report([_episode(success=False)])
+    report["acceptance_checks"]["success_rate"] = False
+    report["accepted"] = False
+
+    result = _MODULE.apply_video_review(report, "Motion reviewed.")
+
+    assert result["acceptance_checks"]["video_reviewed"] is True
+    assert result["accepted"] is False
 
 
 def test_cuda_tensor_state_check_does_not_call_numpy():
