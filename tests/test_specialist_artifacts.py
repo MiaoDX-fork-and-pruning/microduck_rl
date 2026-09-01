@@ -43,7 +43,7 @@ def _inputs(tmp_path):
     }))
     manifest = {
         "policies": [{
-            "id": "stand",
+            "id": "velstand_flat",
             "task": "Mjlab-VelStand-Flat-MicroDuck",
             "accepted": True,
             "observation_dim": 61,
@@ -53,14 +53,19 @@ def _inputs(tmp_path):
         }]
     }
     scenario = {
+        "seed": 1234,
         "duration_s": 10,
         "command_rate_hz": 50,
+        "compatibility": {"scene": "test_scene", "session": "test_session"},
         "transitions": [{
             "at_s": 0,
-            "from": "stand",
-            "to": "stand",
-            "expected_outcome": "upright",
+            "from": "velstand_flat",
+            "to": "velstand_flat",
+            "min_dwell_s": 10,
+            "non_interruptible_s": 0,
+            "expected_outcome": {"metric": "upright", "operator": "gte", "threshold": 0.8},
         }],
+        "unsupported_transitions": [],
     }
     manifest_path = tmp_path / "manifest.json"
     scenario_path = tmp_path / "scenario.json"
@@ -120,10 +125,33 @@ def test_rejects_non_increasing_scenario_times(tmp_path):
     manifest_path, scenario_path, _, scenario = _inputs(tmp_path)
     scenario["transitions"].append({
         "at_s": 0,
-        "from": "stand",
-        "to": "stand",
-        "expected_outcome": "upright",
+        "from": "velstand_flat",
+        "to": "velstand_flat",
+        "min_dwell_s": 1,
+        "non_interruptible_s": 0,
+        "expected_outcome": {"metric": "upright", "operator": "gte", "threshold": 0.8},
     })
     scenario_path.write_text(json.dumps(scenario))
     with pytest.raises(ValueError, match="at_s must increase"):
+        validate(manifest_path, scenario_path)
+
+
+def test_validates_unsupported_policy_ids_without_compiling_them(tmp_path):
+    manifest_path, scenario_path, _, scenario = _inputs(tmp_path)
+    scenario["unsupported_transitions"] = [{
+        "from": "velstand_flat",
+        "to": "unknown_policy",
+        "reason": "not part of the frozen inventory",
+    }]
+    scenario_path.write_text(json.dumps(scenario))
+    with pytest.raises(ValueError, match=r"unsupported_transitions\[0\] references unknown policy"):
+        validate(manifest_path, scenario_path)
+
+
+def test_rejects_unknown_executable_policy_even_with_legacy_reason(tmp_path):
+    manifest_path, scenario_path, _, scenario = _inputs(tmp_path)
+    scenario["transitions"][0]["to"] = "unknown_policy"
+    scenario["transitions"][0]["unsupported_reason"] = "legacy bypass"
+    scenario_path.write_text(json.dumps(scenario))
+    with pytest.raises(ValueError, match=r"transitions\[0\] references unknown policy"):
         validate(manifest_path, scenario_path)

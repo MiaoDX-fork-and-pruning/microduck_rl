@@ -1,6 +1,6 @@
 # Specialist demo implementation plan
 
-Status: **ready for execution**
+Status: **in progress: D0-D2 and per-policy D3/D5 complete; integrated reels and scenario-level PT/ONNX rehearsal remain**
 
 This plan turns the accepted specialist inventory into a reproducible,
 scenario-driven demo. It is an implementation contract, not a training plan.
@@ -151,3 +151,8 @@ after all stop gates pass.
   planning-loop review; D0--D6 are pending.
 - Planning-loop decision: do not promise one 13-policy reel or infer Track B
   router support; prove compatible slices independently.
+- 2026-09-01: staged the real 13-policy artifact manifest, added Track B and
+  explicit unsupported-transition contracts, exported all policies through
+  `scripts/export.py`, passed per-policy ONNX parity, and built the diagnostic
+  gallery. Integrated reels remain pending a headless renderer because the
+  current scenario runner requires the interactive MuJoCo viewer.
