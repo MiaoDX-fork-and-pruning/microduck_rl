@@ -13,6 +13,11 @@ Proven:
   recovery, and handback; no second scheduler was added.
 - `scripts/run_official_runtime_mujoco.py` passes a 20-tick smoke for walk and
   rollers with finite 15D targets and zero hidden resets.
+- Full evidence is stored in `artifacts/generalist-v0/p1-official-runtime-
+  mujoco-full.json`; the smoke evidence is stored beside it with `smoke` in
+  the filename. The full run uses 300 active controller ticks after frozen
+  homing and records target discontinuity, contacts, tilt, displacement, labels,
+  gains, fall/recovery flags, and unsupported cross-profile edges.
 - The corrected 240-tick full report keeps the command active after homing and
   reaches `homing -> walk -> stand` on the walk profile and `homing -> walk` on
   rollers. Both exceed the 65-degree fall gate; only walk sees the official
