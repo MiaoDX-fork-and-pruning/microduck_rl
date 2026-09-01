@@ -22,17 +22,26 @@ Full battery: `artifacts/generalist-v0/p0-action-battery-semantic-final/summary.
 contains 13 policies and 36 cases, with direct-step and command-EMA coverage
 for both velocity policies.
 
-P0 gate result: NOT PASSED for the full requested velocity grid. Ten policies
-pass all primary cases; `standup_flat` now passes its primary sit-to-stand case.
-`velocity_flat` fails the 0.03/0.05 m/s buckets in both input modes for
-insufficient forward displacement while remaining upright. The separate
+P0 gate result: PASSED. All 13 specialists pass their primary gates after
+0.03/0.05 m/s were explicitly accepted as a standing deadband. The separate
 `standup_flat/prone_recovery_probe` remains failed, but is evidence for the
 future recovery chain and does not count against standalone acceptance.
 
+P1 current evidence: official `pollen-robotics/microduck` is pinned at
+`590b986bd8c0d50ae02cb3ea2f59c463b6828168`. Its fall predictor tests pass 8/8;
+the production limp-pose ramp and default-enabled tests pass; the MuJoCo
+sit-to-stand handoff passes. Report:
+`artifacts/generalist-v0/p1-official-fall-recovery-prebridge.json`.
+
+P1 gate result: NOT PASSED. The pinned `robotd --fake` backend cannot accept
+external IMU/joint frames, so MuJoCo cannot yet drive the official persistent
+state machine end to end. Adding a test-only `RobotIo` NDJSON replay adapter in
+the official repository is the next bridge slice; do not duplicate the state
+machine in this repository.
+
 Stop condition: P0 is complete only if every intended teacher has an explicit,
-reproducible passing per-case report. Decide whether the low-speed buckets are
-required locomotion behavior or an explicit standing deadband before P1; do not start P1
-from this evidence.
+reproducible passing per-case report. P1 requires a deterministic persistent
+official-controller replay before composition parity may be claimed.
 
 No-touch scope: official controller repository/API, runtime defaults, a second
 policy scheduler, generalist training, and hardware rollout.

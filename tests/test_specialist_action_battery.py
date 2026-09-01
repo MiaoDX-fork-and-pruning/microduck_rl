@@ -62,6 +62,17 @@ def test_failure_classification_is_per_case():
     assert not passed and reason == "ended_fallen"
 
 
+def test_low_speed_deadband_may_hold_still_but_higher_speed_must_move():
+    low = _MODULE.classify_case(
+        "velocity_flat", True, [0.0, 0.0, 0.0], 0.1, 0.1, False, 0.05
+    )
+    moving = _MODULE.classify_case(
+        "velocity_flat", True, [0.0, 0.0, 0.0], 0.1, 0.1, False, 0.08
+    )
+    assert low == (True, None)
+    assert moving == (False, "insufficient_forward_displacement")
+
+
 def test_sitstand_case_contains_a_commanded_rise():
     case = _MODULE.command_cases("sitstand_flat", smoke=False)[0]
     assert _MODULE.requested_command("sitstand_flat", case, 0, 100)[0] == 1.0
