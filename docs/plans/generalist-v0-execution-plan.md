@@ -73,8 +73,10 @@ NDJSON transport. The transport consumes official 15-joint sensor frames and
 publishes targets, gains, torque writes, and authoritative `RobotState` frames
 without changing the production startup path. The MuJoCo driver now maps the
 14 policy joints explicitly around the runtime mouth slot and passes a 20-tick
-smoke for both profiles. The first 120-tick full run reaches official `stand`
-and `walk` labels but both profiles fall without recovery, so P1 remains active
+smoke for both profiles. A corrected 240-tick run keeps commands active beyond
+the two-second official homing phase and reaches official `walk`/`stand`
+transitions. Both profiles still fall; only the walk profile reports an official
+fall-clear transition, and neither proves physical recovery. P1 remains active
 and P2 must not start.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
