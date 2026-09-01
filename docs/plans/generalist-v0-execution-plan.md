@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 complete, P1 Rust-runtime replay complete, MuJoCo bridge pending.
+Status: active; P0 complete, P1 Rust replay and transport complete, MuJoCo closed-loop runs pending.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -66,10 +66,14 @@ failed teacher is fixed or excluded before composition work.
 
 ### P1. Official-controller combination bridge
 
-Current evidence: the pinned official fork has test-only persistent sensor replay
-coverage for the fall chain plus independent long walk and roller command
-sequences. The remaining P1 gate is a persistent MuJoCo-to-Rust sensor bridge;
-the Rust replay is not counted as MuJoCo parity.
+Current evidence: official fork branch `test/official-fall-replay` at commit
+`66d4fa8` has persistent replay coverage for the fall chain, independent long
+walk and roller command sequences, and an explicit `robotd --replay-stdin`
+NDJSON transport. The transport consumes official 15-joint sensor frames and
+publishes targets, gains, torque writes, and authoritative `RobotState` frames
+without changing the production startup path. The remaining P1 gate is the
+MuJoCo driver plus separate walk and roller closed-loop reports; Rust-only
+replay and transport compilation are not counted as MuJoCo parity.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
 Build the smallest headless bridge needed to run the official controller against
