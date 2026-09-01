@@ -6,7 +6,7 @@ Proven:
 - P0 specialist battery and pinned official fall contract pass.
 - Fork branch `test/official-fall-replay` has test-only replay coverage for the
   fall chain and independent long walk/roller command sequences.
-- Fork commit `66d4fa8` adds the explicit `robotd --replay-stdin` NDJSON
+- Fork commit `66d4fa8facd4c564f8346dc54f361ceaa5e28d59` adds the explicit `robotd --replay-stdin` NDJSON
   transport. It uses the real `control_loop`, preserves its state across
   frames, and emits official targets, gains, torque writes, and state labels.
 - Official controller owns policy selection, command smoothing, gain, fall

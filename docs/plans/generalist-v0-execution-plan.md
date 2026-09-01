@@ -67,7 +67,7 @@ failed teacher is fixed or excluded before composition work.
 ### P1. Official-controller combination bridge
 
 Current evidence: official fork branch `test/official-fall-replay` at commit
-`66d4fa8` has persistent replay coverage for the fall chain, independent long
+`66d4fa8facd4c564f8346dc54f361ceaa5e28d59` has persistent replay coverage for the fall chain, independent long
 walk and roller command sequences, and an explicit `robotd --replay-stdin`
 NDJSON transport. The transport consumes official 15-joint sensor frames and
 publishes targets, gains, torque writes, and authoritative `RobotState` frames
