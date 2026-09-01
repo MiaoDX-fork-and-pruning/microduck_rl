@@ -146,6 +146,7 @@ class PolicyInference:
                  sitstand_onnx_path=None,
                  kick_left_onnx_path=None, kick_right_onnx_path=None,
                  roulade_onnx_path=None,
+                 roller_crouch_onnx_path=None,
                  kick_duration=3.0, roulade_duration=2.0):
         self.model = model
         self.data = data
@@ -238,6 +239,12 @@ class PolicyInference:
             self.slope_session = ort.InferenceSession(slope_onnx_path)
             sl_input_shape = self.slope_session.get_inputs()[0].shape
             print(f"Slope policy input shape: {sl_input_shape}")
+
+        # Track-B roller specialist sessions are explicit scene-local routes.
+        self.roller_crouch_session = (
+            ort.InferenceSession(roller_crouch_onnx_path)
+            if roller_crouch_onnx_path else None
+        )
 
         # Episodic behavior policies (kick left/right, roulade). All three use
         # the unified 61D obs layout with an ALL-ZERO 13D command (twist forced
@@ -839,11 +846,14 @@ class PolicyInference:
         self.body_cmd = command[7:13].copy()
         self.current_policy = {
             "stand": "standing",
+            "velstand_flat": "standing",
             "velocity_flat": "walking",
             "sitstand_flat": "sit",
             "ground_pick_flat": "ground_pick",
             "ball_kick_flat": "kick_right",
             "roulade_flat": "roulade",
+            "velocity_rollers": "walking",
+            "roller_crouch": "roller_crouch",
         }[policy_id]
         self.ort_session = session
         self.input_name = session.get_inputs()[0].name
@@ -856,11 +866,14 @@ class PolicyInference:
     def _specialist_sessions(self):
         return {
             "stand": self.standing_session,
+            "velstand_flat": self.standing_session,
             "velocity_flat": self.walking_session,
             "sitstand_flat": self.sit_session if self.is_sitstand else None,
             "ground_pick_flat": self.ground_pick_session,
             "ball_kick_flat": self.behavior_sessions.get("kick_right"),
             "roulade_flat": self.behavior_sessions.get("roulade"),
+            "velocity_rollers": self.walking_session,
+            "roller_crouch": self.roller_crouch_session,
         }
 
     def validate_specialist_policies(self, policy_ids):
