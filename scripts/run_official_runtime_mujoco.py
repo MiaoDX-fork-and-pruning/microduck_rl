@@ -132,26 +132,32 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         assert process.stdin is not None and process.stdout is not None
         outputs: list[dict[str, Any]] = []
         labels: list[str] = []
+        tilt_trace: list[float] = []
         official_fall_seen = False
         official_recovery_seen = False
         gains: list[int] = []
         targets: list[list[float]] = []
         max_tilt = 0.0
+        physical_fall_seen = False
+        physical_recovery_seen = False
         contacts: set[str] = set()
         twists = ([0.0, 0.0, 0.0] if roller else [0.12, 0.0, 0.0], [0.0, 0.0, 0.0])
         ticks = args.ticks
         stop_sender = threading.Event()
         data_lock = threading.Lock()
+        target_count = 0
 
         def pump_input() -> None:
+            nonlocal target_count
             # The official RobotIo read is intentionally blocking. Keep it fed independently so
             # startup/bring-up ticks (which may not write a target) cannot deadlock the harness.
             try:
-                for tick in range(ticks + 8):
+                for tick in range(ticks + 16):
                     if stop_sender.is_set():
                         break
                     with data_lock:
-                        frame = official_frame(data, policy, list(twists[0] if tick < (ticks * 3) // 4 else twists[1]), init=tick == 0)
+                        moving = target_count < max(0, ticks - args.zero_tail_ticks)
+                        frame = official_frame(data, policy, list(twists[0] if moving else twists[1]), init=tick == 0)
                     process.stdin.write(json.dumps(frame) + "\n")
                     process.stdin.flush()
                     time.sleep(0.02)
@@ -183,6 +189,7 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                     if len(target) != 15 or not np.isfinite(target).all():
                         raise ValueError("official target is not finite 15D")
                     targets.append(target)
+                    target_count = len(targets)
                     servo_target = np.asarray(target, dtype=np.float64)
                     with data_lock:
                         data.ctrl[:] = np.concatenate((servo_target[:MOUTH_INDEX], servo_target[MOUTH_INDEX + 1 :]))
@@ -190,7 +197,12 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                             mujoco.mj_step(model, data)
                         rotation = data.xmat[policy.trunk_body_id].reshape(3, 3)
                         tilt = math.acos(float(np.clip(rotation[2, 2], -1.0, 1.0)))
+                        tilt_trace.append(tilt)
                         max_tilt = max(max_tilt, tilt)
+                        physical_fall_seen = physical_fall_seen or tilt > math.radians(65.0)
+                        physical_recovery_seen = physical_recovery_seen or (
+                            physical_fall_seen and tilt < math.radians(35.0)
+                        )
                         for contact in data.contact[: data.ncon]:
                             for geom in (contact.geom1, contact.geom2):
                                 contacts.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(geom)) or str(geom))
@@ -210,18 +222,26 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             "ticks": len(targets),
             "labels": sorted(set(labels)),
             "label_trace": labels,
+            "tilt_trace_rad": tilt_trace,
             "gains": sorted(set(gains)),
             "target_count": len(targets),
             "max_target_discontinuity": float(np.max(np.abs(np.diff(np.asarray(targets), axis=0)))) if len(targets) > 1 else 0.0,
             "max_tilt_rad": max_tilt,
             "world_displacement_m": (final_pos - start).tolist(),
             "contact_geoms": sorted(contacts),
-            "fall_seen": max_tilt > math.radians(65.0) or official_fall_seen,
+            "fall_seen": physical_fall_seen or official_fall_seen,
+            "physical_fall_seen": physical_fall_seen,
             "official_fall_seen": official_fall_seen,
-            "recovery_seen": official_recovery_seen,
+            "recovery_seen": physical_recovery_seen and official_recovery_seen,
+            "physical_recovery_seen": physical_recovery_seen,
+            "official_recovery_seen": official_recovery_seen,
             "reset_count": 0,
-            "passed": bool(targets) and process.returncode == 0 and max_tilt <= math.radians(65.0),
-            "failure_reason": None if max_tilt <= math.radians(65.0) else "mujoco_fall_without_recovery",
+            "passed": bool(targets) and process.returncode == 0 and (
+                not physical_fall_seen or (physical_recovery_seen and official_recovery_seen)
+            ),
+            "failure_reason": None if (
+                not physical_fall_seen or (physical_recovery_seen and official_recovery_seen)
+            ) else "mujoco_fall_without_recovery",
             "unsupported_edges": ["walk_to_rollers_cross_profile"],
             "raw_output_count": len(outputs),
         }
@@ -234,10 +254,13 @@ def main() -> int:
     parser.add_argument("--roller-policy", type=Path, default=Path("/tmp/microduck-fork/policies/roller.onnx"))
     parser.add_argument("--official-commit", default="66d4fa8")
     parser.add_argument("--ticks", type=int, default=20)
+    parser.add_argument("--zero-tail-ticks", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.ticks <= 0:
         parser.error("--ticks must be positive")
+    if args.zero_tail_ticks < 0 or args.zero_tail_ticks >= args.ticks:
+        parser.error("--zero-tail-ticks must be non-negative and smaller than --ticks")
     reports = [run_profile(args, roller=False), run_profile(args, roller=True)]
     result = {"schema_version": 1, "mode": "smoke" if args.ticks <= 20 else "full", "profiles": reports, "passed": all(r["passed"] for r in reports)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
