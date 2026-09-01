@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 complete, P1 Rust replay and transport complete, MuJoCo closed-loop runs pending.
+Status: active; P0 complete, P1 bridge smoke passes, full MuJoCo closed-loop behavior gate fails.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -71,9 +71,11 @@ Current evidence: official fork branch `test/official-fall-replay` at commit
 walk and roller command sequences, and an explicit `robotd --replay-stdin`
 NDJSON transport. The transport consumes official 15-joint sensor frames and
 publishes targets, gains, torque writes, and authoritative `RobotState` frames
-without changing the production startup path. The remaining P1 gate is the
-MuJoCo driver plus separate walk and roller closed-loop reports; Rust-only
-replay and transport compilation are not counted as MuJoCo parity.
+without changing the production startup path. The MuJoCo driver now maps the
+14 policy joints explicitly around the runtime mouth slot and passes a 20-tick
+smoke for both profiles. The first 120-tick full run reaches official `stand`
+and `walk` labels but both profiles fall without recovery, so P1 remains active
+and P2 must not start.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
 Build the smallest headless bridge needed to run the official controller against

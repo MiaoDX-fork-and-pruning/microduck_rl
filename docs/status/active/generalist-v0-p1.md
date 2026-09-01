@@ -11,12 +11,17 @@ Proven:
   frames, and emits official targets, gains, torque writes, and state labels.
 - Official controller owns policy selection, command smoothing, gain, fall
   recovery, and handback; no second scheduler was added.
+- `scripts/run_official_runtime_mujoco.py` passes a 20-tick smoke for walk and
+  rollers with finite 15D targets and zero hidden resets.
+- The 120-tick full report reaches official `stand` (walk profile) and `walk`
+  (roller profile), but both profiles exceed the 65-degree fall gate without
+  recovery. The report is intentionally failed rather than accepting transport
+  activity as behavior parity.
 
 Next proof:
-- Add the MuJoCo-side driver with an explicit 14-policy-joint to 15-runtime-
-  joint mapping, then run separate walk and roller long-sequence batteries,
-  recording labels, gains, targets, tilt, displacement, contacts,
-  fall/recovery, and reset/latency metrics.
+- Diagnose and correct the closed-loop sensor/actuator timing or controller
+  handoff conditions demonstrated by the failed 120-tick run, then rerun the
+  separate full walk and roller batteries. Do not weaken the fall gate.
 
 Stop gate:
 - P1 is not complete until both profile reports prove deterministic
