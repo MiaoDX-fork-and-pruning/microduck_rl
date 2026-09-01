@@ -144,7 +144,7 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         physical_fall_seen = False
         physical_recovery_seen = False
         contacts: set[str] = set()
-        twists = ([0.0, 0.0, 0.0] if roller else [0.12, 0.0, 0.0], [0.0, 0.0, 0.0])
+        twists = ([0.0, 0.0, 0.0] if roller else [args.walk_speed, 0.0, 0.0], [0.0, 0.0, 0.0])
         ticks = args.ticks
         stop_sender = threading.Event()
         data_lock = threading.Lock()
@@ -281,6 +281,7 @@ def main() -> int:
     parser.add_argument("--official-commit", default="66d4fa8facd4c564f8346dc54f361ceaa5e28d59")
     parser.add_argument("--ticks", type=int, default=20)
     parser.add_argument("--active-ticks", type=int)
+    parser.add_argument("--walk-speed", type=float, default=0.20)
     parser.add_argument("--zero-tail-ticks", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
