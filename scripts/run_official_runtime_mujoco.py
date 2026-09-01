@@ -132,6 +132,9 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         assert process.stdin is not None and process.stdout is not None
         outputs: list[dict[str, Any]] = []
         labels: list[str] = []
+        requested_commands: list[list[float]] = []
+        applied_commands: list[list[float]] = []
+        latest_label = ""
         tilt_trace: list[float] = []
         official_fall_seen = False
         official_recovery_seen = False
@@ -146,17 +149,18 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         stop_sender = threading.Event()
         data_lock = threading.Lock()
         target_count = 0
+        active_target_count = 0
 
         def pump_input() -> None:
             nonlocal target_count
             # The official RobotIo read is intentionally blocking. Keep it fed independently so
             # startup/bring-up ticks (which may not write a target) cannot deadlock the harness.
             try:
-                for tick in range(ticks + 16):
+                for tick in range(args.active_ticks + 150):
                     if stop_sender.is_set():
                         break
                     with data_lock:
-                        moving = target_count < max(0, ticks - args.zero_tail_ticks)
+                        moving = active_target_count < max(0, args.active_ticks - args.zero_tail_ticks)
                         frame = official_frame(data, policy, list(twists[0] if moving else twists[1]), init=tick == 0)
                     process.stdin.write(json.dumps(frame) + "\n")
                     process.stdin.flush()
@@ -171,14 +175,18 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         sender = threading.Thread(target=pump_input, daemon=True)
         sender.start()
         try:
-            while len(targets) < ticks:
+            while active_target_count < args.active_ticks:
                 message = read_json_line(process.stdout)
                 outputs.append(message)
                 if message.get("type") == "gain":
                     gains.append(int(message["kp"]))
                 elif message.get("type") == "state":
                     state = message["state"]
-                    labels.append(str(state.get("policy", "")))
+                    latest_label = str(state.get("policy", ""))
+                    labels.append(latest_label)
+                    movement = state.get("movement", {})
+                    requested_commands.append(list(movement.get("requested", [0.0, 0.0, 0.0])))
+                    applied_commands.append(list(movement.get("applied", [0.0, 0.0, 0.0])))
                     safety = state.get("safety", {})
                     official_fall_seen = official_fall_seen or bool(safety.get("fallen", False))
                     official_recovery_seen = official_recovery_seen or (
@@ -193,8 +201,11 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                     servo_target = np.asarray(target, dtype=np.float64)
                     with data_lock:
                         data.ctrl[:] = np.concatenate((servo_target[:MOUTH_INDEX], servo_target[MOUTH_INDEX + 1 :]))
-                        for _ in range(PHYSICS_STEPS):
-                            mujoco.mj_step(model, data)
+                        in_bringup = latest_label in {"", "homing", "held"}
+                        if not in_bringup:
+                            active_target_count += 1
+                            for _ in range(PHYSICS_STEPS):
+                                mujoco.mj_step(model, data)
                         rotation = data.xmat[policy.trunk_body_id].reshape(3, 3)
                         tilt = math.acos(float(np.clip(rotation[2, 2], -1.0, 1.0)))
                         tilt_trace.append(tilt)
@@ -212,6 +223,18 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             process.stdin.close()
             process.wait(timeout=10)
         final_pos = data.xpos[policy.trunk_body_id].copy()
+        displacement = (final_pos - start).tolist()
+        stable_or_recovered = not physical_fall_seen or (
+            physical_recovery_seen and official_recovery_seen
+        )
+        locomotion_passed = roller or args.active_ticks <= 20 or displacement[0] >= 0.005
+        passed = bool(targets) and process.returncode == 0 and stable_or_recovered and locomotion_passed
+        failure_reason = None
+        if not stable_or_recovered:
+            failure_reason = "mujoco_fall_without_recovery"
+        elif not locomotion_passed:
+            failure_reason = "insufficient_forward_displacement"
+        first_label_tick = {label: labels.index(label) for label in sorted(set(labels))}
         return {
             "schema_version": 1,
             "profile": "rollers" if roller else "walk_all_collisions",
@@ -220,14 +243,21 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             "bridge": "robotd --replay-stdin",
             "policy_sha256": sha256(policy_path),
             "ticks": len(targets),
+            "active_ticks": active_target_count,
+            "homing_physics_frozen": True,
             "labels": sorted(set(labels)),
             "label_trace": labels,
+            "first_label_tick": first_label_tick,
+            "requested_command_last": requested_commands[-1] if requested_commands else None,
+            "applied_command_last": applied_commands[-1] if applied_commands else None,
+            "max_requested_speed_m_s": float(np.max(np.abs(np.asarray(requested_commands)[:, 0]))) if requested_commands else 0.0,
+            "max_applied_speed_m_s": float(np.max(np.abs(np.asarray(applied_commands)[:, 0]))) if applied_commands else 0.0,
             "tilt_trace_rad": tilt_trace,
             "gains": sorted(set(gains)),
             "target_count": len(targets),
             "max_target_discontinuity": float(np.max(np.abs(np.diff(np.asarray(targets), axis=0)))) if len(targets) > 1 else 0.0,
             "max_tilt_rad": max_tilt,
-            "world_displacement_m": (final_pos - start).tolist(),
+            "world_displacement_m": displacement,
             "contact_geoms": sorted(contacts),
             "fall_seen": physical_fall_seen or official_fall_seen,
             "physical_fall_seen": physical_fall_seen,
@@ -236,12 +266,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             "physical_recovery_seen": physical_recovery_seen,
             "official_recovery_seen": official_recovery_seen,
             "reset_count": 0,
-            "passed": bool(targets) and process.returncode == 0 and (
-                not physical_fall_seen or (physical_recovery_seen and official_recovery_seen)
-            ),
-            "failure_reason": None if (
-                not physical_fall_seen or (physical_recovery_seen and official_recovery_seen)
-            ) else "mujoco_fall_without_recovery",
+            "passed": passed,
+            "failure_reason": failure_reason,
             "unsupported_edges": ["walk_to_rollers_cross_profile"],
             "raw_output_count": len(outputs),
         }
@@ -254,13 +280,17 @@ def main() -> int:
     parser.add_argument("--roller-policy", type=Path, default=Path("/tmp/microduck-fork/policies/roller.onnx"))
     parser.add_argument("--official-commit", default="66d4fa8")
     parser.add_argument("--ticks", type=int, default=20)
+    parser.add_argument("--active-ticks", type=int)
     parser.add_argument("--zero-tail-ticks", type=int, default=5)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.ticks <= 0:
         parser.error("--ticks must be positive")
-    if args.zero_tail_ticks < 0 or args.zero_tail_ticks >= args.ticks:
-        parser.error("--zero-tail-ticks must be non-negative and smaller than --ticks")
+    args.active_ticks = args.active_ticks or args.ticks
+    if args.active_ticks <= 0:
+        parser.error("--active-ticks must be positive")
+    if args.zero_tail_ticks < 0 or args.zero_tail_ticks >= args.active_ticks:
+        parser.error("--zero-tail-ticks must be non-negative and smaller than --active-ticks")
     reports = [run_profile(args, roller=False), run_profile(args, roller=True)]
     result = {"schema_version": 1, "mode": "smoke" if args.ticks <= 20 else "full", "profiles": reports, "passed": all(r["passed"] for r in reports)}
     args.output.parent.mkdir(parents=True, exist_ok=True)
