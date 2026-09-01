@@ -13,14 +13,15 @@ Proven:
   recovery, and handback; no second scheduler was added.
 - `scripts/run_official_runtime_mujoco.py` passes a 20-tick smoke for walk and
   rollers with finite 15D targets and zero hidden resets.
-- The 120-tick full report reaches official `stand` (walk profile) and `walk`
-  (roller profile), but both profiles exceed the 65-degree fall gate without
-  recovery. The report is intentionally failed rather than accepting transport
-  activity as behavior parity.
+- The corrected 240-tick full report keeps the command active after homing and
+  reaches `homing -> walk -> stand` on the walk profile and `homing -> walk` on
+  rollers. Both exceed the 65-degree fall gate; only walk sees the official
+  fall flag clear, and neither proves physical recovery. The report is
+  intentionally failed rather than accepting transport activity as parity.
 
 Next proof:
-- Diagnose and correct the closed-loop sensor/actuator timing or controller
-  handoff conditions demonstrated by the failed 120-tick run, then rerun the
+- Diagnose the controller handoff and physical recovery behavior demonstrated
+  by the failed 240-tick run, then rerun the
   separate full walk and roller batteries. Do not weaken the fall gate.
 
 Stop gate:
