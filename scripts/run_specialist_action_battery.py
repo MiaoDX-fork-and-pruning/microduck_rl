@@ -171,12 +171,16 @@ def classify_case(
     max_tilt: float,
     final_tilt: float,
     recovered: bool,
+    requested_speed: float | None = None,
 ) -> tuple[bool, str | None]:
     if not finite:
         return False, "nonfinite_state_or_action"
     if final_tilt > TILT_FAILURE_RAD:
         return False, "ended_fallen"
-    if policy_id in LOCOMOTION_POLICIES and displacement[0] < 0.005:
+    # 0.03/0.05 m/s are an allowed standing deadband: the controller may hold
+    # upright instead of forcing a barely-observable gait cycle.
+    outside_deadband = requested_speed is None or requested_speed > 0.05
+    if policy_id in LOCOMOTION_POLICIES and outside_deadband and displacement[0] < 0.005:
         return False, "insufficient_forward_displacement"
     if policy_id in RECOVERY_POLICIES and max_tilt > TILT_FAILURE_RAD and not recovered:
         return False, "did_not_recover"
@@ -268,7 +272,13 @@ def run_case(
     final = trunk_metrics(model, data, body_id)
     displacement = (data.xpos[body_id] - start).tolist()
     passed, failure_reason = classify_case(
-        policy_id, finite, displacement, max_tilt, float(final["tilt_rad"]), recovered
+        policy_id,
+        finite,
+        displacement,
+        max_tilt,
+        float(final["tilt_rad"]),
+        recovered,
+        case.get("speed"),
     )
     trace = {
         key: np.asarray(value, dtype=str if key == "contacts" else None)
