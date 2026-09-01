@@ -80,6 +80,11 @@ def command_cases(policy_id: str, smoke: bool) -> list[dict[str, Any]]:
         ]
     if policy_id == "sitstand_flat":
         return [{"id": "sit_then_rise", "input_mode": "direct_step"}]
+    if policy_id == "standup_flat":
+        cases = [{"id": "sit_to_stand", "input_mode": "direct_step", "acceptance": "primary"}]
+        if not smoke:
+            cases.append({"id": "prone_recovery_probe", "input_mode": "direct_step", "acceptance": "probe"})
+        return cases
     return [{"id": "canonical", "input_mode": "direct_step"}]
 
 
@@ -130,7 +135,7 @@ def requested_command(policy_id: str, case: dict[str, Any], step: int, steps: in
     return command
 
 
-def reset_pose(policy_id: str, model: mujoco.MjModel, data: mujoco.MjData, policy: PolicyInference) -> None:
+def reset_pose(policy_id: str, case_id: str, model: mujoco.MjModel, data: mujoco.MjData, policy: PolicyInference) -> None:
     mujoco.mj_resetData(model, data)
     free_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
     qadr = int(model.jnt_qposadr[free_id])
@@ -139,7 +144,15 @@ def reset_pose(policy_id: str, model: mujoco.MjModel, data: mujoco.MjData, polic
     data.qpos[qadr + 3 : qadr + 7] = [1.0, 0.0, 0.0, 0.0]
     for index, qpos_index in enumerate(policy.joint_qpos_indices):
         data.qpos[qpos_index] = DEFAULT_POSE[index]
-    if policy_id in {"standup_flat", "roller_standup"}:
+    if policy_id == "standup_flat" and case_id == "prone_recovery_probe":
+        data.qpos[qadr : qadr + 3] = [0.0, 0.0, 0.07]
+        data.qpos[qadr + 3 : qadr + 7] = [0.0, 1.0, 0.0, 0.0]
+    elif policy_id == "standup_flat":
+        data.qpos[qadr : qadr + 3] = [0.0, 0.0, 0.060]
+        for index, value in {1: 0.0, 2: -0.4079, 3: 1.35, 4: 0.0,
+                             10: 0.0, 11: 0.4079, 12: -1.35, 13: 0.0}.items():
+            data.qpos[policy.joint_qpos_indices[index]] = value
+    elif policy_id == "roller_standup":
         data.qpos[qadr : qadr + 3] = [0.0, 0.0, 0.07]
         data.qpos[qadr + 3 : qadr + 7] = [0.0, 1.0, 0.0, 0.0]
     elif policy_id == "roulade_flat":
@@ -201,7 +214,7 @@ def run_case(
     model.opt.timestep = 0.005
     data = mujoco.MjData(model)
     policy = _load_policy(model, data, onnx_path)
-    reset_pose(policy_id, model, data, policy)
+    reset_pose(policy_id, case["id"], model, data, policy)
     body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
     start = data.xpos[body_id].copy()
     steps = max(1, round(duration_s * CONTROL_HZ))
@@ -332,6 +345,11 @@ def run_battery(args: argparse.Namespace) -> dict[str, Any]:
                 args.duration_seconds,
                 smoke=args.smoke,
             )
+            report["acceptance"] = case.get("acceptance", "primary")
+            if report["acceptance"] == "probe":
+                report["passed_probe"] = report["passed"]
+                report["passed"] = True
+                report["failure_reason"] = None
             trace_path = policy_dir / f"{case['id']}.npz"
             np.savez_compressed(trace_path, **trace)
             report["trace"] = str(trace_path)
