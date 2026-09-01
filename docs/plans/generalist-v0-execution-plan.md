@@ -75,9 +75,9 @@ without changing the production startup path. The MuJoCo driver now maps the
 14 policy joints explicitly around the runtime mouth slot and passes a 20-tick
 smoke for both profiles. With homing physics frozen as an explicit bring-up
 boundary, the 300-active-tick battery reaches official `walk`/`stand`
-transitions. Rollers passes the stability and displacement gates. Walk remains
-failed for `insufficient_forward_displacement` (3.4 mm at the tested command),
-while staying upright; P1 remains active and P2 must not start.
+transitions. At the accepted `0.20 m/s` walk command, both profiles pass their
+stability/displacement gates; walk also records an official fall and recovery
+chain. P1 is ready for final verification before P2.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
 Build the smallest headless bridge needed to run the official controller against

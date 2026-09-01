@@ -23,14 +23,16 @@ Proven:
   rollers. Both exceed the 65-degree fall gate; only walk sees the official
   fall flag clear, and neither proves physical recovery. The report is
   intentionally failed rather than accepting transport activity as parity.
-- The current 300-active-tick report is more precise: rollers passes; walk stays
-  upright and switches `walk -> stand`, but fails the existing displacement gate
-  at 3.4 mm. This is a behavior failure, not a bridge or ABI failure.
+- The current 300-active-tick report passes both profiles at the accepted
+  `0.20 m/s` walk command. Walk reaches `homing -> walk -> stand`, records an
+  official fall/recovery indication, and ends with 96 mm forward displacement;
+  rollers reaches `walk` and ends with 847 mm forward displacement. The lower
+  `0.12 m/s` diagnostic run remains retained as a failed displacement case.
 
 Next proof:
-- Diagnose the walk command/handoff behavior demonstrated by the failed 300-
-  active-tick run, then rerun the
-  separate full walk and roller batteries. Do not weaken the fall gate.
+- Run final focused/full verification and check the pinned official commit,
+  report hashes, and unsupported transition list before opening P2. Do not
+  weaken the fall/recovery or displacement gates.
 
 Stop gate:
 - P1 is not complete until both profile reports prove deterministic
