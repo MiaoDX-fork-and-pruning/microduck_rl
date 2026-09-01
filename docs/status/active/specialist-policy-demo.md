@@ -5,9 +5,9 @@ Source plan: `docs/plans/specialist-demo-implementation.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: D0-D2 and per-policy D3/D5 complete; integrated D4 reels and
-scenario-level PT/ONNX D3 remain deferred because the current runner is
-viewer-bound and no headless renderer exists. S2 complete with 13 of 13 policies accepted. VelStand
+Current slice: D0-D2, per-policy D3, stitched D4, and D5 complete; continuous
+headless PT/ONNX D3 remains deferred because the current runner is viewer-bound.
+S2 complete with 13 of 13 policies accepted. VelStand
 `model_10750.pt` and RollerSlope `model_11748.pt` are the two remediated final
 checkpoints.
 
@@ -103,6 +103,11 @@ Last proven evidence:
   explicit non-executable unsupported edges. All 13 per-policy ONNX exports
   pass zero/extreme-command parity, and the validated gallery is at
   `artifacts/video-gallery/index.html`.
+- Track A (90 s) and Track B (60 s) deterministic stitched reels are in
+  `artifacts/reels/`, with source segment hashes and an explicit label that
+  they are packaging evidence, not continuous physics rollouts.
+- `artifacts/specialist-demo-completion.json` records the current completion
+  boundary and deferred continuous headless parity gate.
 
 Completed slices: S0 host/container proof; 13-task smoke matrix; immutable
 source/image package; P0/A1/B1 training waves; final checkpoint inventory;
