@@ -1,0 +1,43 @@
+{
+  "policy_id": "roller_slope",
+  "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "044b8e20b9d7608f378fd5f0075d349d109cb02446696ba96affa9efd0feb241",
+  "onnx_sha256": "bfaa1c61f0809131cfd6e404c0e698f40092b458dc89ccb9c0038e20c92fd927",
+  "parity_report_sha256": "77b76044a6c5ae9a3a5cf46b66bfa7fc577ec7d40848021410b5372b24f8ef0c",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.005150867615375993,
+        0.00362549813810306,
+        -0.002701804947870201
+      ],
+      "max_tilt_rad": 0.036655276386348266,
+      "final_tilt_rad": 0.006442122068660289,
+      "final_height_m": 0.1357981950521298,
+      "max_abs_raw_action": 0.324632465839386,
+      "max_abs_applied_action": 0.324632465839386,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/roller_slope/canonical.npz"
+    }
+  ]
+}
