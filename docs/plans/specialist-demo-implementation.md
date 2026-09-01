@@ -1,6 +1,6 @@
 # Specialist demo implementation plan
 
-Status: **in progress: D0-D2, per-policy D3, stitched D4, and D5 complete; continuous headless PT/ONNX parity remains**
+Status: **completed**
 
 This plan turns the accepted specialist inventory into a reproducible,
 scenario-driven demo. It is an implementation contract, not a training plan.
@@ -159,3 +159,6 @@ after all stop gates pass.
 - 2026-09-01: generated deterministic 90 s Track A and 60 s Track B stitched
   evidence reels from reviewed diagnostics, with segment/source hashes and an
   explicit non-continuous-physics label; gallery now indexes 15 videos.
+- 2026-09-01: continuous EGL headless Track A (4,500 frames) and Track B
+  (3,000 frames) rehearsals completed; checkpoint-backed PT actions match ONNX
+  per policy, and scenario parity reports pass for every scheduled policy.

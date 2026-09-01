@@ -1,13 +1,11 @@
 # Specialist policy demo active run
 
-Status: `ACTIVE`
+Status: `COMPLETED`
 Source plan: `docs/plans/specialist-demo-implementation.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: D0-D2, per-policy D3, stitched D4, and D5 complete; continuous
-headless PT/ONNX D3 remains deferred because the current runner is viewer-bound.
-S2 complete with 13 of 13 policies accepted. VelStand
+Current slice: D0-D6 complete. S2 complete with 13 of 13 policies accepted. VelStand
 `model_10750.pt` and RollerSlope `model_11748.pt` are the two remediated final
 checkpoints.
 
@@ -108,14 +106,16 @@ Last proven evidence:
   they are packaging evidence, not continuous physics rollouts.
 - `artifacts/specialist-demo-completion.json` records the current completion
   boundary and deferred continuous headless parity gate.
+- Continuous EGL headless PT/ONNX rehearsals pass for Track A (4,500 frames,
+  six policies) and Track B (3,000 frames, two policies); completion evidence
+  is in `artifacts/reels/*-scenario-parity.json`.
 
 Completed slices: S0 host/container proof; 13-task smoke matrix; immutable
 source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: headless integrated switching renderer and scenario-level PT/ONNX
-rehearsal. The specialist
+Next slice: none. The specialist
 training and per-policy acceptance objective is complete; no additional model
 training is required. VelStand remediation job `t-20260831123941-k7hts` may
 continue to its configured terminal iteration, but its later checkpoints do
@@ -132,5 +132,5 @@ the completed training lineages.
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 
-Parked work: Track A/B integrated reels and gallery wait for S2 acceptance;
-Generalist teacher ingestion waits for the completed specialist manifest.
+Parked work: Generalist teacher ingestion is outside this plan and may consume
+the completed specialist manifest.
