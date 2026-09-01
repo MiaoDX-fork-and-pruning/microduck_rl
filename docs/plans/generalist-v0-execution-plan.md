@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 complete, P1 bridge smoke passes, full MuJoCo closed-loop behavior gate fails.
+Status: active; P0 complete, P1 bridge smoke passes, rollers full gate passes, walk full gate fails displacement.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -73,11 +73,11 @@ NDJSON transport. The transport consumes official 15-joint sensor frames and
 publishes targets, gains, torque writes, and authoritative `RobotState` frames
 without changing the production startup path. The MuJoCo driver now maps the
 14 policy joints explicitly around the runtime mouth slot and passes a 20-tick
-smoke for both profiles. A corrected 240-tick run keeps commands active beyond
-the two-second official homing phase and reaches official `walk`/`stand`
-transitions. Both profiles still fall; only the walk profile reports an official
-fall-clear transition, and neither proves physical recovery. P1 remains active
-and P2 must not start.
+smoke for both profiles. With homing physics frozen as an explicit bring-up
+boundary, the 300-active-tick battery reaches official `walk`/`stand`
+transitions. Rollers passes the stability and displacement gates. Walk remains
+failed for `insufficient_forward_displacement` (3.4 mm at the tested command),
+while staying upright; P1 remains active and P2 must not start.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
 Build the smallest headless bridge needed to run the official controller against
