@@ -278,7 +278,7 @@ def main() -> int:
     parser.add_argument("--robotd", type=Path, required=True)
     parser.add_argument("--walk-policy", type=Path, default=Path("/tmp/microduck-fork/policies/alpha_walking.onnx"))
     parser.add_argument("--roller-policy", type=Path, default=Path("/tmp/microduck-fork/policies/roller.onnx"))
-    parser.add_argument("--official-commit", default="66d4fa8")
+    parser.add_argument("--official-commit", default="66d4fa8facd4c564f8346dc54f361ceaa5e28d59")
     parser.add_argument("--ticks", type=int, default=20)
     parser.add_argument("--active-ticks", type=int)
     parser.add_argument("--zero-tail-ticks", type=int, default=5)
