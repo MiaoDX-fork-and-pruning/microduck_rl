@@ -1,6 +1,6 @@
-Status: ACTIVE
+Status: COMPLETE
 Source plan: docs/plans/generalist-v0-execution-plan.md
-Current slice: persistent MuJoCo-to-official-Rust closed loop
+Completed slice: persistent MuJoCo-to-official-Rust closed loop
 
 Proven:
 - P0 specialist battery and pinned official fall contract pass.
@@ -29,15 +29,13 @@ Proven:
   rollers reaches `walk` and ends with 847 mm forward displacement. The lower
   `0.12 m/s` diagnostic run remains retained as a failed displacement case.
 
-Next proof:
-- Run final focused/full verification and check the pinned official commit,
-  report hashes, and unsupported transition list before opening P2. Do not
-  weaken the fall/recovery or displacement gates.
+Next phase:
+- P2 walk conditioned BC baseline, using this P1 package as the composition
+  gate. Keep specialists immutable and available as fallback.
 
 Stop gate:
-- P1 is not complete until both profile reports prove deterministic
-  controller state across a MuJoCo transition and the exact official commit,
-  bridge version, model hashes, and unsupported edges are recorded.
+- P1 complete: both profile reports prove persistent official-controller state,
+  exact commit/model hashes, and explicit unsupported edges.
 
 No-touch: production runtime defaults, specialist ABI, cross-profile fallback,
 and any second policy scheduler.

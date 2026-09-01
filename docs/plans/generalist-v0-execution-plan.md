@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 complete, P1 bridge smoke passes, rollers full gate passes, walk full gate fails displacement.
+Status: active; P0 and P1 complete, P2 walk merged-model work is next.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -77,7 +77,7 @@ smoke for both profiles. With homing physics frozen as an explicit bring-up
 boundary, the 300-active-tick battery reaches official `walk`/`stand`
 transitions. At the accepted `0.20 m/s` walk command, both profiles pass their
 stability/displacement gates; walk also records an official fall and recovery
-chain. P1 is ready for final verification before P2.
+chain. The P1 evidence package is complete and P2 may begin.
 
 Pin an official `microduck` commit and record the exact controller API/schema.
 Build the smallest headless bridge needed to run the official controller against
@@ -93,8 +93,8 @@ the scenario file.
 
 Stop gate: a replay proves deterministic controller decisions and state across
 one transition; official commit, bridge version, model hashes, and unsupported
-edges are recorded. No claim of official-controller parity is valid without this
-evidence package.
+edges are recorded. This gate is satisfied by the smoke/full reports under
+`artifacts/generalist-v0/`.
 
 ### P2. Walk merged model
 
