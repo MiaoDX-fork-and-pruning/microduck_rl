@@ -6,7 +6,7 @@
       "schema_version": 1,
       "profile": "walk_all_collisions",
       "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
-      "official_commit": "66d4fa8",
+      "official_commit": "66d4fa8facd4c564f8346dc54f361ceaa5e28d59",
       "bridge": "robotd --replay-stdin",
       "policy_sha256": "e36332d383997d51401897734cd3e79cf5038406feddb18b4d57ecfb141daa6c",
       "ticks": 401,
@@ -844,7 +844,7 @@
         200
       ],
       "target_count": 401,
-      "max_target_discontinuity": 0.19222147472897327,
+      "max_target_discontinuity": 0.19222147473397894,
       "max_tilt_rad": 0.03581798624138073,
       "world_displacement_m": [
         0.003385285649498806,
@@ -874,7 +874,7 @@
       "schema_version": 1,
       "profile": "rollers",
       "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
-      "official_commit": "66d4fa8",
+      "official_commit": "66d4fa8facd4c564f8346dc54f361ceaa5e28d59",
       "bridge": "robotd --replay-stdin",
       "policy_sha256": "cf05651d2708a2f9364212e86b866c97a70ace8131c492500105e8f28bf99afd",
       "ticks": 402,
@@ -1711,7 +1711,7 @@
         200
       ],
       "target_count": 402,
-      "max_target_discontinuity": 0.4588524818420463,
+      "max_target_discontinuity": 0.45885248184206223,
       "max_tilt_rad": 0.1590343549875195,
       "world_displacement_m": [
         0.8470229955998728,
