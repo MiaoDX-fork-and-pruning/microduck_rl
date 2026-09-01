@@ -5,11 +5,20 @@ Source plan: `docs/plans/specialist-demo-implementation.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
-Current slice: S2 complete with 13 of 13 policies accepted. VelStand
+Current slice: D0-D2 and per-policy D3/D5 complete; integrated D4 reels and
+scenario-level PT/ONNX D3 remain deferred because the current runner is
+viewer-bound and no headless renderer exists. S2 complete with 13 of 13 policies accepted. VelStand
 `model_10750.pt` and RollerSlope `model_11748.pt` are the two remediated final
 checkpoints.
 
 Last proven evidence:
+
+- D0-D2 and per-policy D3/D5 proof completed on 2026-09-01: manifest
+  validation passes, Track A/B compile deterministically, 13 ONNX comparators
+  pass, and gallery generation succeeds.
+- Full suite with pytest plugin autoload disabled: 211 passed, 1 skipped, 1
+  unrelated failure in `tests/test_aarch64_cuda_torch.py` because this host's
+  configured package mirror is not the literal PyPI URL asserted by that test.
 
 - all 13 CloudML training jobs reached `succeed` with final `nan_state=0`;
 - all 13 expected final checkpoint filenames have exactly one JuiceFS hit;
@@ -88,13 +97,20 @@ Last proven evidence:
   CloudML and JuiceFS audit proved 13/13 original jobs in `succeed`, exactly
   one remote hit for every accepted checkpoint, and exactly one remote report
   and diagnostic video for every policy.
+- A real 13-policy package is staged under `artifacts/`; manifest SHA-256 is
+  `f37c59ae921fdfdf57165d589a070cde07c6517627c2227b86bb0d928cdb4996`.
+- Track A and Track B contracts compile deterministically at 50 Hz with
+  explicit non-executable unsupported edges. All 13 per-policy ONNX exports
+  pass zero/extreme-command parity, and the validated gallery is at
+  `artifacts/video-gallery/index.html`.
 
 Completed slices: S0 host/container proof; 13-task smoke matrix; immutable
 source/image package; P0/A1/B1 training waves; final checkpoint inventory;
 canonical scenario and manifest validator; ONNX parity helper; gallery and
 deployment-style ONNX scenario route.
 
-Next slice: S3/S4 packaging and the integrated switching demo. The specialist
+Next slice: headless integrated switching renderer and scenario-level PT/ONNX
+rehearsal. The specialist
 training and per-policy acceptance objective is complete; no additional model
 training is required. VelStand remediation job `t-20260831123941-k7hts` may
 continue to its configured terminal iteration, but its later checkpoints do

@@ -136,13 +136,13 @@ def validate(manifest_path: Path, scenario_path: Path) -> dict:
         if not missing:
             _validate_evidence(policy_id, artifacts, errors)
 
-    if scenario.get("command_rate_hz") != 50:
-        errors.append("scenario.command_rate_hz must be 50")
     transitions = scenario.get("transitions", [])
     for index, transition in enumerate(transitions):
         if transition.get("from") not in policy_ids or transition.get("to") not in policy_ids:
-            if not transition.get("unsupported_reason"):
-                errors.append(f"scenario.transitions[{index}] references unknown policy")
+            errors.append(f"scenario.transitions[{index}] references unknown policy")
+    for index, transition in enumerate(scenario.get("unsupported_transitions", [])):
+        if transition.get("from") not in policy_ids or transition.get("to") not in policy_ids:
+            errors.append(f"scenario.unsupported_transitions[{index}] references unknown policy")
     try:
         frames = compile_scenario(scenario)
     except ValueError as exc:
@@ -151,6 +151,7 @@ def validate(manifest_path: Path, scenario_path: Path) -> dict:
         raise ValueError("\n".join(errors))
     return {"manifest": str(manifest_path), "scenario": str(scenario_path),
             "policies": len(policies), "transitions": len(transitions),
+            "unsupported_transitions": len(scenario.get("unsupported_transitions", [])),
             "frames": len(frames), "valid": True}
 
 

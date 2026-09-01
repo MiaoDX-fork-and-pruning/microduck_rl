@@ -19,7 +19,69 @@ class ScenarioFrame:
     time_s: float
     policy_id: str
     command: tuple[float, ...]
-    expected_outcome: str
+    expected_outcome: dict[str, Any]
+
+
+def _positive_grid_seconds(raw: Any, location: str, rate: int) -> float:
+    if not isinstance(raw, (int, float)) or isinstance(raw, bool) or raw < 0:
+        raise ValueError(f"{location} must be a non-negative number")
+    value = float(raw)
+    if not (value * rate).is_integer():
+        raise ValueError(f"{location} must align to command_rate_hz")
+    return value
+
+
+def _validate_outcome(raw: Any, location: str) -> dict[str, Any]:
+    if not isinstance(raw, dict):
+        raise ValueError(f"{location}.expected_outcome must be an object")
+    required = {"metric", "operator", "threshold"}
+    missing = required - raw.keys()
+    if missing:
+        raise ValueError(
+            f"{location}.expected_outcome missing: {', '.join(sorted(missing))}"
+        )
+    if not isinstance(raw["metric"], str) or not raw["metric"].strip():
+        raise ValueError(f"{location}.expected_outcome.metric must be non-empty")
+    if raw["operator"] not in {"lt", "lte", "gt", "gte", "eq"}:
+        raise ValueError(f"{location}.expected_outcome.operator is invalid")
+    threshold = raw["threshold"]
+    if not isinstance(threshold, (int, float)) or isinstance(threshold, bool):
+        raise ValueError(f"{location}.expected_outcome.threshold must be numeric")
+    return raw
+
+
+def _validate_contract(scenario: dict[str, Any]) -> tuple[int, float, list[Any]]:
+    seed = scenario.get("seed")
+    if not isinstance(seed, int) or isinstance(seed, bool):
+        raise ValueError("scenario.seed must be an integer")
+    rate = scenario.get("command_rate_hz")
+    if rate != 50:
+        raise ValueError("scenario.command_rate_hz must be 50")
+    duration = scenario.get("duration_s")
+    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0:
+        raise ValueError("scenario.duration_s must be positive")
+    compatibility = scenario.get("compatibility")
+    if not isinstance(compatibility, dict):
+        raise ValueError("scenario.compatibility must be an object")
+    for name in ("scene", "session"):
+        if not isinstance(compatibility.get(name), str) or not compatibility[name].strip():
+            raise ValueError(f"scenario.compatibility.{name} must be non-empty")
+    transitions = scenario.get("transitions")
+    if not isinstance(transitions, list) or not transitions:
+        raise ValueError("scenario.transitions must contain at least one transition")
+    unsupported = scenario.get("unsupported_transitions", [])
+    if not isinstance(unsupported, list):
+        raise ValueError("scenario.unsupported_transitions must be an array")
+    for index, record in enumerate(unsupported):
+        location = f"scenario.unsupported_transitions[{index}]"
+        if not isinstance(record, dict):
+            raise ValueError(f"{location} must be an object")
+        if not all(isinstance(record.get(name), str) and record[name].strip()
+                   for name in ("from", "to", "reason")):
+            raise ValueError(f"{location} requires non-empty from, to, and reason")
+        if any(name in record for name in ("at_s", "command")):
+            raise ValueError(f"{location} must not contain executable fields")
+    return rate, float(duration), transitions
 
 
 def _command_block(raw: Any, location: str) -> tuple[float, ...]:
@@ -40,15 +102,7 @@ def _command_block(raw: Any, location: str) -> tuple[float, ...]:
 
 
 def compile_scenario(scenario: dict[str, Any]) -> list[ScenarioFrame]:
-    rate = scenario.get("command_rate_hz")
-    duration = scenario.get("duration_s")
-    transitions = scenario.get("transitions")
-    if not isinstance(rate, int) or isinstance(rate, bool) or rate <= 0:
-        raise ValueError("scenario.command_rate_hz must be a positive integer")
-    if not isinstance(duration, (int, float)) or isinstance(duration, bool) or duration <= 0:
-        raise ValueError("scenario.duration_s must be positive")
-    if not isinstance(transitions, list) or not transitions:
-        raise ValueError("scenario.transitions must contain at least one transition")
+    rate, duration, transitions = _validate_contract(scenario)
 
     total_steps_float = float(duration) * rate
     if not total_steps_float.is_integer():
@@ -77,9 +131,17 @@ def compile_scenario(scenario: dict[str, Any]) -> list[ScenarioFrame]:
             raise ValueError(
                 f"{location}.from {source!r} does not continue previous policy {previous_to!r}"
             )
-        outcome = transition.get("expected_outcome")
-        if not isinstance(outcome, str) or not outcome.strip():
-            raise ValueError(f"{location}.expected_outcome must be non-empty")
+        outcome = _validate_outcome(transition.get("expected_outcome"), location)
+        min_dwell = _positive_grid_seconds(
+            transition.get("min_dwell_s"), f"{location}.min_dwell_s", rate
+        )
+        non_interruptible = _positive_grid_seconds(
+            transition.get("non_interruptible_s"),
+            f"{location}.non_interruptible_s",
+            rate,
+        )
+        if non_interruptible > min_dwell:
+            raise ValueError(f"{location}.non_interruptible_s must not exceed min_dwell_s")
         events.append((step, transition, _command_block(transition.get("command"), location)))
         previous_step, previous_to = step, target
 
@@ -89,13 +151,22 @@ def compile_scenario(scenario: dict[str, Any]) -> list[ScenarioFrame]:
     frames: list[ScenarioFrame] = []
     for event_index, (start, event, command) in enumerate(events):
         stop = events[event_index + 1][0] if event_index + 1 < len(events) else total_steps
+        dwell_steps = stop - start
+        if dwell_steps < int(float(event["min_dwell_s"]) * rate):
+            raise ValueError(
+                f"scenario.transitions[{event_index}] switches before min_dwell_s"
+            )
+        if dwell_steps < int(float(event["non_interruptible_s"]) * rate):
+            raise ValueError(
+                f"scenario.transitions[{event_index}] interrupts a non-interruptible window"
+            )
         frames.extend(
             ScenarioFrame(
                 step=step,
                 time_s=step / rate,
                 policy_id=event["to"],
                 command=command,
-                expected_outcome=event["expected_outcome"],
+                expected_outcome=dict(event["expected_outcome"]),
             )
             for step in range(start, stop)
         )
