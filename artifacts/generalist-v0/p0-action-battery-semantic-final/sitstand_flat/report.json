@@ -1,0 +1,44 @@
+{
+  "policy_id": "sitstand_flat",
+  "task": "Mjlab-SitStand-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "81550d1a8f90c9b83abaaee4359929ba02fb1eb8ee3bfcf5db95aff5a5a0c581",
+  "onnx_sha256": "107c9873c57f00de737f4a876a8b8e6d54c6f8621ecd777ddf6264d756d03015",
+  "parity_report_sha256": "cccce972d6dafb0bce3134f25b0e2b228c25fdbd0c042ee0501753eac6946743",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "sit_then_rise",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.022343291092095968,
+        -0.00034177873827571177,
+        -0.007989164001238197
+      ],
+      "max_tilt_rad": 0.10231504694495742,
+      "final_tilt_rad": 0.025693697526541107,
+      "final_height_m": 0.1170108359987618,
+      "max_abs_raw_action": 1.3936569690704346,
+      "max_abs_applied_action": 1.3936569690704346,
+      "contact_geoms": [
+        "floor",
+        "geom_26",
+        "geom_76",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-semantic-final/sitstand_flat/sit_then_rise.npz"
+    }
+  ]
+}

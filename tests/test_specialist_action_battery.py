@@ -68,6 +68,14 @@ def test_sitstand_case_contains_a_commanded_rise():
     assert _MODULE.requested_command("sitstand_flat", case, 50, 100)[0] == 0.0
 
 
+def test_standup_separates_primary_sit_to_stand_from_recovery_probe():
+    cases = _MODULE.command_cases("standup_flat", smoke=False)
+    assert [case["id"] for case in cases] == ["sit_to_stand", "prone_recovery_probe"]
+    assert cases[0]["acceptance"] == "primary"
+    assert cases[1]["acceptance"] == "probe"
+    assert [case["id"] for case in _MODULE.command_cases("standup_flat", smoke=True)] == ["sit_to_stand"]
+
+
 def test_every_accepted_specialist_has_an_explicit_profile():
     entries = _MODULE.load_manifest(
         Path(__file__).parents[1] / "artifacts" / "specialist_artifact_manifest.json"
