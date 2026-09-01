@@ -1,0 +1,362 @@
+{
+  "policy_id": "velocity_rollers",
+  "task": "Mjlab-Velocity-Flat-MicroDuck-Rollers",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "f6442ac3bb8d6937948fdf0a42b785efe1eff436af8bb957ff90228d37ea7a9b",
+  "onnx_sha256": "25472d2235728227bbc90451c3a1cf36601417f4a7acfe3719a93a1b1b236cb6",
+  "parity_report_sha256": "b0ac84124fb33eef48e188d9e567c338f1554a97adea808c46385cebb5fcbb03",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": false,
+  "cases": [
+    {
+      "id": "vx_0.03_direct_step",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.03,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.008610074073693887,
+        0.0005812708605105113,
+        -0.01840151149581512
+      ],
+      "max_tilt_rad": 0.018270986322525492,
+      "final_tilt_rad": 0.012416988144586907,
+      "final_height_m": 0.12009848850418489,
+      "max_abs_raw_action": 1.007249355316162,
+      "max_abs_applied_action": 1.007249355316162,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.03_direct_step.npz"
+    },
+    {
+      "id": "vx_0.03_command_ema",
+      "seed": 43,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.03,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.017069274612971388,
+        0.0008566103128225731,
+        -0.01838480803857946
+      ],
+      "max_tilt_rad": 0.018121891006233896,
+      "final_tilt_rad": 0.012192099060760653,
+      "final_height_m": 0.12011519196142055,
+      "max_abs_raw_action": 1.0071736574172974,
+      "max_abs_applied_action": 1.0071736574172974,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": false,
+      "failure_reason": "insufficient_forward_displacement",
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.03_command_ema.npz"
+    },
+    {
+      "id": "vx_0.05_direct_step",
+      "seed": 44,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.05,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.008685054926680045,
+        0.0005449686473256038,
+        -0.0184099232571083
+      ],
+      "max_tilt_rad": 0.01824661226213473,
+      "final_tilt_rad": 0.012454837691554015,
+      "final_height_m": 0.12009007674289171,
+      "max_abs_raw_action": 1.0073542594909668,
+      "max_abs_applied_action": 1.0073542594909668,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.05_direct_step.npz"
+    },
+    {
+      "id": "vx_0.05_command_ema",
+      "seed": 45,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.05,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.016985504068076095,
+        0.0008099870918829264,
+        -0.018393474266054782
+      ],
+      "max_tilt_rad": 0.018145022614115245,
+      "final_tilt_rad": 0.01231243922889494,
+      "final_height_m": 0.12010652573394523,
+      "max_abs_raw_action": 1.0072031021118164,
+      "max_abs_applied_action": 1.0072031021118164,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": false,
+      "failure_reason": "insufficient_forward_displacement",
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.05_command_ema.npz"
+    },
+    {
+      "id": "vx_0.08_direct_step",
+      "seed": 46,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.08,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.008822307369018505,
+        0.00047937357098828075,
+        -0.018422781748364217
+      ],
+      "max_tilt_rad": 0.018193900347566985,
+      "final_tilt_rad": 0.012574185210324823,
+      "final_height_m": 0.1200772182516358,
+      "max_abs_raw_action": 1.0075640678405762,
+      "max_abs_applied_action": 1.0075640678405762,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.08_direct_step.npz"
+    },
+    {
+      "id": "vx_0.08_command_ema",
+      "seed": 47,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.08,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.008824885117576998,
+        0.00048508939373194675,
+        -0.018422336084382818
+      ],
+      "max_tilt_rad": 0.01817646388426013,
+      "final_tilt_rad": 0.012589335851873346,
+      "final_height_m": 0.1200776639156172,
+      "max_abs_raw_action": 1.0072531700134277,
+      "max_abs_applied_action": 1.0072531700134277,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.08_command_ema.npz"
+    },
+    {
+      "id": "vx_0.10_direct_step",
+      "seed": 48,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.1,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.010199751845479952,
+        0.00042806575484821794,
+        -0.01843053647392348
+      ],
+      "max_tilt_rad": 0.018057712173277406,
+      "final_tilt_rad": 0.01256175493299006,
+      "final_height_m": 0.12006946352607653,
+      "max_abs_raw_action": 1.0077357292175293,
+      "max_abs_applied_action": 1.0077357292175293,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.10_direct_step.npz"
+    },
+    {
+      "id": "vx_0.10_command_ema",
+      "seed": 49,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.1,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.00891131341329915,
+        0.00044121321237266224,
+        -0.018430564168653518
+      ],
+      "max_tilt_rad": 0.018195110004172073,
+      "final_tilt_rad": 0.012558014287574705,
+      "final_height_m": 0.1200694358313465,
+      "max_abs_raw_action": 1.0072894096374512,
+      "max_abs_applied_action": 1.0072894096374512,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.10_command_ema.npz"
+    },
+    {
+      "id": "vx_0.15_direct_step",
+      "seed": 50,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.15,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.009101719427470902,
+        0.00030044185883576865,
+        -0.018449517062703202
+      ],
+      "max_tilt_rad": 0.018431364915978573,
+      "final_tilt_rad": 0.01193627044692411,
+      "final_height_m": 0.12005048293729681,
+      "max_abs_raw_action": 1.0082690715789795,
+      "max_abs_applied_action": 1.0082690715789795,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.15_direct_step.npz"
+    },
+    {
+      "id": "vx_0.15_command_ema",
+      "seed": 51,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.15,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.009132524668327183,
+        0.000328562740469058,
+        -0.01844979725483896
+      ],
+      "max_tilt_rad": 0.018232507618073934,
+      "final_tilt_rad": 0.012019612629191285,
+      "final_height_m": 0.12005020274516105,
+      "max_abs_raw_action": 1.0073940753936768,
+      "max_abs_applied_action": 1.0073940753936768,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.15_command_ema.npz"
+    },
+    {
+      "id": "vx_0.20_direct_step",
+      "seed": 52,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": 0.2,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.010512012311164057,
+        8.451384151693144e-05,
+        -0.01844604312489373
+      ],
+      "max_tilt_rad": 0.02096380649121362,
+      "final_tilt_rad": 0.009944946311927631,
+      "final_height_m": 0.12005395687510628,
+      "max_abs_raw_action": 1.0095127820968628,
+      "max_abs_applied_action": 1.0095127820968628,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.20_direct_step.npz"
+    },
+    {
+      "id": "vx_0.20_command_ema",
+      "seed": 53,
+      "input_mode": "command_ema",
+      "requested_speed_m_s": 0.2,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.009320057758150462,
+        0.00016733233632080258,
+        -0.018447944436749866
+      ],
+      "max_tilt_rad": 0.018289822914583736,
+      "final_tilt_rad": 0.010073835696103449,
+      "final_height_m": 0.12005205556325015,
+      "max_abs_raw_action": 1.0075187683105469,
+      "max_abs_applied_action": 1.0075187683105469,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/velocity_rollers/vx_0.20_command_ema.npz"
+    }
+  ]
+}
