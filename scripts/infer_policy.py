@@ -873,7 +873,7 @@ class PolicyInference:
             "ball_kick_flat": self.behavior_sessions.get("kick_right"),
             "roulade_flat": self.behavior_sessions.get("roulade"),
             "velocity_rollers": self.walking_session,
-            "roller_crouch": self.roller_crouch_session,
+            "roller_crouch": getattr(self, "roller_crouch_session", None),
         }
 
     def validate_specialist_policies(self, policy_ids):
