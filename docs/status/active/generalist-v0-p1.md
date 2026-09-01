@@ -18,10 +18,13 @@ Proven:
   rollers. Both exceed the 65-degree fall gate; only walk sees the official
   fall flag clear, and neither proves physical recovery. The report is
   intentionally failed rather than accepting transport activity as parity.
+- The current 300-active-tick report is more precise: rollers passes; walk stays
+  upright and switches `walk -> stand`, but fails the existing displacement gate
+  at 3.4 mm. This is a behavior failure, not a bridge or ABI failure.
 
 Next proof:
-- Diagnose the controller handoff and physical recovery behavior demonstrated
-  by the failed 240-tick run, then rerun the
+- Diagnose the walk command/handoff behavior demonstrated by the failed 300-
+  active-tick run, then rerun the
   separate full walk and roller batteries. Do not weaken the fall gate.
 
 Stop gate:
