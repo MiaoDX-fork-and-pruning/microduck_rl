@@ -1,6 +1,6 @@
 # Specialist demo implementation plan
 
-Status: **in progress: D0-D2 and per-policy D3/D5 complete; integrated reels and scenario-level PT/ONNX rehearsal remain**
+Status: **in progress: D0-D2, per-policy D3, stitched D4, and D5 complete; continuous headless PT/ONNX parity remains**
 
 This plan turns the accepted specialist inventory into a reproducible,
 scenario-driven demo. It is an implementation contract, not a training plan.
@@ -156,3 +156,6 @@ after all stop gates pass.
   `scripts/export.py`, passed per-policy ONNX parity, and built the diagnostic
   gallery. Integrated reels remain pending a headless renderer because the
   current scenario runner requires the interactive MuJoCo viewer.
+- 2026-09-01: generated deterministic 90 s Track A and 60 s Track B stitched
+  evidence reels from reviewed diagnostics, with segment/source hashes and an
+  explicit non-continuous-physics label; gallery now indexes 15 videos.
