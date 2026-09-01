@@ -10,7 +10,7 @@ import subprocess
 from typing import Any
 
 
-PINNED_COMMIT = "66d4fa8"
+PINNED_COMMIT = "66d4fa8facd4c564f8346dc54f361ceaa5e28d59"
 
 
 def run(command: list[str], cwd: Path) -> dict[str, Any]:
