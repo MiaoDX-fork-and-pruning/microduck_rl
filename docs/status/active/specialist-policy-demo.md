@@ -1,7 +1,7 @@
 # Specialist policy demo active run
 
 Status: `ACTIVE`
-Source plan: `docs/specialist_policy_demo_plan.md`
+Source plan: `docs/plans/specialist-demo-implementation.md`
 Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
 Latest intent: continue the approved plan through intuitive-flow
 
