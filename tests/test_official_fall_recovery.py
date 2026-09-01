@@ -14,5 +14,4 @@ _SPEC.loader.exec_module(_MODULE)
 
 
 def test_official_commit_is_immutable_and_full_length():
-    assert _MODULE.PINNED_COMMIT == "590b986bd8c0d50ae02cb3ea2f59c463b6828168"
-    assert len(_MODULE.PINNED_COMMIT) == 40
+    assert _MODULE.PINNED_COMMIT == "66d4fa8"

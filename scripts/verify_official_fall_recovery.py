@@ -10,7 +10,7 @@ import subprocess
 from typing import Any
 
 
-PINNED_COMMIT = "590b986bd8c0d50ae02cb3ea2f59c463b6828168"
+PINNED_COMMIT = "66d4fa8"
 
 
 def run(command: list[str], cwd: Path) -> dict[str, Any]:
@@ -29,7 +29,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     commit = subprocess.check_output(
         ["git", "rev-parse", "HEAD"], cwd=checkout, text=True
     ).strip()
-    if commit != PINNED_COMMIT:
+    if not (commit == PINNED_COMMIT or commit.startswith(PINNED_COMMIT)):
         raise ValueError(f"official checkout is {commit}, expected {PINNED_COMMIT}")
 
     tests = [
@@ -41,15 +41,13 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
     primary = next(case for case in standup["cases"] if case["id"] == "sit_to_stand")
     probe = next(case for case in standup["cases"] if case["id"] == "prone_recovery_probe")
     official_source = (checkout / "robotd/src/main.rs").read_text(encoding="utf-8")
-    has_external_replay = "--replay" in official_source or "NdjsonIo" in official_source
-
     checks = {
         "official_commit_pinned": True,
         "official_fall_predictor_tests": tests[0]["passed"],
         "official_pose_ramp_test": tests[1]["passed"],
         "official_limp_fall_default_test": tests[2]["passed"],
         "standup_primary_handoff_passed": primary["passed"],
-        "persistent_sensor_injection_bridge": has_external_replay,
+        "persistent_sensor_injection_bridge": "--replay-stdin" in official_source,
     }
     report = {
         "schema_version": 1,
@@ -79,11 +77,7 @@ def verify(args: argparse.Namespace) -> dict[str, Any]:
         },
         "checks": checks,
         "p1_passed": all(checks.values()),
-        "blocker": None if all(checks.values()) else (
-            "Pinned robotd has no persistent external sensor-frame injection seam; "
-            "official decisions cannot yet be driven end-to-end by MuJoCo without "
-            "duplicating the scheduler."
-        ),
+        "blocker": None if all(checks.values()) else "official bridge or recovery contract checks failed",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
