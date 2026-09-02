@@ -19,6 +19,7 @@ from mjlab.tasks.velocity import mdp
 
 from mjlab_microduck.tasks import mdp as microduck_mdp
 from mjlab_microduck.tasks.microduck_velstand_env_cfg import make_microduck_velstand_env_cfg
+from mjlab_microduck.tasks.symmetry import PpoWithSymmetryCfg
 
 G0_BEHAVIORS = ("VELSTAND", "VELOCITY", "SITSTAND")
 G0_OBS_DIM = 71
@@ -65,6 +66,11 @@ def behavior_mask(env, behavior: str) -> torch.Tensor:
 
 
 def _masked(func, behavior):
+    # Manager reward terms may be callable classes with constructor state;
+    # wrapping those changes their invocation contract. Leave such terms in
+    # their proven form and mask only ordinary per-step functions.
+    if isinstance(func, type):
+        return func
     def wrapped(env, **params):
         return func(env, **params) * behavior_mask(env, behavior)
     wrapped.__name__ = f"g0_{behavior.lower()}_{func.__name__}"
@@ -72,11 +78,15 @@ def _masked(func, behavior):
 
 
 def initialize_g0_state(env, env_ids):
-    n = len(env_ids)
-    env.g0_behavior_id = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
-    env.g0_phase = torch.zeros((env.num_envs, 2), device=env.device)
-    env.g0_posture = torch.zeros(env.num_envs, device=env.device)
-    env.g0_side = torch.zeros(env.num_envs, device=env.device)
+    if not hasattr(env, "g0_behavior_id"):
+        env.g0_behavior_id = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        env.g0_phase = torch.zeros((env.num_envs, 2), device=env.device)
+        env.g0_posture = torch.zeros(env.num_envs, device=env.device)
+        env.g0_side = torch.zeros(env.num_envs, device=env.device)
+    env.g0_behavior_id[env_ids] = 0
+    env.g0_phase[env_ids] = 0
+    env.g0_posture[env_ids] = 0
+    env.g0_side[env_ids] = 0
     return None
 
 
@@ -121,8 +131,32 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
 
 
 GeneralistG0RlCfg = RslRlOnPolicyRunnerCfg(
-    actor=RslRlModelCfg(hidden_dims=(512, 256, 128), activation="elu", obs_normalization=True),
+    actor=RslRlModelCfg(
+        hidden_dims=(512, 256, 128),
+        activation="elu",
+        obs_normalization=True,
+        distribution_cfg={
+            "class_name": "GaussianDistribution",
+            "init_std": 1.0,
+            "std_type": "scalar",
+        },
+    ),
     critic=RslRlModelCfg(hidden_dims=(512, 256, 128), activation="elu", obs_normalization=True),
+    algorithm=PpoWithSymmetryCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        symmetry_cfg=None,
+    ),
     wandb_project="mjlab_microduck",
     experiment_name="generalist_g0",
     run_name="generalist_g0",

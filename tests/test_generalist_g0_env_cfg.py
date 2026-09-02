@@ -31,3 +31,5 @@ def test_g0_condition_masks_are_exclusive_and_finite():
 
 def test_g0_runner_has_distinct_identity():
     assert GeneralistG0RlCfg.experiment_name == "generalist_g0"
+    assert GeneralistG0RlCfg.actor.distribution_cfg["class_name"] == "GaussianDistribution"
+    assert GeneralistG0RlCfg.algorithm is not None
