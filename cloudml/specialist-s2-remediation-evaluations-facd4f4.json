@@ -1,0 +1,152 @@
+{
+  "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "source_commit": "facd4f4",
+  "seed": 42,
+  "episodes": 32,
+  "main_task_term": "wheel_glide",
+  "success_threshold": 5.0,
+  "minimum_success_rate": 0.8,
+  "minimum_main_task_metric": 7.0,
+  "candidates": [
+    {
+      "checkpoint": "model_7750.pt",
+      "checkpoint_sha256": "c5f374e9c6cad190be1d662e332d452440f1f319238ef1fe963c19a92b9dae31",
+      "success_rate": 0.625,
+      "main_task_metric": 7.188538560916408,
+      "termination_counts": {"fell_over": 10, "time_out": 22},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8000.pt",
+      "checkpoint_sha256": "42dc7738ac36dadc954fe3ecf9e8a43e665b5d2532ccd30b744adfff4da87055",
+      "success_rate": 0.34375,
+      "main_task_metric": 8.05572168376532,
+      "termination_counts": {"fell_into_void": 3, "fell_over": 18, "time_out": 11},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8250.pt",
+      "checkpoint_sha256": "fa455bf7c36e4ac976b10742e9a5a0bd587201e10fb44bb39af1392137f85034",
+      "success_rate": 0.15625,
+      "main_task_metric": 8.360547601708674,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 25, "time_out": 5},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8500.pt",
+      "checkpoint_sha256": "ca27b3e3aecbb215f6de5a7765e6ebb173e551347efc52fb2a34c990fa1c5eee",
+      "success_rate": 0.125,
+      "main_task_metric": 8.59981239960878,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 26, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8750.pt",
+      "checkpoint_sha256": "193a80fbf4347e62a481654eecee49c1e4137048c6c5a6f10c203e168e9d07a5",
+      "success_rate": 0.59375,
+      "main_task_metric": 7.928752653698531,
+      "termination_counts": {"fell_over": 13, "time_out": 19},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_9000.pt",
+      "checkpoint_sha256": "6dffe4ba92d0848e4cbb2c0da3d05b54c15ddfd6ac0b8a7485adfc86b2904022",
+      "success_rate": 0.375,
+      "main_task_metric": 8.649006436118002,
+      "termination_counts": {"fell_over": 20, "time_out": 12},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_9250.pt",
+      "checkpoint_sha256": "317d14085215838e3a5def841e93bab8a32e87833d82305453b85be16b63b8bc",
+      "success_rate": 0.21875,
+      "main_task_metric": 8.303620996293736,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 24, "time_out": 7},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_9500.pt",
+      "checkpoint_sha256": "390e2b06a7b3ed594de4efe1abd5c5ceef44d7d5d19a0180e060b3ca9bc26600",
+      "success_rate": 0.5625,
+      "main_task_metric": 8.265216463477094,
+      "termination_counts": {"fell_over": 14, "time_out": 18},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_9750.pt",
+      "checkpoint_sha256": "8a87e4eda6dd9669f349116a2a75727ce6db2a549bec17723c337fdecf45d048",
+      "success_rate": 0.125,
+      "main_task_metric": 8.020850980477274,
+      "termination_counts": {"fell_into_void": 3, "fell_over": 25, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_10000.pt",
+      "checkpoint_sha256": "89c4d1fcd2d116b4809131ac053df58d75711bf56346dfea358a5edd800b48b3",
+      "success_rate": 0.25,
+      "main_task_metric": 8.078133823256934,
+      "termination_counts": {"fell_into_void": 4, "fell_over": 20, "time_out": 8},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_10500.pt",
+      "checkpoint_sha256": "5a0f8f35661983643600ecfa838c607a38b4a27acfb40fcfd00d241678c5085e",
+      "success_rate": 0.53125,
+      "main_task_metric": 8.581874823824018,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 14, "time_out": 17},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11000.pt",
+      "checkpoint_sha256": "175d20fc459f16f9f5fd7a2d60a60357c9d2cff22705469f4050569c7828ef5b",
+      "success_rate": 0.25,
+      "main_task_metric": 8.537536065801502,
+      "termination_counts": {"fell_into_void": 4, "fell_over": 20, "time_out": 8},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11500.pt",
+      "checkpoint_sha256": "88bae5f0838460f4c8d5903f02bf50a0f79af6ea9030b1fc5ee47f7ed0efdef9",
+      "success_rate": 0.125,
+      "main_task_metric": 8.569716422165945,
+      "termination_counts": {"fell_into_void": 1, "fell_over": 27, "time_out": 4},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11999.pt",
+      "checkpoint_sha256": "819bcc109060eebaaa1b6bb9be074b742e18fcae01322bad692d57160c9db5ff",
+      "success_rate": 0.375,
+      "main_task_metric": 8.007567186154642,
+      "termination_counts": {"fell_over": 20, "time_out": 12},
+      "finite": true,
+      "penalties_non_positive": true,
+      "accepted": false
+    }
+  ]
+}

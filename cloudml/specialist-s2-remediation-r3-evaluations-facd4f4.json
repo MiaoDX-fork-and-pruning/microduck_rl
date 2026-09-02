@@ -1,0 +1,135 @@
+{
+  "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "source_commit": "facd4f4",
+  "seed": 42,
+  "episodes": 32,
+  "main_task_term": "wheel_glide",
+  "success_threshold": 5.0,
+  "minimum_success_rate": 0.8,
+  "minimum_main_task_metric": 7.0,
+  "training_job_id": "t-20260831152607-wxmy9",
+  "training_state_at_evaluation": "running",
+  "candidates": [
+    {
+      "checkpoint": "model_10750.pt",
+      "checkpoint_sha256": "49dfcda507be25cefcdd96299785c9bbc13e2705e3c54e32075b51a8ace18f6d",
+      "success_rate": 0.65625,
+      "main_task_metric": 8.548725954652776,
+      "termination_counts": {"fell_over": 11, "time_out": 21},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11000.pt",
+      "checkpoint_sha256": "2a65783cebd810eddb049d90fec8b9016f95b67759f02d3471691701d76c3ed7",
+      "success_rate": 0.375,
+      "main_task_metric": 8.726545951046944,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 18, "time_out": 12},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11250.pt",
+      "checkpoint_sha256": "b8d8e069e04970430f2df644666fe5e79eccbbd707f6784bc4348bdfd5b74606",
+      "success_rate": 0.5625,
+      "main_task_metric": 7.964818825070363,
+      "termination_counts": {"fell_over": 14, "time_out": 18},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11500.pt",
+      "checkpoint_sha256": "0fd61792e7c20a02723c67c73520518b04d32479887cae37c030b8c53d7377ee",
+      "success_rate": 0.0625,
+      "main_task_metric": 8.811145088858924,
+      "termination_counts": {"fell_into_void": 2, "fell_over": 28, "time_out": 2},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_11750.pt",
+      "checkpoint_sha256": "fb1a56713144a71ad0e73f45137c0fd78f6931f97085582e5705c3c84c524982",
+      "success_rate": 0.59375,
+      "main_task_metric": 8.25224572421051,
+      "termination_counts": {"fell_over": 13, "time_out": 19},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12000.pt",
+      "checkpoint_sha256": "ac4fe49c4b43ac0dff7112191df220937e200698b75e0eced72d7189dcb3e773",
+      "success_rate": 0.21875,
+      "main_task_metric": 8.318681286379862,
+      "termination_counts": {"fell_over": 25, "time_out": 7},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12250.pt",
+      "checkpoint_sha256": "3644e59677c50e8d031990b21c0b558a643a7486de54f95429bff25d3bdc7698",
+      "success_rate": 0.5625,
+      "main_task_metric": 7.902323450158618,
+      "termination_counts": {"fell_over": 14, "time_out": 18},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12500.pt",
+      "checkpoint_sha256": "8200c511954e6a9f9f46b6e14bb5d402b5ef02fee7c3db76856f2eddf71e0035",
+      "success_rate": 0.3125,
+      "main_task_metric": 9.038882532696103,
+      "termination_counts": {"fell_over": 22, "time_out": 10},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_12750.pt",
+      "checkpoint_sha256": "200b794ae3eacfaebf72358c4ec8c0b6aa2dc5a401b05827b8639a3a47a3c5a2",
+      "success_rate": 0.1875,
+      "main_task_metric": 8.2448601253821,
+      "termination_counts": {"fell_over": 26, "time_out": 6},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_13000.pt",
+      "checkpoint_sha256": "766ff0c3971d935623c1e10f2291cb2cb043a411ad873f9d70bc236505fd76d2",
+      "success_rate": 0.5,
+      "main_task_metric": 7.764672160435266,
+      "termination_counts": {"fell_over": 16, "time_out": 16},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_13250.pt",
+      "checkpoint_sha256": "39a16f47c5fd0db46b4bb82def1044cb17f7f69307fa966c63df6415aae3db47",
+      "success_rate": 0.4375,
+      "main_task_metric": 7.541809694832361,
+      "termination_counts": {"fell_over": 18, "time_out": 14},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    }
+  ]
+}

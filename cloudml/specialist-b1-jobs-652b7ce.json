@@ -1,0 +1,5 @@
+[
+  {"slug":"roller-crouch","task":"Mjlab-RollerCrouch-Flat-MicroDuck","iterations":8000,"track":"B","wave":"b1","preemptible":true},
+  {"slug":"roller-slope","task":"Mjlab-RollerSlope-Flat-MicroDuck","iterations":8000,"track":"B","wave":"b1","preemptible":true},
+  {"slug":"spin","task":"Mjlab-Spin-Flat-MicroDuck","iterations":8000,"track":"B","wave":"b1","preemptible":true}
+]
