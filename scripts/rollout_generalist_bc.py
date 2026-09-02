@@ -16,11 +16,15 @@ from infer_policy import DEFAULT_POSE, PolicyInference
 TILT_FAILURE_RAD = np.deg2rad(65.0)
 
 
-def run_case(model, student, teacher_onnx: Path, behavior: str, speed: float, ticks: int) -> dict:
+def run_case(model, student, teacher_onnx: Path, normalizer_checkpoint: Path, behavior: str, speed: float, ticks: int) -> dict:
     data = mujoco.MjData(model)
     helper = PolicyInference(model, data, walking_onnx_path=str(teacher_onnx), new_cmd_obs=True,
                              use_projected_gravity=True)
     helper.command = np.array([speed, 0.0, 0.0] + [0.0] * 10, dtype=np.float32)
+    import torch
+    state = torch.load(normalizer_checkpoint, weights_only=False, map_location="cpu")["actor_state_dict"]
+    mean = state["obs_normalizer._mean"].numpy().reshape(61)
+    std = state["obs_normalizer._std"].numpy().reshape(61)
     free_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
     free_qadr = int(model.jnt_qposadr[free_id])
     data.qpos[free_qadr:free_qadr + 3] = [0.0, 0.0, 0.125]
@@ -34,8 +38,8 @@ def run_case(model, student, teacher_onnx: Path, behavior: str, speed: float, ti
     finite = True
     for _ in range(ticks):
         legacy = helper.get_observations()
-        conditioned = make_conditioned_observation(legacy[None, :], helper.command[None, :], behavior)
-        import torch
+        normalized = (legacy - mean) / np.maximum(std, 1e-6)
+        conditioned = make_conditioned_observation(normalized[None, :], helper.command[None, :], behavior)
         with torch.inference_mode():
             action = student(torch.from_numpy(conditioned)).numpy().astype(np.float32).reshape(-1)
         finite = bool(np.isfinite(legacy).all() and np.isfinite(conditioned).all() and np.isfinite(action).all())
@@ -70,13 +74,13 @@ def main() -> None:
     args = ap.parse_args()
     import torch
     bundle = torch.load(args.run / "model.pt", weights_only=False)
-    net = torch.nn.Sequential(torch.nn.Linear(71, 256), torch.nn.Tanh(), torch.nn.Linear(256, 256), torch.nn.Tanh(), torch.nn.Linear(256, 14))
+    net = torch.nn.Sequential(torch.nn.Linear(71, 512), torch.nn.Tanh(), torch.nn.Linear(512, 256), torch.nn.Tanh(), torch.nn.Linear(256, 128), torch.nn.Tanh(), torch.nn.Linear(128, 14))
     net.load_state_dict(bundle["state_dict"]); net.eval()
     model = mujoco.MjModel.from_xml_path("src/mjlab_microduck/robot/microduck/scene.xml")
     model.opt.timestep = 0.005
     report = {"schema": bundle.get("schema"), "schema_version": bundle.get("schema_version"), "ticks": args.ticks,
-              "profiles": [run_case(model, net, args.teacher_onnx, "stand", 0.0, args.ticks),
-                           run_case(model, net, args.teacher_onnx, "locomotion", args.speed, args.ticks)]}
+              "profiles": [run_case(model, net, args.teacher_onnx, Path("artifacts/specialists/velstand_flat/checkpoint.pt"), "stand", 0.0, args.ticks),
+                           run_case(model, net, args.teacher_onnx, Path("artifacts/specialists/velocity_flat/checkpoint.pt"), "locomotion", args.speed, args.ticks)]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

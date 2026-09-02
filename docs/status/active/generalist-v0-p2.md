@@ -33,6 +33,9 @@ Evidence:
   for 120 ticks (max tilt `0.384 rad`, displacement `40.4 mm`) but stand still
   fails (max tilt `1.635 rad`). This confirms a behavior-specific gap rather
   than a general ABI or rollout failure.
+- The pooled data is imbalanced (420 stand vs 3,720 locomotion samples). The BC
+  trainer now uses deterministic behavior-balanced sampling by default so the
+  offline objective cannot hide the stand condition.
 
 Remaining P2 work:
 - Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
@@ -42,6 +45,10 @@ Remaining P2 work:
   added.
 - Continue DAgger/initialization work for the stand condition; do not advance
   to sit/kick/roulade until both G0 behavior gates pass.
+- A VelStand-expanded actor initialization experiment and a teacher-normalized
+  input experiment were both run. Neither passed the G0 rollout gate; the
+  normalized candidate also regressed locomotion. These are retained as failed
+  diagnostics, not as accepted baselines.
 - Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.

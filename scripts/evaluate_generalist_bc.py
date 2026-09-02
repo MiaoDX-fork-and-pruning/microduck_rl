@@ -18,7 +18,7 @@ def main() -> None:
     data = np.load(args.run / "dataset.npz", allow_pickle=False)
     x, y = data["inputs"].astype(np.float32), data["actions"].astype(np.float32)
     bundle = torch.load(args.run / "model.pt", weights_only=False)
-    model = torch.nn.Sequential(torch.nn.Linear(71, 256), torch.nn.Tanh(), torch.nn.Linear(256, 256), torch.nn.Tanh(), torch.nn.Linear(256, 14))
+    model = torch.nn.Sequential(torch.nn.Linear(71, 512), torch.nn.Tanh(), torch.nn.Linear(512, 256), torch.nn.Tanh(), torch.nn.Linear(256, 128), torch.nn.Tanh(), torch.nn.Linear(128, 14))
     model.load_state_dict(bundle["state_dict"]); model.eval()
     with torch.no_grad(): pred = model(torch.from_numpy(x)).numpy()
     err = (pred - y) ** 2

@@ -17,12 +17,17 @@ def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"))
     xs, ys, manifest_sources = [], [], []
     for behavior, name in sources:
+        import torch
+        state = torch.load(Path("artifacts/specialists") / name / "checkpoint.pt", weights_only=False, map_location="cpu")["actor_state_dict"]
+        mean = state["obs_normalizer._mean"].numpy().reshape(61)
+        std = state["obs_normalizer._std"].numpy().reshape(61)
         paths = sorted((trace_root / name).glob("*.npz"))
         if not paths:
             raise FileNotFoundError(f"no traces for {name} under {trace_root}")
         for path in paths:
             data = np.load(path)
-            x = make_conditioned_observation(data["observation"], data["requested_command"], behavior)
+            legacy = (np.asarray(data["observation"], dtype=np.float32) - mean) / np.maximum(std, 1e-6)
+            x = make_conditioned_observation(legacy, data["requested_command"], behavior)
             y = np.asarray(data["raw_action"], dtype=np.float32)
             validate_batch(x, y)
             xs.append(x)
@@ -32,16 +37,32 @@ def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
     return x, y, {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "sources": manifest_sources}
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int) -> dict:
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None) -> dict:
     import torch
     from torch import nn
 
     torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True)
-    order = torch.randperm(len(x))
+    labels = x[:, 48:54].argmax(axis=1)
+    if balance:
+        rng = np.random.default_rng(seed)
+        groups = [np.flatnonzero(labels == i) for i in (0, 1)]
+        target = max(len(g) for g in groups)
+        balanced = np.concatenate([rng.choice(g, target, replace=len(g) < target) for g in groups])
+        order = torch.from_numpy(balanced[rng.permutation(len(balanced))].astype(np.int64))
+    else:
+        order = torch.randperm(len(x))
     split = max(1, int(len(x) * 0.9))
     train_idx, val_idx = order[:split], order[split:]
-    model = nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh(), nn.Linear(256, 14))
+    model = nn.Sequential(nn.Linear(71, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 128), nn.Tanh(), nn.Linear(128, 14))
+    if init_checkpoint:
+        source = torch.load(init_checkpoint, weights_only=False)["actor_state_dict"]
+        with torch.no_grad():
+            model[0].weight[:, :48] = source["mlp.0.weight"][:, :48]
+            model[0].weight[:, 54:67] = source["mlp.0.weight"][:, 48:61]
+            model[0].bias.copy_(source["mlp.0.bias"])
+            for dst, key in ((2, "mlp.2"), (4, "mlp.4"), (6, "mlp.6")):
+                model[dst].weight.copy_(source[key + ".weight"]); model[dst].bias.copy_(source[key + ".bias"])
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4)
     tx, ty = torch.from_numpy(x), torch.from_numpy(y)
     for _ in range(epochs):
@@ -63,7 +84,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int) -> di
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14]}
+            "architecture": [71, 512, 256, 128, 14], "init_checkpoint": str(init_checkpoint) if init_checkpoint else None}
 
 
 def main() -> None:
@@ -73,6 +94,8 @@ def main() -> None:
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--seed", type=int, default=7)
     ap.add_argument("--extra-data", type=Path, default=None)
+    ap.add_argument("--no-balance", action="store_true")
+    ap.add_argument("--init-checkpoint", type=Path, default=None)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     x, y, manifest = collect(args.trace_root)
@@ -83,7 +106,7 @@ def main() -> None:
             manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
-    metrics = train(x, y, args.output, args.epochs, args.seed)
+    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint)
     manifest["metrics"] = metrics
     (args.output / "manifest.json").parent.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
