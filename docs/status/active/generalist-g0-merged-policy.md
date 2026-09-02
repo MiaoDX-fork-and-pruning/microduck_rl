@@ -224,6 +224,15 @@ implementation is test-clean and operationally measurable, but it is not an
 accepted candidate because the canonical P4 behavior/edge success criteria
 remain unmet.
 
+Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
+continue as a next-skill seed. Both remain diagnostic failures, while the
+distilled BC/DAgger actor remains the strongest available artifact for schema,
+ONNX, latency, and fallback checks. Canonical evidence is retained in
+`/tmp/g0-direct-100-posture-eval.json`, `/tmp/g0-direct-eval-norm.json`,
+`/tmp/g0-hybrid-eval-norm.json`, `/tmp/g0-parity.json`, `/tmp/g0-budget.json`,
+and `/tmp/g0-fallback.json`; these generated files stay out of Git. No video
+or hardware evidence exists, so those final-report fields remain unproven.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
