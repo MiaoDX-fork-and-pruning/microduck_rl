@@ -240,6 +240,12 @@ fallback, and fail-closed gate tests are covered. This verifies the software
 contract but does not substitute for the still-failing physical behavior and
 transition battery.
 
+Repository verification: full `tests/` under the current worktree reports
+`284 passed, 1 skipped, 1 failed`. The sole failure is the pre-existing
+`test_x86_64_resolution_stays_on_pypi`; the user-owned `uv.lock` resolves the
+registry to the local Tsinghua mirror. No G0 test fails, and `uv.lock` was left
+untouched as required.
+
 Corrected hybrid smoke: the available diagnostic BC artifacts were multi-head
 and intentionally rejected by the dense hybrid runner. A new bounded dense
 71-512-256-128-14 BC artifact was trained from the frozen 4,200-sample traces
