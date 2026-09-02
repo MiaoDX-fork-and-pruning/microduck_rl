@@ -54,6 +54,13 @@ This remains a failed diagnostic; no G0 candidate is accepted.
 Next slice: run student-state DAgger and hybrid-PPO initialization from this
 artifact, then repeat the same battery without relaxing acceptance thresholds.
 
+DAgger diagnostic: the collector now supports all three G0 teachers and
+produced 120 student-state samples at beta 0.5. Retraining the bounded
+multi-head actor produced `/tmp/g0-bc-dagger`; its 120-tick battery still fails
+stand, locomotion, and sit/stand (max tilt 1.85, 1.65, and 1.50 rad). The
+student-state pass did not cure the shared covariate-shift failure, so this is
+not an accepted candidate and hybrid PPO remains the next experiment.
+
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
 tests/test_generalist_model.py tests/test_collect_generalist_dagger.py
