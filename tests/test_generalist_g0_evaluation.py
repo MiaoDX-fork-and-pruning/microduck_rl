@@ -15,6 +15,7 @@ def test_trace_metrics_records_required_physics_signals():
     assert report["tilt_rad"]["max"] == 0.2
     assert report["displacement_m"] == pytest.approx(0.5)
     assert report["max_abs_action"] == 1.0
+    assert report["success"] is True
     assert report["peak_action_jump"] == 1.0
 
 
@@ -34,6 +35,7 @@ def test_report_requires_three_behaviors_four_edges_and_records_unsupported():
     edges = [_entry(**{"from": source, "to": target}) for source, target in LEGAL_EDGES]
     report = make_report(backend="onnx", seed=42, behaviors=behaviors, edges=edges)
     assert report["finite"]
+    assert all("success" in item for item in report["behaviors"] + report["legal_edges"])
     assert len(report["legal_edges"]) == 4
     assert {(item["from"], item["to"]) for item in report["unsupported_edges"]} == {
         ("VELOCITY", "SITSTAND"), ("SITSTAND", "VELOCITY")

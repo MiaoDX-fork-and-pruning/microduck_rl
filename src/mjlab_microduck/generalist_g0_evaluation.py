@@ -49,6 +49,8 @@ class TraceMetrics:
         )
         actions = np.asarray(self.actions)
         jumps = np.abs(np.diff(actions, axis=0)) if len(actions) >= 2 else np.zeros((0, 14))
+        passed = bool(self.finite and self.actions and max(self.tilts, default=np.inf) < np.deg2rad(65.0)
+                      and np.max(np.abs(actions)) <= 1.0 + 1e-6)
         return {
             "steps": len(self.actions),
             "finite": self.finite,
@@ -58,6 +60,8 @@ class TraceMetrics:
             "displacement_m": float(np.linalg.norm(displacement[:2])),
             "max_abs_action": float(np.max(np.abs(actions))) if actions.size else None,
             "peak_action_jump": float(np.max(jumps)) if jumps.size else 0.0,
+            "success": passed,
+            "passed": passed,
         }
 
 
@@ -80,6 +84,12 @@ def make_report(*, backend: str, seed: int, behaviors: list[dict], edges: list[d
         for (source, destination), reason in sorted(UNSUPPORTED_EDGES.items())
     ]
     finite = all(item["metrics"]["finite"] for item in behaviors + edges)
+    for item in behaviors:
+        item.setdefault("success", bool(item["metrics"].get("success", False)))
+        item.setdefault("passed", item["success"])
+    for item in edges:
+        item.setdefault("success", bool(item["metrics"].get("success", False)) and item.get("reset_count", 0) == 0)
+        item.setdefault("passed", item["success"])
     return {
         "schema": "generalist-g0-evaluation",
         "schema_version": 1,
