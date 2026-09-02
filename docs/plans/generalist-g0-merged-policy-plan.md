@@ -1,6 +1,12 @@
 # Generalist G0 Merged Policy Plan
 
-Status: proposed
+Status: active
+
+Current checkpoint: P0 contract freeze complete. The versioned teacher manifest
+(`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition graph
+(`docs/generalist_g0_transition_graph.json`) are hash-verified and covered by
+focused tests. P1 remains gated on fixed-seed reproduction of the three
+teachers and the no-reset Track A legal edges.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the
