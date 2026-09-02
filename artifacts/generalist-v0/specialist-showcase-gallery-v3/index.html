@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Microduck Specialist Switching Showcase</title>
+<style>
+:root { color-scheme: dark; font: 16px/1.4 system-ui,sans-serif; }
+body { margin:0; padding:24px; background:#111827; color:#e5e7eb; }
+header { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+h1 { margin:0; font-size:1.35rem; }
+select,input { background:#1f2937; color:inherit; border:1px solid #4b5563; padding:8px; border-radius:5px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; }
+.card { background:#1f2937; border:1px solid #374151; padding:12px; border-radius:6px; }
+.card h2 { margin:0 0 8px; font-size:1rem; }
+video { display:block; width:100%; aspect-ratio:4/3; background:#000; object-fit:contain; }
+.card p { color:#9ca3af; font-size:.8rem; overflow-wrap:anywhere; }
+.metrics { display:grid; grid-template-columns:max-content 1fr; gap:5px 10px; font-size:.78rem; }
+.metrics dt { color:#9ca3af; } .metrics dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+code { font-size:.72rem; }
+</style></head><body>
+<header><h1>Microduck Specialist Switching Showcase</h1>
+<label>Task <select id="task"><option value="">All</option><option value="roller_slope">Roller_Slope</option><option value="roller_standup">Roller_Standup</option><option value="track_a">Track_A</option><option value="track_b">Track_B</option><option value="velocity_rollers">Velocity_Rollers</option></select></label>
+<label>Search <input id="search" placeholder="filename or task"></label>
+<span id="count"></span></header>
+<main class="grid"><article class="card" data-task="roller_slope"><h2>Roller_Slope</h2><video controls preload="metadata" src="videos/Roller_Slope/roller-slope.mp4"></video><p>roller-slope.mp4</p></article><article class="card" data-task="roller_standup"><h2>Roller_Standup</h2><video controls preload="metadata" src="videos/Roller_Standup/roller-standup.mp4"></video><p>roller-standup.mp4</p></article><article class="card" data-task="track_a"><h2>Track_A</h2><video controls preload="metadata" src="videos/Track_A/track-a-43s.mp4"></video><p>track-a-43s.mp4</p></article><article class="card" data-task="track_b"><h2>Track_B</h2><video controls preload="metadata" src="videos/Track_B/track-b-crouch-roll-crouch-21s.mp4"></video><p>track-b-crouch-roll-crouch-21s.mp4</p></article><article class="card" data-task="velocity_rollers"><h2>Velocity_Rollers</h2><video controls preload="metadata" src="videos/Velocity_Rollers/velocity-rollers-policy.mp4"></video><p>velocity-rollers-policy.mp4</p></article></main>
+<script>
+const cards=[...document.querySelectorAll('.card')], task=document.querySelector('#task'), search=document.querySelector('#search'), count=document.querySelector('#count');
+function filter() { const t=task.value, q=search.value.toLowerCase(); let n=0; cards.forEach(c=>{const ok=(!t||c.dataset.task===t)&&(!q||c.textContent.toLowerCase().includes(q)); c.hidden=!ok; if(ok)n++;}); count.textContent=`${n} / ${cards.length} videos`; }
+task.onchange=search.oninput=filter; filter();
+</script></body></html>

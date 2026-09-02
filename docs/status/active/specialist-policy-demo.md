@@ -142,9 +142,11 @@ and `artifacts/generalist-v0/specialist-switch-track-b-final.json`.
 Dynamic showcase contracts are available as compact reels: Track A is 43 s and
 Track B is 21 s. Their rendered videos include a top-left overlay with the
 active policy, velocity or phase command, elapsed time, tilt, and action jump.
-Track A uses `velocity_flat @ 0.20 m/s` and a real ball; Track B uses a 1 s idle,
-`roller_crouch`, a 1 s handback, then `velocity_rollers @ 0.35 m/s`. The current
-gallery is `artifacts/generalist-v0/specialist-showcase-gallery-v2/index.html`.
+Track A uses `velocity_flat @ 0.20 m/s` and a real ball. Track B is a measured
+`roller_crouch -> velocity_rollers -> roller_crouch` sequence: 5 s crouch-glide,
+2 s handoff, 3 s push at `+0.30`, 6 s active brake at `-0.20`, then a second 5 s
+crouch-glide. The current gallery is
+`artifacts/generalist-v0/specialist-showcase-gallery-v3/index.html`.
 
 The roller posture diagnostic measures canonical, left-leg-ahead, and
 right-leg-ahead resets. All three converge to a right-leg-leading posture after
@@ -152,6 +154,9 @@ startup, indicating learned asymmetric gait rather than a command-speed
 artifact: `artifacts/generalist-v0/velocity-rollers-posture-diagnostic.json`.
 `roller_slope` and `roller_standup` are included as dedicated slope and
 prone-reset clips, not falsely represented as flat-scene hot-switch states.
+The standalone `roller_crouch` diagnostic remains in the specialist artifact
+bundle but is omitted from the main gallery because its intended crouch-glide
+behavior is already demonstrated more clearly by Track B.
 
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
