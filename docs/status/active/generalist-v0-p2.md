@@ -15,11 +15,15 @@ Evidence:
   Per-behavior validation MSE: stand `0.00005858`, locomotion `0.00120211`.
 - The dataset contains 3,900 finite samples and is serializable as NPZ with
   explicit 71D/14D shapes.
+- A 100-epoch baseline reached validation MSE `0.00017076` (stand
+  `0.00000327`, locomotion `0.00018422`). Outputs were finite with maximum
+  absolute action `0.6105` and no values outside `[-1, 1]`.
 
 Remaining P2 work:
 - Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
 - Add Rust-readable golden vectors and export metadata for the 71D student contract.
-- Compare the BC candidate in MuJoCo against P1 per-behavior and transition baselines.
+- Add a 71D student inference/rollout adapter, then compare the BC candidate in
+  MuJoCo against P1 per-behavior and transition baselines.
 - Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.
