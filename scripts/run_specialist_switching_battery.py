@@ -58,15 +58,19 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
     font = ImageFont.load_default() if video else None
     start = data.xpos[trunk].copy(); events = {f.step:f for f in scenario_events(frames)}
     segment = {}; labels=[]; tilts=[]; actions=[]; contacts=set(); previous=None; transitions=[]; finite=True
+    path_length = 0.0
+    previous_position = data.xpos[trunk].copy()
     first_failure_step = None
     try:
       for step, frame in enumerate(frames):
         if step in events:
             if previous is not None: transitions[-1]["end_step"] = step - 1
+            if previous is not None:
+                transitions[-1]["end_position_m"] = data.xpos[trunk].tolist()
             policy.activate_specialist_policy(events[step].policy_id, events[step].command)
             previous = events[step].policy_id
             transitions.append({"step": step, "policy_id": previous, "command": list(events[step].command), "start_step": step})
-            segment.setdefault(previous, {"frames": 0, "max_tilt_rad": 0.0, "max_action_jump": 0.0})
+            segment.setdefault(previous, {"frames": 0, "max_tilt_rad": 0.0, "max_action_jump": 0.0, "start_position_m": data.xpos[trunk].tolist()})
         # Phase-conditioned episodic policies use the same command contract as
         # deployment: phase 0 starts at the handoff and advances continuously.
         # A zero block is only the event seed, not the runtime command.
@@ -85,8 +89,12 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         policy.apply_action(action)
         for _ in range(4): mujoco.mj_step(model, data)
         quat = data.xquat[trunk]; tilt = float(2 * math.acos(np.clip(abs(float(quat[0])), 0, 1)))
+        current_position = data.xpos[trunk].copy()
+        path_length += float(np.linalg.norm(current_position - previous_position))
+        previous_position = current_position
         tilts.append(tilt); actions.append(action); labels.append(frame.policy_id)
         item = segment[frame.policy_id]; item["frames"] += 1; item["max_tilt_rad"] = max(item["max_tilt_rad"], tilt); item["max_action_jump"] = max(item["max_action_jump"], jump)
+        item["end_position_m"] = current_position.tolist()
         if tilt >= TILT_FAILURE and first_failure_step is None:
             first_failure_step = step
         if renderer is not None:
@@ -123,13 +131,15 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         writer.close()
       if renderer is not None:
         renderer.close()
-    if transitions: transitions[-1]["end_step"] = len(labels) - 1
+    if transitions:
+        transitions[-1]["end_step"] = len(labels) - 1
+        transitions[-1]["end_position_m"] = data.xpos[trunk].tolist()
     displacement = (data.xpos[trunk] - start).tolist()
     dynamic_policy_ids = {"roulade_flat", "ball_kick_flat"}
     non_dynamic_tilts = [tilt for label, tilt in zip(labels, tilts) if label not in dynamic_policy_ids]
     recovery_start = next((t["start_step"] for t in transitions if t["policy_id"] == "velstand_flat" and t["start_step"] > 3500), None)
     recovery_max_tilt = (max(tilts[recovery_start:], default=None) if recovery_start is not None else None)
-    report = {"schema_version": 1, "scenario": str(scenario_path), "track": scenario["track"], "scene": "rollers" if roller else "walk_all_collisions", "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0), "video": str(video) if video else None}
+    report = {"schema_version": 1, "scenario": str(scenario_path), "track": scenario["track"], "scene": "rollers" if roller else "walk_all_collisions", "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "path_length_m": path_length, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0), "video": str(video) if video else None}
     report["stability_gate_rad"] = TILT_FAILURE
     physical_ok = (report["max_non_dynamic_tilt_rad"] is None or report["max_non_dynamic_tilt_rad"] < TILT_FAILURE)
     recovery_ok = recovery_max_tilt is None or recovery_max_tilt < TILT_FAILURE

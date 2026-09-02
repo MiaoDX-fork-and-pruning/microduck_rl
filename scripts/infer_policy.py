@@ -841,7 +841,10 @@ class PolicyInference:
         }.get(policy_id)
         self.sit_mode = bool(policy_id == "sitstand_flat" and command[0] >= 0.5)
         self.slope_mode = False
-        self.vel_cmd = command[:3].copy() if policy_id == "velocity_flat" else np.zeros(3, dtype=np.float32)
+        # Both flat locomotion specialists consume the twist command. The
+        # rollers policy used to fall through to zero here, silently turning a
+        # requested rolling speed into a standing command.
+        self.vel_cmd = command[:3].copy() if policy_id in {"velocity_flat", "velocity_rollers"} else np.zeros(3, dtype=np.float32)
         self.head_offset = command[3:7].copy()
         self.body_cmd = command[7:13].copy()
         self.current_policy = {
