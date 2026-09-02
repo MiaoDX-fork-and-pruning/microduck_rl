@@ -50,6 +50,8 @@ from .microduck_sitstand_env_cfg import (
 from .microduck_generalist_g0_env_cfg import (
     make_microduck_generalist_g0_env_cfg,
     GeneralistG0RlCfg,
+    GeneralistG0DirectPpoRlCfg,
+    GeneralistG0HybridPpoRlCfg,
 )
 from .microduck_velocity_rollers_env_cfg import (
     make_microduck_velocity_rollers_env_cfg,
@@ -87,6 +89,22 @@ register_mjlab_task(
     env_cfg=make_microduck_velocity_env_cfg(),
     play_env_cfg=make_microduck_velocity_env_cfg(play=True),
     rl_cfg=MicroduckRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-DirectPPO-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0DirectPpoRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-HybridPPO-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0HybridPpoRlCfg,
     runner_cls=MicroduckOnPolicyRunner,
 )
 
