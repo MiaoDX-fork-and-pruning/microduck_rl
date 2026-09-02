@@ -2,11 +2,14 @@
 
 Status: active
 
-Current checkpoint: P0 contract freeze complete. The versioned teacher manifest
-(`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition graph
-(`docs/generalist_g0_transition_graph.json`) are hash-verified and covered by
-focused tests. P1 remains gated on fixed-seed reproduction of the three
-teachers and the no-reset Track A legal edges.
+Current checkpoint: P4 diagnostic evaluation complete. The versioned teacher
+manifest (`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition
+graph (`docs/generalist_g0_transition_graph.json`) are hash-verified; data
+collection, BC/DAgger, direct PPO, hybrid PPO, ONNX parity, latency, and
+fallback tooling are implemented and covered by focused tests. The current
+candidate is not accepted: behavior and legal-edge success gates remain below
+the required thresholds, so work must continue on the merged-policy behavior
+before adding any new skill.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the
