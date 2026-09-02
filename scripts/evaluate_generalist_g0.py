@@ -66,6 +66,10 @@ class Policy:
             state = {key: actor_state[f"mlp.{key}"] for key in ("0.weight", "0.bias", "2.weight", "2.bias", "4.weight", "4.bias", "6.weight", "6.bias")}
             model.load_state_dict(state, strict=True)
             self.model = model.to(device or "cpu").eval()
+            mean = actor_state.get("obs_normalizer._mean")
+            std = actor_state.get("obs_normalizer._std")
+            self._obs_mean = mean.reshape(-1).numpy() if mean is not None else None
+            self._obs_std = std.reshape(-1).numpy() if std is not None else None
             self.backend = "rsl_raw_checkpoint"
             return
         from dataclasses import asdict
@@ -95,6 +99,8 @@ class Policy:
             return np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
         import torch
         if self.backend == "rsl_raw_checkpoint":
+            if self._obs_mean is not None and self._obs_std is not None:
+                observation = (observation - self._obs_mean) / np.maximum(self._obs_std, 1e-6)
             with torch.inference_mode():
                 value = self.model(torch.from_numpy(observation[None, :]).to(next(self.model.parameters()).device))
             return value.detach().cpu().numpy()[0].astype(np.float32)

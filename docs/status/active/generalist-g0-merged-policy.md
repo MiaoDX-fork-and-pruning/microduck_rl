@@ -138,6 +138,13 @@ but the standalone helper still exposes the same grouped/raw observation shape
 mismatch for these checkpoints. The fail-closed P4 gate therefore blocks any
 checkpoint acceptance until this boundary is corrected.
 
+Normalization diagnosis: PPO checkpoint evaluation now applies the saved
+`obs_normalizer._mean/_std` before raw 71D inference. This reduced direct
+stand/locomotion maxima to 1.32/1.17 rad but still fails the 1.134 rad gate;
+sit/stand reaches 1.91 rad. Hybrid remains worse (2.10/2.06/1.52 rad).
+Therefore the previous failures were partly a normalization mismatch, but
+correct normalization does not make either five-iteration checkpoint viable.
+
 P3 checkpoint battery is now executable after flattening singleton observation
 dimensions in the canonical deployment helper. Fixed-seed 120-tick reports for
 both direct and hybrid PPO checkpoints are finite, but every behavior and legal
