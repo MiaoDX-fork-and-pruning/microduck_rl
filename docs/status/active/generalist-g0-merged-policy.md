@@ -125,6 +125,14 @@ export tests pass for dense and multi-head actors. Full-seed behavior,
 transition, inference-budget, and specialist-regression gates are still
 missing, so no candidate is accepted.
 
+P4 supporting gates: `scripts/benchmark_generalist_g0.py` measured the exported
+ONNX actor at p95 `0.020 ms` (15 ms budget after the 5 ms margin), passing the
+50 Hz inference-budget gate. `scripts/validate_generalist_fallback.py` passed
+against `docs/plans/generalist-g0-teacher-manifest.json`, confirming the three
+61D/14D specialists, required artifacts, source commit, and hashes remain
+available as fallback. The older 13-policy manifest is intentionally rejected
+by this narrower G0 validator.
+
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
 proof is P1 dataset shape, balance, replay-state, and determinism validation.)
