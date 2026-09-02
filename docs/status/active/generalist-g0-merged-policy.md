@@ -133,6 +133,11 @@ grouped environment observation and the raw 71D harness. This is a concrete
 integration blocker for checkpoint-level P3 evaluation; BC/ONNX evaluation
 continues to pass, and no acceptance claim is made for PPO checkpoints.
 
+The adapter also reconstructs dense raw actors directly from `actor_state_dict`,
+but the standalone helper still exposes the same grouped/raw observation shape
+mismatch for these checkpoints. The fail-closed P4 gate therefore blocks any
+checkpoint acceptance until this boundary is corrected.
+
 P4 supporting gates: `scripts/benchmark_generalist_g0.py` measured the exported
 ONNX actor at p95 `0.020 ms` (15 ms budget after the 5 ms margin), passing the
 50 Hz inference-budget gate. `scripts/validate_generalist_fallback.py` passed
