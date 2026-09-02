@@ -74,6 +74,13 @@ optimizer state remain fresh. A dense BC artifact was prepared and the hybrid
 task completed the required 64-env, five-iteration smoke with finite rewards
 and no NaN termination. This is an integration smoke, not a behavior pass.
 
+Matched baseline smoke evidence: `/tmp/g0-p3-comparison.json` records seed 42,
+64 environments, five iterations, and SHA256 hashes for direct checkpoint
+`fe42af6e84bd3c2cb9f48e508f6e59cb7a85a4937877cf738c74a12a2352bec4` and hybrid
+checkpoint `a3e4036649e1ef467fbf2dbf31ff8601afdefde44ab5b40496fe94aebf1d5573`.
+Both smokes passed finite-step execution; neither is an acceptance candidate.
+The frozen specialist manifest remains available as fallback (`preserved=true`).
+
 Canonical evaluator proof: `/tmp/g0-canonical-eval.json` is a finite PyTorch
 report covering all three behaviors, all four legal edges, and both unsupported
 direct edges marked unexercised. Its short 40-tick diagnostic still shows
