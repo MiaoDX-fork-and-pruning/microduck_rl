@@ -81,6 +81,12 @@ checkpoint `a3e4036649e1ef467fbf2dbf31ff8601afdefde44ab5b40496fe94aebf1d5573`.
 Both smokes passed finite-step execution; neither is an acceptance candidate.
 The frozen specialist manifest remains available as fallback (`preserved=true`).
 
+ONNX proof: `scripts/export_generalist_g0.py` exported the bounded DAgger actor
+to `/tmp/g0-dagger.onnx` with a 71D input and 14D output. The 32-sample golden
+vector report passed with maximum absolute PyTorch/ONNX error
+`1.79e-7`; metadata records the model kind, architecture, seed, and artifact
+hash. Export tests pass for dense and multi-head actors.
+
 Canonical evaluator proof: `/tmp/g0-canonical-eval.json` is a finite PyTorch
 report covering all three behaviors, all four legal edges, and both unsupported
 direct edges marked unexercised. Its short 40-tick diagnostic still shows
