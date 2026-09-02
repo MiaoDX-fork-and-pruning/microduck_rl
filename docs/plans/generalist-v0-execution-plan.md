@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 and P1 complete, P2 walk merged-model work is next.
+Status: active; P0 and P1 complete, P2 walk conditioned BC baseline is active.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -97,6 +97,10 @@ edges are recorded. This gate is satisfied by the smoke/full reports under
 `artifacts/generalist-v0/`.
 
 ### P2. Walk merged model
+
+Current slice: the 71D schema adapter and an offline BC MLP smoke are implemented
+from immutable `velstand_flat`/`velocity_flat` P0 traces. The smoke is a baseline
+only; it is not yet a rollout-qualified merged model.
 
 Use the no-wheel teacher subset: stand/velstand, velocity, sitstand, ground pick,
 kick, and roulade only after P0 passes. Collect balanced teacher data in the
