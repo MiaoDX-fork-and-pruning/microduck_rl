@@ -7,7 +7,28 @@ import mujoco, numpy as np, onnxruntime as ort
 import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from infer_policy import DEFAULT_POSE, PolicyInference
-from mjlab_microduck.generalist_schema import make_conditioned_observation
+from mjlab_microduck.generalist_schema import ACTION_DIM, OBS_DIM, make_conditioned_observation, validate_batch
+
+
+def validate_replay_batch(data: dict[str, np.ndarray]) -> None:
+    """Check replay fields needed to reproduce teacher labels deterministically."""
+    required = ("observation", "requested_command", "raw_action")
+    missing = [key for key in required if key not in data]
+    if missing:
+        raise ValueError(f"replay missing required fields: {', '.join(missing)}")
+    observation = np.asarray(data["observation"])
+    command = np.asarray(data["requested_command"])
+    action = np.asarray(data["raw_action"])
+    conditioned = make_conditioned_observation(observation, command, "stand")
+    validate_batch(conditioned, action)
+    if action.shape[1] != ACTION_DIM or conditioned.shape[1] != OBS_DIM:
+        raise ValueError("replay ABI mismatch")
+    lengths = {len(observation), len(command), len(action)}
+    for key in ("previous_action", "episode_step", "transition_id"):
+        if key in data:
+            lengths.add(len(np.asarray(data[key])))
+    if len(lengths) != 1:
+        raise ValueError("replay fields have inconsistent lengths")
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument('--student-run',type=Path,required=True); ap.add_argument('--output',type=Path,required=True); ap.add_argument('--ticks',type=int,default=120); ap.add_argument('--beta',type=float,default=.5); args=ap.parse_args()

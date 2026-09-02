@@ -15,7 +15,7 @@ from mjlab_microduck.generalist_model import G0MultiHeadActor
 
 
 def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"))
+    sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"), ("sit_stand", "sitstand_flat"))
     xs, ys, manifest_sources = [], [], []
     for behavior, name in sources:
         paths = sorted((trace_root / name).glob("*.npz"))
@@ -32,7 +32,36 @@ def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
             ys.append(y)
             manifest_sources.append(str(path))
     x, y = np.concatenate(xs), np.concatenate(ys)
-    return x, y, {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "sources": manifest_sources}
+    validate_dataset(x, y)
+    return x, y, {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "sources": manifest_sources,
+                  "behavior_counts": behavior_counts(x)}
+
+
+def behavior_counts(x: np.ndarray) -> dict[str, int]:
+    """Return counts for the three G0 labels, including explicit zeroes."""
+    labels = np.asarray(x)[:, 48:54].argmax(axis=1)
+    return {name: int(np.sum(labels == i)) for i, name in enumerate(("stand", "locomotion", "sit_stand"))}
+
+
+def validate_dataset(x: np.ndarray, y: np.ndarray) -> None:
+    """Validate the immutable 71D/14D dataset and its active G0 labels."""
+    validate_batch(np.asarray(x), np.asarray(y))
+    labels = np.asarray(x)[:, 48:54]
+    if not np.allclose(labels.sum(axis=1), 1.0) or not np.isin(labels.argmax(axis=1), (0, 1, 2)).all():
+        raise ValueError("dataset contains invalid or out-of-scope G0 behavior labels")
+
+
+def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarray | None = None) -> np.ndarray:
+    """Deterministically oversample each behavior (and optional bucket) equally."""
+    labels = np.asarray(labels, dtype=np.int64)
+    if labels.ndim != 1 or len(labels) == 0:
+        raise ValueError("labels must be a non-empty vector")
+    keys = labels if bucket_labels is None else np.stack((labels, np.asarray(bucket_labels)), axis=1)
+    groups = [np.flatnonzero(np.all(keys == key, axis=1)) for key in np.unique(keys, axis=0)] if keys.ndim == 2 else [np.flatnonzero(keys == key) for key in np.unique(keys)]
+    target = max(len(group) for group in groups)
+    rng = np.random.default_rng(seed)
+    selected = np.concatenate([rng.choice(group, target, replace=len(group) < target) for group in groups])
+    return selected[rng.permutation(len(selected))]
 
 
 def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False) -> dict:
@@ -41,13 +70,11 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
 
     torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True)
+    validate_dataset(x, y)
     labels = x[:, 48:54].argmax(axis=1)
     if balance:
         rng = np.random.default_rng(seed)
-        groups = [np.flatnonzero(labels == i) for i in (0, 1)]
-        target = max(len(g) for g in groups)
-        balanced = np.concatenate([rng.choice(g, target, replace=len(g) < target) for g in groups])
-        order = torch.from_numpy(balanced[rng.permutation(len(balanced))].astype(np.int64))
+        order = torch.from_numpy(balanced_indices(labels, seed=seed).astype(np.int64))
     else:
         order = torch.randperm(len(x))
     split = max(1, int(len(x) * 0.9))
@@ -74,7 +101,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
         val = ((val_pred - ty[val_idx]) ** 2).mean().item() if len(val_idx) else float("nan")
         labels = x[:, 48:54].argmax(axis=1)
         per_behavior = {}
-        for index, name in enumerate(("stand", "locomotion")):
+        for index, name in enumerate(("stand", "locomotion", "sit_stand")):
             selected = val_idx.numpy()[labels[val_idx.numpy()] == index]
             if len(selected):
                 per_behavior[name] = float(((model(tx[selected]) - ty[selected]) ** 2).mean().item())
