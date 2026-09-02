@@ -47,6 +47,27 @@ class Policy:
     def _load_rsl_checkpoint(self, checkpoint: Path, task: str, device: str | None) -> None:
         """Load an rsl_rl actor through the task registry (critic is ignored)."""
         import torch
+        payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+        actor_state = payload.get("actor_state_dict", {})
+        # The canonical standalone MuJoCo harness supplies raw 71D vectors,
+        # whereas rsl_rl inference policies require a grouped TensorDict. For
+        # checkpoint diagnostics, reconstruct the saved MLP directly so the
+        # observation contract remains explicit and reproducible.
+        mlp_keys = [key for key in actor_state if key.startswith("mlp.") and key.endswith(".weight")]
+        if {key for key in mlp_keys} >= {"mlp.0.weight", "mlp.2.weight", "mlp.4.weight", "mlp.6.weight"}:
+            from torch import nn
+            dims = [int(actor_state[f"mlp.{i}.weight"].shape[1]) for i in (0, 2, 4, 6)] + [14]
+            layers = []
+            for index, (source, target) in enumerate(zip(dims, dims[1:])):
+                layers.append(nn.Linear(source, target))
+                if index < len(dims) - 2:
+                    layers.append(nn.ELU())
+            model = nn.Sequential(*layers)
+            state = {key: actor_state[f"mlp.{key}"] for key in ("0.weight", "0.bias", "2.weight", "2.bias", "4.weight", "4.bias", "6.weight", "6.bias")}
+            model.load_state_dict(state, strict=True)
+            self.model = model.to(device or "cpu").eval()
+            self.backend = "rsl_raw_checkpoint"
+            return
         from dataclasses import asdict
         from mjlab.envs import ManagerBasedRlEnv
         from mjlab.rl import RslRlVecEnvWrapper
@@ -73,6 +94,10 @@ class Policy:
         if self.backend == "onnx":
             return np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
         import torch
+        if self.backend == "rsl_raw_checkpoint":
+            with torch.inference_mode():
+                value = self.model(torch.from_numpy(observation[None, :]).to(next(self.model.parameters()).device))
+            return value.detach().cpu().numpy()[0].astype(np.float32)
         if self.backend == "rsl_rl":
             with torch.inference_mode():
                 value = self._torch_policy({"actor": torch.from_numpy(observation[None, :]).to(self._device)})
