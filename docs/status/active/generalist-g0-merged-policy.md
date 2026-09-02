@@ -8,8 +8,9 @@ Control plane: root Codex session
 
 Latest user intent: implement the full plan through `intuitive-flow`.
 
-Current slice: P1 contract/data utilities complete; training-only G0 task
-surface registered, with scheduler/reward integration still incomplete.
+Current slice: P2 PPO scaffold executes the required five-iteration smoke;
+behavior state, legal interval transitions, and compatible masked reward terms
+are wired in the training-only task.
 
 P0 evidence and contract freeze complete for `velstand_flat`,
 `velocity_flat`, and `sitstand_flat` on the all-collisions/no-wheel model.
@@ -32,12 +33,13 @@ the authoritative Track A report, emits phase/bucket metadata, covers exactly
 the four legal edges, and rejects direct velocity/sit transitions.
 
 P2 scaffold: `Mjlab-GeneralistG0-Flat-MicroDuck` is registered with a distinct
-runner and CPU config tests. It is not yet PPO-ready because behavior state is
-currently a placeholder and reward/transition masking is not wired.
+runner, Gaussian actor distribution, reset/interval behavior state, legal-edge
+sampling, and masked compatible reward terms. Class-based manager terms remain
+unwrapped to preserve mjlab invocation semantics.
 
-Next slice: implement live behavior/phase state, legal-edge transition
-scheduling, and masked reward terms in the training-only task; then run the
-64-env, 5-iteration smoke test.
+Next slice: replace placeholder transition state with command/dwell-aware
+router semantics, add direct-vs-hybrid training entrypoints, and evaluate the
+three-behavior rollout battery.
 
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
@@ -56,7 +58,10 @@ P0 gate result: PASSED. P1 balanced collection may begin; excluded skills and
 unproven direct edges remain out of the dataset.
 
 P1/P2 proof: focused collection/schema/model/graph/G0-config tests pass (24
-tests across the current focused files). No PPO smoke claim yet.
+tests across the current focused files). `WANDB_MODE=disabled uv run train
+Mjlab-GeneralistG0-Flat-MicroDuck --env.scene.num-envs 64
+--agent.max_iterations 5` completed all five iterations with finite rewards,
+observations, actions, and no NaN termination.
 
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
