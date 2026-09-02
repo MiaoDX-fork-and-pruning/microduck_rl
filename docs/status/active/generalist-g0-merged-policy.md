@@ -173,6 +173,14 @@ reports, returns `DIAGNOSTIC_FAIL` with seven missing-success reasons. This
 prevents a numerically valid but behaviorally unmeasured model from being
 accepted.
 
+Evaluator action-contract fix: raw PPO checkpoint inference now applies the
+same configured `[-1, 1]` action clipping as the rsl_rl environment wrapper.
+The previous 100-iteration direct checkpoint battery was invalid at the MuJoCo
+boundary (raw outputs reached about 28,000). After clipping, actions are finite
+and in range, but the checkpoint still fails the 65-degree stability gate
+(maximum tilt about 1.83 rad) for the tested behaviors and legal edges. The
+evaluator tests pass; this remains diagnostic evidence rather than acceptance.
+
 Evaluator gate integration: behavior and edge reports now emit explicit
 `success`/`passed` fields from finite, action-range, tilt, and reset criteria.
 The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four

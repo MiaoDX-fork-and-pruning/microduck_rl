@@ -96,20 +96,22 @@ class Policy:
 
     def __call__(self, observation: np.ndarray) -> np.ndarray:
         if self.backend == "onnx":
-            return np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
+            value = np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
+            return np.clip(value, -1.0, 1.0)
         import torch
         if self.backend == "rsl_raw_checkpoint":
             if self._obs_mean is not None and self._obs_std is not None:
                 observation = (observation - self._obs_mean) / np.maximum(self._obs_std, 1e-6)
             with torch.inference_mode():
                 value = self.model(torch.from_numpy(observation[None, :]).to(next(self.model.parameters()).device))
-            return value.detach().cpu().numpy()[0].astype(np.float32)
+            return np.clip(value.detach().cpu().numpy()[0].astype(np.float32), -1.0, 1.0)
         if self.backend == "rsl_rl":
             with torch.inference_mode():
                 value = self._torch_policy({"actor": torch.from_numpy(observation[None, :]).to(self._device)})
-            return value.detach().cpu().numpy()[0].astype(np.float32)
+            return np.clip(value.detach().cpu().numpy()[0].astype(np.float32), -1.0, 1.0)
         with torch.inference_mode():
-            return self.model(torch.from_numpy(observation)).numpy()[0].astype(np.float32)
+            value = self.model(torch.from_numpy(observation)).numpy()[0].astype(np.float32)
+            return np.clip(value, -1.0, 1.0)
 
 
 def _command(state: str) -> np.ndarray:
