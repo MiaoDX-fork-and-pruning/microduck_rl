@@ -1,0 +1,50 @@
+jobName: microduck-specialist-s2-velocity-rollers-3b44c25
+description: Specialist S2 velocity_rollers calibration evaluation from 3b44c25
+accessType: PRIVATE
+imageConfig:
+  imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+  imageCommand: "set -euo pipefail\nexport PYTHONUNBUFFERED=1\nexport PYTHONPATH=/mnt/cloudml/source/src\n\
+    cd /mnt/cloudml/output\n/opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/evaluate_specialist_policy.py\
+    \ Mjlab-Velocity-Flat-MicroDuck-Rollers \\\n  --checkpoint /mnt/cloudml/checkpoint/logs/rsl_rl/velocity_rollers/2026-08-30_21-53-01_a1-velocity-rollers-652b7ce/model_5999.pt\
+    \ \\\n  --output /mnt/cloudml/output/evaluation.json \\\n  --seed 42 \\\n  --episodes\
+    \ 32 \\\n  --device cuda:0 \\\n  --main-task-term wheel_speed \\\n  --success-threshold\
+    \ 0 \\\n  --minimum-success-rate 0 \\\n  --minimum-main-task-metric 0 \\\n  --video-output\
+    \ /mnt/cloudml/output/diagnostic.mp4 \\\n  --video-seconds 15 \\\n  --video-width\
+    \ 640 \\\n  --video-height 480 \\\n  --report-only"
+juiceFsMountConfigs:
+- volume: robot-intelligent-planning-data
+  juiceFsCluster: wlcb-cloudml
+  subPath: /dongxu/microduck_rl/source/3b44c25-20260831T1114
+  mountPath: /mnt/cloudml/source
+  readOnly: true
+- volume: robot-intelligent-planning-data
+  juiceFsCluster: wlcb-cloudml
+  subPath: /dongxu/microduck_rl/runs/specialist-a1/velocity-rollers-652b7ce-v1
+  mountPath: /mnt/cloudml/checkpoint
+  readOnly: true
+- volume: robot-intelligent-planning-data
+  juiceFsCluster: wlcb-cloudml
+  subPath: /dongxu/microduck_rl/runs/specialist-s2-eval/velocity-rollers-3b44c25-v1
+  mountPath: /mnt/cloudml/output
+  readOnly: false
+queueId: '11759'
+priority: 5
+preemptible: true
+framework: pytorch
+resourceConfigs:
+- nodeRole: worker
+  nodeNumber: 1
+  perNodeResourceSpec:
+    resourcePriority: GUARANTEED
+    resourceName: cloudml.ng1r49-8-8.13-107
+    resourceNumber: 1
+enableTensorboard: false
+enableMetrics: false
+retryConfig:
+  enableRetry: false
+  maxRetryTimes: 0
+  policySets:
+  - JobFailed
+diagOptions:
+- name: HangDetection
+  enable: false

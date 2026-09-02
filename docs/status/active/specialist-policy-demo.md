@@ -1,0 +1,170 @@
+# Specialist policy demo active run
+
+Status: `COMPLETED`
+Source plan: `docs/plans/specialist-demo-implementation.md`
+Control plane: primary Codex session `01a04d9e-be91-7531-8041-52620c432d61`
+Latest intent: continue the approved plan through intuitive-flow
+
+Current slice: D0-D6 complete. S2 complete with 13 of 13 policies accepted. VelStand
+`model_10750.pt` and RollerSlope `model_11748.pt` are the two remediated final
+checkpoints.
+
+Last proven evidence:
+
+- D0-D2 and per-policy D3/D5 proof completed on 2026-09-01: manifest
+  validation passes, Track A/B compile deterministically, 13 ONNX comparators
+  pass, and gallery generation succeeds.
+- Full suite with pytest plugin autoload disabled: 211 passed, 1 skipped, 1
+  unrelated failure in `tests/test_aarch64_cuda_torch.py` because this host's
+  configured package mirror is not the literal PyPI URL asserted by that test.
+
+- all 13 CloudML training jobs reached `succeed` with final `nan_state=0`;
+- all 13 expected final checkpoint filenames have exactly one JuiceFS hit;
+- every checkpoint probe completed without truncation;
+- resolved task, job, output, run prefix, and checkpoint inputs are frozen in
+  `cloudml/specialist-final-checkpoints-652b7ce.json`;
+- evaluator/renderer contract tests pass (`21 passed`), including a real CUDA
+  tensor finite/NaN check and threshold reassessment from raw episodes;
+- all 13 task configs resolve their active reward terms and episode durations;
+- Velocity's 32-episode report is accepted after human review: success rate
+  0.8125, main metric 24.5030, all penalties non-positive, finite rollouts;
+- short-task EGL smoke produced a decodable 750-frame / 15-second BallKick
+  clip across two resets while retaining exactly two original metric episodes;
+- immutable source `/source/3b44c25-20260831T1114` uploaded successfully
+  (273 files, 28,987,837 bytes);
+- all 12 output prefixes were materialized and all 12 effective CloudML jobs
+  succeeded; one BallKick attempt was preempted and retained before a successful
+  retry;
+  job IDs and output prefixes are frozen in
+  `cloudml/specialist-s2-evaluation-jobs-3b44c25.json`;
+- 10 new reports are accepted after task-specific threshold reassessment and
+  video review; combined with Velocity, S2 now has 11 accepted policies;
+- VelStand is rejected at 0.625 success (12/32 `fallen_too_long`) and
+  RollerSlope at 0.3125 success (22/32 `fell_over`); all reports remain finite
+  with non-positive penalties and are published back to JuiceFS;
+- reviewed thresholds and rationale are frozen in
+  `cloudml/specialist-s2-thresholds-3b44c25.json`.
+- formal re-evaluation rejected VelStand `model_4000.pt` at 0.6875 success;
+  RollerSlope checkpoints 7250/7500/7750 reached only
+  0.1875/0.3125/0.28125, so neither lineage has a defensible replacement;
+- RollerSlope per-difficulty evaluation proved a narrow middle-band policy:
+  success was 0.2188/0.6562/0.5312/0.1875/0.0 from difficulty 0.0 to 1.0;
+- commit `facd4f4` makes RollerSlope resample all ten slope levels every
+  episode, matching the S2/play distribution; focused tests pass (41 passed),
+  and the 64-env/5-iteration smoke kept terrain level near the uniform mean
+  with a 61D actor and zero NaN terminations;
+- VelStand also passed its required 64-env/5-iteration smoke; its configured
+  20,000-iteration budget was previously overridden to 6,000, so continuation
+  is prepared without another reward change;
+- immutable source upload dry-run for `facd4f4-20260831T1152` passed: 288
+  files, 29,026,755 bytes; two isolated GUARANTEED R49 continuation YAMLs are
+  ready under `cloudml/generated/`.
+- source snapshot and both `_READY` output markers were uploaded; VelStand job
+  `t-20260831123941-k7hts` and RollerSlope job `t-20260831124001-s8mmr` are
+  both `running` on queue `11759`, with the expected read-only checkpoint,
+  source, and writable output mounts; job inventory is frozen in
+  `cloudml/specialist-s2-remediation-jobs-facd4f4.json`.
+- subsequent log verification shows both bootstrap loads explicitly
+  (`model_5999.pt` and `model_7000.pt`); latest sampled logs reached VelStand
+  6108/19999 and RollerSlope 7111/12000 with mean rewards 64.20 and 53.44,
+  and no traceback or NaN failure.
+- VelStand R2 `model_10750.pt` is accepted after a fresh 32-episode battery:
+  success rate 0.875, main metric 23.5618, finite rollouts, non-positive
+  penalties, and 28/32 timeouts. Its reviewed 15-second episode-0 video stays
+  upright throughout and the full episode terminates by timeout.
+- RollerSlope R3 checkpoints through `model_13250.pt` remain below the 0.8
+  success gate; the best is `model_10750.pt` at 0.65625. Fixed-difficulty
+  diagnostics pass the middle difficulty at 0.84375 but fail 0.0/0.25/0.75/1.0
+  at 0.59375/0.46875/0.5/0.21875. Disabling inherited velocity pushes does not
+  improve success, and training logs confirm full-range terrain sampling is
+  active.
+- the offline artifact contract, ONNX comparator, canonical scenario runner,
+  and gallery builder already have focused tests.
+- RollerSlope R3 job `t-20260831152607-wxmy9` completed successfully, but its
+  standard-PPO checkpoints never passed the acceptance gate. A local RTX 3090
+  R4 continuation used learning rate `0.0001` and entropy coefficient `0.001`;
+  `model_11748.pt` passed at 0.84375 success and wheel_glide 7.3004, with
+  27/32 timeouts, finite rollouts, non-positive penalties, and a reviewed
+  15-second video that reaches the flat runout upright.
+- both remediated checkpoints were exported through `scripts/export.py` and
+  passed 61D-to-14D PyTorch/ONNX parity on zero-command and command-extreme
+  cases. Their isolated bundles were uploaded to JuiceFS and downloaded again;
+  all 16 returned files match their local SHA-256 values.
+- the remediation-aware final inventory is frozen in
+  `cloudml/specialist-final-checkpoints-remediated-facd4f4.json`. A fresh
+  CloudML and JuiceFS audit proved 13/13 original jobs in `succeed`, exactly
+  one remote hit for every accepted checkpoint, and exactly one remote report
+  and diagnostic video for every policy.
+- A real 13-policy package is staged under `artifacts/`; manifest SHA-256 is
+  `f37c59ae921fdfdf57165d589a070cde07c6517627c2227b86bb0d928cdb4996`.
+- Track A and Track B contracts compile deterministically at 50 Hz with
+  explicit non-executable unsupported edges. All 13 per-policy ONNX exports
+  pass zero/extreme-command parity, and the validated gallery is at
+  `artifacts/video-gallery/index.html`.
+- Track A (90 s) and Track B (60 s) deterministic stitched reels are in
+  `artifacts/reels/`, with source segment hashes and an explicit label that
+  they are packaging evidence, not continuous physics rollouts.
+- `artifacts/specialist-demo-completion.json` records the current completion
+  boundary and deferred continuous headless parity gate.
+- Continuous EGL headless PT/ONNX rehearsals pass for Track A (4,500 frames,
+  six policies) and Track B (3,000 frames, two policies); completion evidence
+  is in `artifacts/reels/*-scenario-parity.json`.
+
+Completed slices: S0 host/container proof; 13-task smoke matrix; immutable
+source/image package; P0/A1/B1 training waves; final checkpoint inventory;
+canonical scenario and manifest validator; ONNX parity helper; gallery and
+deployment-style ONNX scenario route.
+
+Next slice: none. The specialist
+training and per-policy acceptance objective is complete; no additional model
+training is required. VelStand remediation job `t-20260831123941-k7hts` may
+continue to its configured terminal iteration, but its later checkpoints do
+not replace accepted `model_10750.pt` without a new formal evaluation.
+
+Next proof: validate the final artifact manifest and produce the Track A/B
+switching reels and gallery without changing the accepted checkpoint inventory.
+
+Stop condition: do not mark a checkpoint accepted from training reward alone;
+accept only finite rollouts with non-positive penalties and video review that
+matches the task metric. Failed evaluations remain isolated and do not mutate
+the completed training lineages.
+
+Continuous multi-policy switching is now physically accepted for both tracks.
+The switching battery uses projected-gravity observations, runtime passive-wheel
+friction, and the phase-conditioned command contract for `ground_pick_flat` and
+`roller_crouch`. Track A completed 4,500 frames with six specialists and zero
+resets; Track B completed 3,000 frames with velocity and crouch specialists and
+zero resets. Dynamic `roulade_flat` tilt is reported separately from the
+locomotion stability gate, and its post-action handback remains upright.
+Final reports: `artifacts/generalist-v0/specialist-switch-track-a-final.json`
+and `artifacts/generalist-v0/specialist-switch-track-b-final.json`.
+
+Dynamic showcase contracts are available as compact reels: Track A is 43 s and
+Track B is 21 s. Their rendered videos include a top-left overlay with the
+active policy, velocity or phase command, elapsed time, tilt, and action jump.
+Track A uses `velocity_flat @ 0.20 m/s` and a real ball. Track B is a measured
+`roller_crouch -> velocity_rollers -> roller_crouch` sequence: 5 s crouch-glide,
+2 s handoff, 3 s push at `+0.30`, 6 s active brake at `-0.20`, then a second 5 s
+crouch-glide. The current gallery is
+`artifacts/generalist-v0/specialist-showcase-gallery-v3/index.html`.
+
+The roller posture diagnostic measures canonical, left-leg-ahead, and
+right-leg-ahead resets. All three converge to a right-leg-leading posture after
+startup, indicating learned asymmetric gait rather than a command-speed
+artifact: `artifacts/generalist-v0/velocity-rollers-posture-diagnostic.json`.
+`roller_slope` and `roller_standup` are included as dedicated slope and
+prone-reset clips, not falsely represented as flat-scene hot-switch states.
+The standalone `roller_crouch` diagnostic remains in the specialist artifact
+bundle but is omitted from the main gallery because its intended crouch-glide
+behavior is already demonstrated more clearly by Track B.
+
+No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
+hardware, Rough/Backlash variants, and left-kick expansion.
+
+Parked work: Generalist teacher ingestion is outside this plan and may consume
+the completed specialist manifest.
+
+Important composition boundary: the compact physical switching battery runs the
+canonical Track A and Track B specialist sequences in one MuJoCo episode with
+zero resets. Both pass finite-state, transition, and physical stability gates;
+Track A reports real-ball displacement and Track B reports rolling path length.

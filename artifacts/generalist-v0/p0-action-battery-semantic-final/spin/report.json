@@ -1,0 +1,44 @@
+{
+  "policy_id": "spin",
+  "task": "Mjlab-Spin-Flat-MicroDuck",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "e62fb077edbcca7a2c90b06feae8e206939f67a1ddaea8dd7f8c92d9ad034e43",
+  "onnx_sha256": "def2e2f9ce7c6ebe25efc3e35dae7030888c512b4f9a20647fd6c598223980d3",
+  "parity_report_sha256": "1c4cfd1e6aa0105b17afb58c291c1cdd369a0c87840a7647ea334d0acfc56f36",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.02082924563026328,
+        -0.09504149113640632,
+        -0.03846438984358867
+      ],
+      "max_tilt_rad": 0.04919337931271026,
+      "final_tilt_rad": 0.02898141155826592,
+      "final_height_m": 0.10003561015641134,
+      "max_abs_raw_action": 12.931449890136719,
+      "max_abs_applied_action": 12.931449890136719,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-semantic-final/spin/canonical.npz"
+    }
+  ]
+}

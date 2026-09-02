@@ -1,0 +1,50 @@
+{
+  "policy_id": "roller_standup",
+  "task": "Mjlab-RollerStandUp-Flat-MicroDuck",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "a0ef49763bf9512169220d1a53a718a240b59a69cc193ca8c8d4b7e49b90c48d",
+  "onnx_sha256": "3d335bf68b280c730c7ff029ad051dec402d653faeb9d36f14d98f055ed9df6f",
+  "parity_report_sha256": "d04fbb3f70bf5865f0d5c64e9b5cbf3c200a62fb26e1d47dc870618c17a40ce1",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.2651464213323985,
+        0.5224878327845615,
+        0.06899943870244513
+      ],
+      "max_tilt_rad": 3.097385571568875,
+      "final_tilt_rad": 0.006134627678221962,
+      "final_height_m": 0.13899943870244513,
+      "max_abs_raw_action": 4.125524520874023,
+      "max_abs_applied_action": 4.125524520874023,
+      "contact_geoms": [
+        "floor",
+        "geom_26",
+        "geom_32",
+        "geom_36",
+        "geom_53",
+        "geom_60",
+        "geom_62",
+        "geom_71",
+        "geom_85",
+        "geom_89",
+        "geom_9"
+      ],
+      "recovered": true,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-deadband-final/roller_standup/canonical.npz"
+    }
+  ]
+}

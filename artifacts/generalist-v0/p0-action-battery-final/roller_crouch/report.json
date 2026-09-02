@@ -1,0 +1,43 @@
+{
+  "policy_id": "roller_crouch",
+  "task": "Mjlab-RollerCrouch-Flat-MicroDuck",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "7fa080a44023eb4b32da4fdc044b4899feef9750c50f7bbde7d2a1a4ba0263c8",
+  "onnx_sha256": "861c154d0dd7e3f72e2078c6a5ec3d74892fa2b8d047ae4faa0029790733df91",
+  "parity_report_sha256": "b496be347df77f1e54f3ab998c7582ba17688c6a4bd604fe3bee6b7a43f8eee4",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        2.4266822558168224,
+        0.5065480246665665,
+        -0.030802550093203943
+      ],
+      "max_tilt_rad": 0.11038259798315476,
+      "final_tilt_rad": 0.04898689315296768,
+      "final_height_m": 0.10769744990679607,
+      "max_abs_raw_action": 2.979304313659668,
+      "max_abs_applied_action": 2.979304313659668,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/roller_crouch/canonical.npz"
+    }
+  ]
+}

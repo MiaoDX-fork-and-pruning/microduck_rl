@@ -84,7 +84,12 @@ def make_microduck_roller_slope_env_cfg(play: bool = False) -> ManagerBasedRlEnv
                 )
             },
         ),
-        max_init_terrain_level=0,  # curriculum : démarrer sur la rampe la plus douce
+        # S2 evaluates the full difficulty range.  Starting every environment
+        # at level 0 let the adaptive curriculum collapse around the middle
+        # levels, producing a policy that failed both gentle and steep ramps.
+        # Seed all levels uniformly; the curriculum below resamples the full
+        # range after every episode to preserve evaluation-matched coverage.
+        max_init_terrain_level=None,
     )
 
     # Au play : montrer des pentes variées. difficulté None -> raideurs aléatoires
@@ -210,15 +215,16 @@ def make_microduck_roller_slope_env_cfg(play: bool = False) -> ManagerBasedRlEnv
         params={"speed_range": ENTRY_VELOCITY_X},
     )
 
-    # === CURRICULUM : raideur doux -> raide ===
-    # Démarre sur la pente la plus douce (2°) et promeut vers plus raide (jusqu'à
-    # 20°) quand le robot a descendu assez loin (terrain_levels_slope, basé sur la
-    # distance parcourue). Viable maintenant que descent_speed le fait AVANCER
-    # (avant il restait immobile -> jamais promu). Il apprend l'équilibre
-    # progressivement au lieu d'être jeté d'emblée sur du 20° (où il pique du nez).
+    # === CURRICULUM : couverture uniforme de toute la plage de raideur ===
+    # Les environnements sont répartis sur les dix niveaux au démarrage afin
+    # d'aligner l'entraînement avec l'évaluation play, puis le niveau est tiré
+    # à nouveau après chaque épisode. Une promotion adaptative concentrait la
+    # distribution au milieu et laissait les deux extrêmes non maîtrisés.
     for name in list(cfg.curriculum.keys()):
         del cfg.curriculum[name]
-    cfg.curriculum["terrain_levels"] = CurriculumTermCfg(func=microduck_mdp.terrain_levels_slope)
+    cfg.curriculum["terrain_levels"] = CurriculumTermCfg(
+        func=microduck_mdp.randomize_slope_terrain_levels
+    )
 
     return cfg
 

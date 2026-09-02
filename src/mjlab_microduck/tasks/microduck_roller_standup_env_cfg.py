@@ -9,9 +9,8 @@ quel le robot rollers, les capteurs, toute la DR et l'observation 61D, donc
 interchangeable au runtime (--new-cmd-obs). C'est le pattern de roller_slope.
 
 Deux différences structurelles avec `standup` :
-  - les roues passives sont INTERCALÉES dans l'ordre des joints → indices
-    remappés (_LEG_JOINTS ci-dessous), verrouillés par
-    tests/test_roller_standup_cfg.py ;
+  - les roues passives sont INTERCALÉES dans l'ordre MuJoCo, mais les helpers de
+    récompense projettent déjà vers l'ordre des 14 servos ;
   - pas de commande head_pose : les slots head/body restent zero-paddés
     (convention de la famille roller) et la tête est tenue droite par
     neck_joint_pos_l2, qui résout par NOM.
@@ -91,24 +90,10 @@ def _resolve_play_face_up():
         print(f"[roller_standup] STANDUP_PLAY_FACE_UP='{raw}' invalide -> défaut {PLAY_FACE_UP}")
         return PLAY_FACE_UP
 
-# ── Indices de joints — les roues passives sont INTERCALÉES ───────────────────
-# Ordre réel du modèle rollers (18 joints après le free-joint), vérifié dans
-# MuJoCo via get_walk_rollers_spec().compile() :
-#   0-4   left_hip_yaw, left_hip_roll, left_hip_pitch, left_knee, left_ankle
-#   5-6   passive_LF_wheel, passive_LR_wheel
-#   7-10  neck_pitch, head_pitch, head_yaw, head_roll
-#   11-15 right_hip_yaw, right_hip_roll, right_hip_pitch, right_knee, right_ankle
-#   16-17 passive_RF_wheel, passive_RR_wheel
-# Le standup utilise [0-4, 9-13] / [5-8] : ce sont les indices du modèle SANS
-# roues, ils ne valent PAS ici. Verrouillé par tests/test_roller_standup_cfg.py.
-#
-# Seul _LEG_JOINTS est consommé (par les récompenses de pose). _NECK_JOINTS et
-# _WHEEL_JOINTS servent à la documentation et au test d'indices : le cou est
-# résolu par NOM (neck_joint_pos_l2 appelle find_joints(r".*(neck|head).*") à
-# chaque pas) et les roues par la regex ^passive_.*.
-_LEG_JOINTS   = [0, 1, 2, 3, 4, 11, 12, 13, 14, 15]
-_NECK_JOINTS  = [7, 8, 9, 10]
-_WHEEL_JOINTS = [5, 6, 16, 17]
+# Reward helpers use `_servo_joint_pos` / `_servo_default_joint_pos`, which
+# remove passive wheels before applying these indices. This is the 14-servo
+# policy order, not the raw 18-joint MuJoCo order.
+_LEG_SERVO_INDICES = [0, 1, 2, 3, 4, 9, 10, 11, 12, 13]
 
 # Récompenses de PATINAGE de l'env roller : aucun sens quand on est par terre.
 # feet_flat : les lames ne sont PAS à plat pendant la montée → combattrait le geste.
@@ -180,7 +165,7 @@ def make_microduck_roller_standup_env_cfg(play: bool = False) -> ManagerBasedRlE
         weight=8.0,
         params={
             "std": 0.5,
-            "joint_indices": _LEG_JOINTS,
+            "joint_indices": _LEG_SERVO_INDICES,
             "target_overrides": None,
         },
     )
@@ -189,7 +174,7 @@ def make_microduck_roller_standup_env_cfg(play: bool = False) -> ManagerBasedRlE
         func=microduck_mdp.pose_l1_penalty,
         weight=5.0,
         params={
-            "joint_indices": _LEG_JOINTS,
+            "joint_indices": _LEG_SERVO_INDICES,
             "target_overrides": None,
         },
     )
@@ -294,7 +279,7 @@ def make_microduck_roller_standup_env_cfg(play: bool = False) -> ManagerBasedRlE
             "height_std": 0.04,
             "upright_std": 0.40,
             "pose_std": 0.40,
-            "joint_indices": _LEG_JOINTS,
+            "joint_indices": _LEG_SERVO_INDICES,
             "target_overrides": None,
             "asset_cfg": SceneEntityCfg("robot", body_names=("trunk_base",)),
         },

@@ -1,0 +1,41 @@
+{
+  "policy_id": "ground_pick_flat",
+  "task": "Mjlab-GroundPick-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "051d3b3c2062314f31b12da5a641ead635b46c67f1dd611cac96028da846950e",
+  "onnx_sha256": "9b6b6e27f36b973ccfa011fa8e5dc8dd635e002067ad80a363c4fddeb635bc52",
+  "parity_report_sha256": "214ba408006a7b20a327672b56104bc4c60f1a07edc6454d88bbebb72e7f698a",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.00954840690088516,
+        -0.014021713913321356,
+        -0.011387768368132448
+      ],
+      "max_tilt_rad": 0.43810352653339557,
+      "final_tilt_rad": 0.06255402893546877,
+      "final_height_m": 0.11361223163186755,
+      "max_abs_raw_action": 1.479095458984375,
+      "max_abs_applied_action": 1.479095458984375,
+      "contact_geoms": [
+        "floor",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/ground_pick_flat/canonical.npz"
+    }
+  ]
+}

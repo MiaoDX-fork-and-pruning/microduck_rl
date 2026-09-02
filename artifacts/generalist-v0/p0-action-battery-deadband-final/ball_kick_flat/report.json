@@ -1,0 +1,42 @@
+{
+  "policy_id": "ball_kick_flat",
+  "task": "Mjlab-BallKick-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "add8764869a1303bc2d1547eb7f57c8dea64e37035f9ecd4a17169c37f5092c2",
+  "onnx_sha256": "8d2664c8f042cadf6791491dae42b5cf2e8af3a930aafc197ed30e69b2ef250f",
+  "parity_report_sha256": "51d658dc86b0431cfdd2271e549ec716ef05924a346a18b48a4b31f41e2871f2",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.02801054147274463,
+        -0.018846530178739114,
+        -0.00983381786918229
+      ],
+      "max_tilt_rad": 0.13067626444424277,
+      "final_tilt_rad": 0.01090092800654365,
+      "final_height_m": 0.11516618213081771,
+      "max_abs_raw_action": 2.332822322845459,
+      "max_abs_applied_action": 2.332822322845459,
+      "contact_geoms": [
+        "floor",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-deadband-final/ball_kick_flat/canonical.npz"
+    }
+  ]
+}

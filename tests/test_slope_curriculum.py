@@ -1,5 +1,11 @@
+from types import SimpleNamespace
+
 import torch
-from mjlab_microduck.tasks.mdp import slope_move_masks
+
+from mjlab_microduck.tasks.mdp import (
+    randomize_slope_terrain_levels,
+    slope_move_masks,
+)
 
 
 def test_move_up_when_reached_bottom():
@@ -37,3 +43,23 @@ def test_move_up_boundary_at_04():
     dist_mid = torch.tensor([3.0])
     up_mid, down_mid = slope_move_masks(dist_mid, size_x=8.0)
     assert not bool(up_mid[0]) and not bool(down_mid[0])
+
+
+def test_randomize_slope_terrain_levels_resamples_completed_envs():
+    class Terrain:
+        terrain_levels = torch.tensor([0, 4, 9], dtype=torch.long)
+
+        def __init__(self):
+            self.randomized = None
+
+        def randomize_env_origins(self, env_ids):
+            self.randomized = env_ids.clone()
+
+    terrain = Terrain()
+    env = SimpleNamespace(scene=SimpleNamespace(terrain=terrain))
+    env_ids = torch.tensor([0, 2], dtype=torch.long)
+
+    mean_level = randomize_slope_terrain_levels(env, env_ids)
+
+    assert torch.equal(terrain.randomized, env_ids)
+    assert mean_level.item() == torch.mean(terrain.terrain_levels.float()).item()

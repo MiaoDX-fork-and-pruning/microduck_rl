@@ -1,0 +1,331 @@
+{
+  "schema_version": 1,
+  "scenario": "/home/mi/ws/gogo/microduck_rl/docs/specialist_demo_scenario.json",
+  "track": "A",
+  "scene": "walk_all_collisions",
+  "seed": 20260829,
+  "frames": 4500,
+  "expected_frames": 4500,
+  "reset_count": 0,
+  "finite": true,
+  "policy_sequence": [
+    "velstand_flat",
+    "velocity_flat",
+    "sitstand_flat",
+    "ground_pick_flat",
+    "ball_kick_flat",
+    "roulade_flat"
+  ],
+  "transitions": [
+    {
+      "step": 0,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 0,
+      "end_step": 399
+    },
+    {
+      "step": 400,
+      "policy_id": "velocity_flat",
+      "command": [
+        0.15,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 400,
+      "end_step": 1099
+    },
+    {
+      "step": 1100,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1100,
+      "end_step": 1499
+    },
+    {
+      "step": 1500,
+      "policy_id": "sitstand_flat",
+      "command": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1500,
+      "end_step": 1799
+    },
+    {
+      "step": 1800,
+      "policy_id": "sitstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1800,
+      "end_step": 2099
+    },
+    {
+      "step": 2100,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2100,
+      "end_step": 2399
+    },
+    {
+      "step": 2400,
+      "policy_id": "ground_pick_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2400,
+      "end_step": 2899
+    },
+    {
+      "step": 2900,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2900,
+      "end_step": 3199
+    },
+    {
+      "step": 3200,
+      "policy_id": "ball_kick_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 3200,
+      "end_step": 3499
+    },
+    {
+      "step": 3500,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 3500,
+      "end_step": 3799
+    },
+    {
+      "step": 3800,
+      "policy_id": "roulade_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 3800,
+      "end_step": 4199
+    },
+    {
+      "step": 4200,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 4200,
+      "end_step": 4499
+    }
+  ],
+  "segments": {
+    "velstand_flat": {
+      "frames": 2000,
+      "max_tilt_rad": 0.49956002740163596,
+      "max_action_jump": 1.3335787057876587
+    },
+    "velocity_flat": {
+      "frames": 700,
+      "max_tilt_rad": 0.04847179551765398,
+      "max_action_jump": 0.1353788524866104
+    },
+    "sitstand_flat": {
+      "frames": 600,
+      "max_tilt_rad": 0.3979820757896598,
+      "max_action_jump": 1.0573432445526123
+    },
+    "ground_pick_flat": {
+      "frames": 500,
+      "max_tilt_rad": 0.7317135159256127,
+      "max_action_jump": 0.3162589967250824
+    },
+    "ball_kick_flat": {
+      "frames": 300,
+      "max_tilt_rad": 0.26017648349631206,
+      "max_action_jump": 1.5630567073822021
+    },
+    "roulade_flat": {
+      "frames": 400,
+      "max_tilt_rad": 3.1330482688221704,
+      "max_action_jump": 1.7853989601135254
+    }
+  },
+  "max_tilt_rad": 3.1330482688221704,
+  "max_non_dynamic_tilt_rad": 0.7317135159256127,
+  "recovery_max_tilt_rad": 0.49956002740163596,
+  "first_failure_step": 3811,
+  "world_displacement_m": [
+    0.5940857521136212,
+    0.15069424669789655,
+    -0.008360353008036253
+  ],
+  "contact_geoms": [
+    "26",
+    "49",
+    "56",
+    "58",
+    "67",
+    "76",
+    "9",
+    "floor",
+    "left_foot_collision",
+    "right_foot_collision"
+  ],
+  "max_action_jump": 1.7853989601135254,
+  "video": "artifacts/generalist-v0/specialist-switch-track-a-final.mp4",
+  "stability_gate_rad": 1.1344640137963142,
+  "passed": true,
+  "failure_reason": null
+}

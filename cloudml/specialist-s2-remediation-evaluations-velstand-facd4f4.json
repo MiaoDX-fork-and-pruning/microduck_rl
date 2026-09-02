@@ -1,0 +1,70 @@
+{
+  "task": "Mjlab-VelStand-Flat-MicroDuck",
+  "source_commit": "facd4f4",
+  "seed": 42,
+  "episodes": 32,
+  "main_task_term": "track_linear_velocity",
+  "success_threshold": 15.0,
+  "minimum_success_rate": 0.8,
+  "minimum_main_task_metric": 18.0,
+  "candidates": [
+    {
+      "checkpoint": "model_7250.pt",
+      "checkpoint_sha256": "51323e1c29963d5653fa26c9e049e9b10e321671be4e33e94364c34a1329a2b8",
+      "success_rate": 0.71875,
+      "main_task_metric": 21.791010922170017,
+      "termination_counts": {"fallen_too_long": 9, "time_out": 23},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_7500.pt",
+      "checkpoint_sha256": "402092a089c0905dac38ec2bc32ebd225b57c5fcfe3009ccf80e98b4ccb212ce",
+      "success_rate": 0.75,
+      "main_task_metric": 21.997954992269854,
+      "termination_counts": {"fallen_too_long": 8, "time_out": 24},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": null,
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_7750.pt",
+      "checkpoint_sha256": "69d8aade92b6e23e143638b70c769d46289e01597603ad9d08c230f747a83a3f",
+      "success_rate": 0.875,
+      "main_task_metric": 23.988362500650986,
+      "termination_counts": {"fallen_too_long": 4, "time_out": 28},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": false,
+      "video_review": "The robot remains upright for roughly six seconds, then falls onto its back and stays prone until the automatic reset near 14.3 seconds. This matches episode 0 terminating fallen_too_long and is not acceptable final video evidence.",
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_8000.pt",
+      "checkpoint_sha256": "8157516d543e69c5997678616635d8daabaeb6ac60ea1da2378f00a621c7decf",
+      "success_rate": 0.8125,
+      "main_task_metric": 22.4653009471644,
+      "termination_counts": {"fallen_too_long": 6, "time_out": 26},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": false,
+      "video_review": "The robot remains upright for roughly six seconds, then falls onto its back and remains prone through the end of the clip. Episode 0 terminates fallen_too_long at 14.28 seconds, so the diagnostic video does not support final acceptance.",
+      "accepted": false
+    },
+    {
+      "checkpoint": "model_10750.pt",
+      "checkpoint_sha256": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5",
+      "success_rate": 0.875,
+      "main_task_metric": 23.561818493333224,
+      "termination_counts": {"fallen_too_long": 4, "time_out": 28},
+      "finite": true,
+      "penalties_non_positive": true,
+      "video_review_passed": true,
+      "video_review": "Episode 0 remains upright and coherent throughout the full 15-second diagnostic clip with no fall or prone interval. Its full 20-second rollout terminates by time_out, matching the visible behavior and the 28/32 timeout battery result.",
+      "accepted": true
+    }
+  ]
+}

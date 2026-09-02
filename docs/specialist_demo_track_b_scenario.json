@@ -1,0 +1,23 @@
+{
+  "version": 2,
+  "track": "B",
+  "seed": 20260829,
+  "duration_s": 60,
+  "command_rate_hz": 50,
+  "compatibility": {
+    "scene": "microduck_walk_rollers_flat",
+    "session": "track_b_rollers_flat"
+  },
+  "transitions": [
+    {"at_s": 0, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 10, "non_interruptible_s": 0, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 10, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0.2, 0, 0], "min_dwell_s": 25, "non_interruptible_s": 2, "expected_outcome": {"metric": "forward_displacement_m", "operator": "gte", "threshold": 2.0}},
+    {"at_s": 35, "from": "velocity_rollers", "to": "roller_crouch", "command": [0, 0, 0], "min_dwell_s": 15, "non_interruptible_s": 10, "expected_outcome": {"metric": "crouch_completed", "operator": "eq", "threshold": 1}},
+    {"at_s": 50, "from": "roller_crouch", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 10, "non_interruptible_s": 2, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}}
+  ],
+  "unsupported_transitions": [
+    {"from": "velocity_rollers", "to": "roller_slope", "reason": "roller_slope requires its dedicated slope terrain scene"},
+    {"from": "velocity_rollers", "to": "roller_standup", "reason": "roller_standup requires its task-specific reset and episode session"},
+    {"from": "velocity_rollers", "to": "spin", "reason": "spin uses the all-collisions model rather than the rollers-flat session"},
+    {"from": "velocity_rollers", "to": "swizzle", "reason": "swizzle is not validated on the rollers-flat model"}
+  ]
+}

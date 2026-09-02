@@ -1,0 +1,106 @@
+[
+  {
+    "id": "velocity_flat",
+    "task": "Mjlab-Velocity-Flat-MicroDuck",
+    "job_id": "t-20260829233250-qzkbi",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-p0/velocity-652b7ce-v2",
+    "run_prefix": "logs/rsl_rl/velocity/2026-08-29_23-34-01_p0-velocity-652b7ce",
+    "checkpoint": "model_5999.pt"
+  },
+  {
+    "id": "roller_standup",
+    "task": "Mjlab-RollerStandUp-Flat-MicroDuck",
+    "job_id": "t-20260829233248-jaq6f",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-p0/roller-standup-652b7ce-v2",
+    "run_prefix": "logs/rsl_rl/roller_standup/2026-08-29_23-39-56_p0-roller-standup-652b7ce",
+    "checkpoint": "model_14999.pt"
+  },
+  {
+    "id": "velstand_flat",
+    "task": "Mjlab-VelStand-Flat-MicroDuck",
+    "job_id": "t-20260830214918-gxien",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/velstand-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/velstand/2026-08-30_21-52-38_a1-velstand-652b7ce",
+    "checkpoint": "model_5999.pt"
+  },
+  {
+    "id": "sitstand_flat",
+    "task": "Mjlab-SitStand-Flat-MicroDuck",
+    "job_id": "t-20260830214918-p98ty",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/sitstand-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/microduck_sitstand/2026-08-30_21-53-10_a1-sitstand-652b7ce",
+    "checkpoint": "model_14999.pt"
+  },
+  {
+    "id": "ground_pick_flat",
+    "task": "Mjlab-GroundPick-Flat-MicroDuck",
+    "job_id": "t-20260830214918-77usp",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/ground-pick-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/ground_pick/2026-08-30_21-52-38_a1-ground-pick-652b7ce",
+    "checkpoint": "model_19999.pt"
+  },
+  {
+    "id": "ball_kick_flat",
+    "task": "Mjlab-BallKick-Flat-MicroDuck",
+    "job_id": "t-20260830214918-kgjma",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/ball-kick-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/ball_kick_right/2026-08-30_21-52-59_a1-ball-kick-652b7ce",
+    "checkpoint": "model_9999.pt"
+  },
+  {
+    "id": "roulade_flat",
+    "task": "Mjlab-Roulade-Flat-MicroDuck",
+    "job_id": "t-20260830214918-mkrjo",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/roulade-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/microduck_roulade/2026-08-30_21-53-10_a1-roulade-652b7ce",
+    "checkpoint": "model_9999.pt"
+  },
+  {
+    "id": "standup_flat",
+    "task": "Mjlab-StandUp-Flat-MicroDuck",
+    "job_id": "t-20260830214918-5cmql",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/standup-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/microduck_stand/2026-08-30_21-52-38_a1-standup-652b7ce",
+    "checkpoint": "model_14999.pt"
+  },
+  {
+    "id": "velocity_rollers",
+    "task": "Mjlab-Velocity-Flat-MicroDuck-Rollers",
+    "job_id": "t-20260830214918-weych",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/velocity-rollers-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/velocity_rollers/2026-08-30_21-53-01_a1-velocity-rollers-652b7ce",
+    "checkpoint": "model_5999.pt"
+  },
+  {
+    "id": "swizzle",
+    "task": "Mjlab-Velocity-Swizzle-MicroDuck",
+    "job_id": "t-20260830214918-0sllb",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-a1/swizzle-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/velocity_swizzle/2026-08-30_21-52-38_a1-swizzle-652b7ce",
+    "checkpoint": "model_5999.pt"
+  },
+  {
+    "id": "roller_crouch",
+    "task": "Mjlab-RollerCrouch-Flat-MicroDuck",
+    "job_id": "t-20260830220033-au07o",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-b1/roller-crouch-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/roller_crouch/2026-08-30_22-03-27_b1-roller-crouch-652b7ce",
+    "checkpoint": "model_7999.pt"
+  },
+  {
+    "id": "roller_slope",
+    "task": "Mjlab-RollerSlope-Flat-MicroDuck",
+    "job_id": "t-20260830220052-rs8dx",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-b1/roller-slope-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/roller_slope/2026-08-30_22-04-00_b1-roller-slope-652b7ce",
+    "checkpoint": "model_7999.pt"
+  },
+  {
+    "id": "spin",
+    "task": "Mjlab-Spin-Flat-MicroDuck",
+    "job_id": "t-20260830220052-afcbg",
+    "output_prefix": "/dongxu/microduck_rl/runs/specialist-b1/spin-652b7ce-v1",
+    "run_prefix": "logs/rsl_rl/spin/2026-08-30_22-03-27_b1-spin-652b7ce",
+    "checkpoint": "model_7999.pt"
+  }
+]

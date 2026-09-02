@@ -1,0 +1,14 @@
+[
+  {"id": "roller_standup", "main_task_term": "standing_composite"},
+  {"id": "velstand_flat", "main_task_term": "track_linear_velocity"},
+  {"id": "sitstand_flat", "main_task_term": "posture_composite"},
+  {"id": "ground_pick_flat", "main_task_term": "ground_pick_return_pose_legs"},
+  {"id": "ball_kick_flat", "main_task_term": "ball_forward_velocity"},
+  {"id": "roulade_flat", "main_task_term": "roulade_progress"},
+  {"id": "standup_flat", "main_task_term": "standing_composite"},
+  {"id": "velocity_rollers", "main_task_term": "wheel_speed"},
+  {"id": "swizzle", "main_task_term": "wheel_speed"},
+  {"id": "roller_crouch", "main_task_term": "forward_speed"},
+  {"id": "roller_slope", "main_task_term": "wheel_glide"},
+  {"id": "spin", "main_task_term": "spin_rate_track"}
+]

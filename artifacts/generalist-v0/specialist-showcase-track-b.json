@@ -1,0 +1,217 @@
+{
+  "schema_version": 3,
+  "scenario": "/home/mi/ws/gogo/microduck_rl/docs/specialist_showcase_track_b.json",
+  "track": "B-showcase",
+  "scene": "microduck_walk_rollers_flat",
+  "seed": 20260902,
+  "frames": 1050,
+  "expected_frames": 1050,
+  "reset_count": 0,
+  "finite": true,
+  "policy_sequence": [
+    "roller_crouch",
+    "velocity_rollers"
+  ],
+  "transitions": [
+    {
+      "step": 0,
+      "policy_id": "roller_crouch",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 0,
+      "end_step": 249,
+      "end_position_m": [
+        0.05422286832659714,
+        0.013350900042360824,
+        0.11079530926894493
+      ],
+      "duration_s": 5.0,
+      "max_tilt_rad": 0.26326542741840936
+    },
+    {
+      "step": 250,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 250,
+      "end_step": 349,
+      "end_position_m": [
+        0.0678037267803756,
+        0.012615885280922823,
+        0.12020204899705031
+      ],
+      "duration_s": 2.0,
+      "max_tilt_rad": 0.06418783718513398
+    },
+    {
+      "step": 350,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.3,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 350,
+      "end_step": 499,
+      "end_position_m": [
+        0.7697019205633641,
+        0.05341455842468459,
+        0.1110952889100204
+      ],
+      "duration_s": 3.0,
+      "max_tilt_rad": 0.5497267728652481
+    },
+    {
+      "step": 500,
+      "policy_id": "velocity_rollers",
+      "command": [
+        -0.2,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 500,
+      "end_step": 799,
+      "end_position_m": [
+        0.9044900824983847,
+        0.11394624693751196,
+        0.12018805159376302
+      ],
+      "duration_s": 6.0,
+      "max_tilt_rad": 0.7666494036496754
+    },
+    {
+      "step": 800,
+      "policy_id": "roller_crouch",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 800,
+      "end_step": 1049,
+      "end_position_m": [
+        0.9191283110815563,
+        0.13271720531188497,
+        0.10964884503831078
+      ],
+      "duration_s": 5.0,
+      "max_tilt_rad": 1.1281871752230708
+    }
+  ],
+  "segments": {
+    "roller_crouch": {
+      "frames": 500,
+      "max_tilt_rad": 1.1281871752230708,
+      "max_action_jump": 0.8106849193572998,
+      "start_position_m": [
+        0.0,
+        0.0,
+        0.1385
+      ],
+      "end_position_m": [
+        0.9191283110815563,
+        0.13271720531188497,
+        0.10964884503831078
+      ]
+    },
+    "velocity_rollers": {
+      "frames": 550,
+      "max_tilt_rad": 0.7666494036496754,
+      "max_action_jump": 0.7116584777832031,
+      "start_position_m": [
+        0.05422286832659714,
+        0.013350900042360824,
+        0.11079530926894493
+      ],
+      "end_position_m": [
+        0.9044900824983847,
+        0.11394624693751196,
+        0.12018805159376302
+      ]
+    }
+  },
+  "max_tilt_rad": 1.1281871752230708,
+  "max_non_dynamic_tilt_rad": 1.1281871752230708,
+  "recovery_max_tilt_rad": null,
+  "recovery_stable_step": null,
+  "recovery_time_s": null,
+  "recovery_stable_window_s": 1.0,
+  "recovery_settled_max_tilt_rad": null,
+  "first_failure_step": null,
+  "world_displacement_m": [
+    0.9191283110815563,
+    0.13271720531188497,
+    -0.028851154961689232
+  ],
+  "path_length_m": 1.6610744573474354,
+  "ball_displacement_m": null,
+  "contact_geoms": [
+    "32",
+    "36",
+    "85",
+    "89",
+    "floor"
+  ],
+  "max_action_jump": 0.7116584777832031,
+  "video": "artifacts/generalist-v0/specialist-showcase-track-b.mp4",
+  "stability_gate_rad": 1.1344640137963142,
+  "max_gated_non_dynamic_tilt_rad": 1.1281871752230708,
+  "passed": true,
+  "failure_reason": null
+}
