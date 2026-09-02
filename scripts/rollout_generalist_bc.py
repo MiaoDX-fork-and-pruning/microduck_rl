@@ -21,6 +21,10 @@ def run_case(model, student, teacher_onnx: Path, behavior: str, speed: float, ti
     helper = PolicyInference(model, data, walking_onnx_path=str(teacher_onnx), new_cmd_obs=True,
                              use_projected_gravity=True)
     helper.command = np.array([speed, 0.0, 0.0] + [0.0] * 10, dtype=np.float32)
+    free_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
+    free_qadr = int(model.jnt_qposadr[free_id])
+    data.qpos[free_qadr:free_qadr + 3] = [0.0, 0.0, 0.125]
+    data.qpos[free_qadr + 3:free_qadr + 7] = [1.0, 0.0, 0.0, 0.0]
     for i, qidx in enumerate(helper.joint_qpos_indices):
         data.qpos[qidx] = DEFAULT_POSE[i]
     mujoco.mj_forward(model, data)

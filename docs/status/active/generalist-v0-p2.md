@@ -27,6 +27,12 @@ Evidence:
   threshold. Outputs remained finite and within range, so this is a control
   quality failure rather than an ABI failure. Report:
   `artifacts/generalist-v0/p2-walk-bc-rollout.json`.
+- A first DAgger smoke collected 240 student-state samples with `beta=0.5`,
+  relabeled by the correct immutable teachers (`velstand_flat` for stand and
+  `velocity_flat` for locomotion). The retrained candidate passes locomotion
+  for 120 ticks (max tilt `0.384 rad`, displacement `40.4 mm`) but stand still
+  fails (max tilt `1.635 rad`). This confirms a behavior-specific gap rather
+  than a general ABI or rollout failure.
 
 Remaining P2 work:
 - Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
@@ -34,6 +40,8 @@ Remaining P2 work:
 - Diagnose the rollout stability gap (teacher initialization, action scale, or
   covariate shift) and rerun the MuJoCo G0 battery before any new behavior is
   added.
+- Continue DAgger/initialization work for the stand condition; do not advance
+  to sit/kick/roulade until both G0 behavior gates pass.
 - Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.
