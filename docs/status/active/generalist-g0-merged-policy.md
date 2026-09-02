@@ -233,6 +233,13 @@ ONNX, latency, and fallback checks. Canonical evidence is retained in
 and `/tmp/g0-fallback.json`; these generated files stay out of Git. No video
 or hardware evidence exists, so those final-report fields remain unproven.
 
+Verification checkpoint: the complete focused G0 suite now passes `43 tests`
+(including explicit rejection of actions outside the `[-1, 1]` contract).
+Configuration, graph legality, data/replay, evaluator, exporter/parity, latency,
+fallback, and fail-closed gate tests are covered. This verifies the software
+contract but does not substitute for the still-failing physical behavior and
+transition battery.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the

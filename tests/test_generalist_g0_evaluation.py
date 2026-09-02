@@ -19,6 +19,15 @@ def test_trace_metrics_records_required_physics_signals():
     assert report["peak_action_jump"] == 1.0
 
 
+def test_trace_metrics_rejects_action_contract_violation():
+    trace = TraceMetrics()
+    trace.append(height=0.12, tilt=0.1, position=[0, 0, 0.12], action=np.full(14, 1.01))
+    report = trace.report()
+    assert report["finite"] is True
+    assert report["max_abs_action"] == pytest.approx(1.01)
+    assert report["success"] is False
+
+
 def test_nonfinite_trace_is_sticky():
     trace = TraceMetrics()
     trace.append(height=np.nan, tilt=0, position=[0, 0, 0], action=np.zeros(14))
