@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 from pathlib import Path
 
@@ -36,6 +37,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int) -> di
     from torch import nn
 
     torch.manual_seed(seed)
+    torch.use_deterministic_algorithms(True)
     order = torch.randperm(len(x))
     split = max(1, int(len(x) * 0.9))
     train_idx, val_idx = order[:split], order[split:]
@@ -47,10 +49,21 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int) -> di
         loss = ((pred - ty[train_idx]) ** 2).mean()
         opt.zero_grad(); loss.backward(); opt.step()
     with torch.no_grad():
-        val = ((model(tx[val_idx]) - ty[val_idx]) ** 2).mean().item() if len(val_idx) else float("nan")
+        val_pred = model(tx[val_idx]) if len(val_idx) else torch.empty((0, 14))
+        val = ((val_pred - ty[val_idx]) ** 2).mean().item() if len(val_idx) else float("nan")
+        labels = x[:, 48:54].argmax(axis=1)
+        per_behavior = {}
+        for index, name in enumerate(("stand", "locomotion")):
+            selected = val_idx.numpy()[labels[val_idx.numpy()] == index]
+            if len(selected):
+                per_behavior[name] = float(((model(tx[selected]) - ty[selected]) ** 2).mean().item())
     out.mkdir(parents=True, exist_ok=True)
     torch.save({"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "state_dict": model.state_dict()}, out / "model.pt")
-    return {"train_mse": float(loss.item()), "validation_mse": val, "samples": len(x), "seed": seed}
+    model_hash = hashlib.sha256((out / "model.pt").read_bytes()).hexdigest()
+    return {"train_mse": float(loss.item()), "validation_mse": val,
+            "validation_mse_by_behavior": per_behavior, "samples": len(x),
+            "seed": seed, "model_sha256": model_hash,
+            "architecture": [71, 256, 256, 14]}
 
 
 def main() -> None:
