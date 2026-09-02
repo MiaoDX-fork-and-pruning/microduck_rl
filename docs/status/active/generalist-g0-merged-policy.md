@@ -198,6 +198,15 @@ removed the proven reward starvation condition but is insufficient for P4
 acceptance; longer training or further reward/state-coverage diagnosis is still
 required.
 
+Fresh post-fix direct PPO run: 100 iterations at 64 environments completed
+without numerical errors, and the new SITSTAND terms carried non-zero weighted
+mass (terminal `sitstand_posture_pose_legs` about 0.09 and composite/height
+terms positive). However, the canonical `model_99.pt` battery still failed all
+three behaviors and four legal edges; maximum tilts were about 2.11 rad
+(stand), 1.63 rad (locomotion), and 2.08 rad (sit/stand), with actions clipped
+to range. The reward is now active, but the merged policy has not learned the
+required stable behaviors.
+
 Reward-contract diagnosis found a second omission: the G0 task had only the
 generic velocity-template pose term, so SITSTAND lacked the validated commanded
 height/pose/composite stack used by its specialist. G0 now imports those four
