@@ -25,24 +25,25 @@ def validate_bc_artifact(root: Path) -> dict:
     if not manifest_path.is_file() or not model_path.is_file():
         raise FileNotFoundError(f"BC artifact requires {manifest_path} and {model_path}")
     metadata = json.loads(manifest_path.read_text())
-    if metadata.get("schema") != SCHEMA or metadata.get("schema_version") != SCHEMA_VERSION:
+    model_metadata = metadata.get("metrics", metadata)
+    if metadata.get("schema", model_metadata.get("schema")) != SCHEMA or metadata.get("schema_version", model_metadata.get("schema_version")) != SCHEMA_VERSION:
         raise ValueError("BC artifact schema does not match the G0 contract")
-    if metadata.get("input_dim") not in (None, OBS_DIM) or metadata.get("action_dim") not in (None, ACTION_DIM):
+    if metadata.get("input_dim", model_metadata.get("input_dim")) not in (None, OBS_DIM) or metadata.get("action_dim", model_metadata.get("action_dim")) not in (None, ACTION_DIM):
         raise ValueError("BC artifact dimensions do not match 71D/14D G0 contract")
     import torch
     payload = torch.load(model_path, map_location="cpu", weights_only=False)
     state = payload.get("state_dict")
     if not isinstance(state, dict):
         raise ValueError("BC checkpoint is missing state_dict")
-    actor = build_actor(metadata)
+    actor = build_actor(model_metadata)
     try:
         actor.load_state_dict(state, strict=True)
     except RuntimeError as exc:
         raise ValueError(f"BC checkpoint architecture does not match manifest: {exc}") from exc
     return {"schema": SCHEMA, "schema_version": SCHEMA_VERSION,
-            "model_kind": metadata.get("model_kind", "dense"),
-            "architecture": metadata.get("architecture"),
-            "bounded_actions": bool(metadata.get("bounded_actions", False)),
+            "model_kind": model_metadata.get("model_kind", "dense"),
+            "architecture": model_metadata.get("architecture"),
+            "bounded_actions": bool(model_metadata.get("bounded_actions", False)),
             "model": str(model_path.resolve()), "model_sha256": sha256(model_path)}
 
 
