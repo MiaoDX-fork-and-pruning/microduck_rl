@@ -250,6 +250,14 @@ the required 64-environment, 5-iteration smoke without error. The artifact is
 diagnostic and remains outside Git; longer hybrid behavior evidence is still
 required.
 
+Comparable hybrid diagnostic: with the dense BC initializer, a 20-iteration
+hybrid PPO run at 64 environments completed without numerical errors. Its
+canonical battery still failed all three behaviors and all four legal edges
+(maximum tilts about 1.64 rad stand, 2.09 rad locomotion, and 1.62 rad
+sit/stand). Direct PPO and hybrid PPO therefore agree on the current decision:
+neither meets the G0 stability contract, despite valid initialization, active
+rewards, finite actions, and successful smoke tests.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
