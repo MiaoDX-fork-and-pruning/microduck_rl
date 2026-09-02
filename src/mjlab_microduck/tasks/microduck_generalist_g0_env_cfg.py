@@ -210,6 +210,7 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
     )
     # Existing VelStand terms are retained but task-specific terms are active
     # only under their corresponding condition.
+    pose_source = copy.copy(cfg.rewards.get("pose")) if "pose" in cfg.rewards else None
     for name, behavior in (("track_linear_velocity", "VELOCITY"), ("track_angular_velocity", "VELOCITY"),
                            ("pose", "VELOCITY"), ("upright_progress", "VELSTAND"),
                            ("height_progress", "VELSTAND"), ("recovery_success", "VELSTAND"),
@@ -217,6 +218,13 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
         if name in cfg.rewards:
             term = cfg.rewards[name]
             cfg.rewards[name] = RewardTermCfg(func=_masked(term.func, behavior), weight=term.weight, params=term.params)
+    # Posture tracking is also the sit/stand task objective. Keep a separate
+    # masked term so VELOCITY and SITSTAND each receive the same validated
+    # pose-tracking signal without allowing either behavior to farm the other.
+    if pose_source is not None:
+        cfg.rewards["sitstand_pose"] = RewardTermCfg(
+            func=_masked(pose_source.func, "SITSTAND"), weight=pose_source.weight, params=pose_source.params
+        )
     for group in ("actor", "critic"):
         terms = cfg.observations[group].terms
         terms["g0_behavior"] = ObservationTermCfg(func=g0_behavior_one_hot)
