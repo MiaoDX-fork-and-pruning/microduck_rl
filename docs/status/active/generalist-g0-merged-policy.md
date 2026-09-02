@@ -138,6 +138,13 @@ but the standalone helper still exposes the same grouped/raw observation shape
 mismatch for these checkpoints. The fail-closed P4 gate therefore blocks any
 checkpoint acceptance until this boundary is corrected.
 
+P3 checkpoint battery is now executable after flattening singleton observation
+dimensions in the canonical deployment helper. Fixed-seed 120-tick reports for
+both direct and hybrid PPO checkpoints are finite, but every behavior and legal
+edge fails the 65-degree stability/success gate. Direct maxima are 1.48, 1.50,
+and 1.49 rad (stand, locomotion, sit/stand); hybrid maxima are 2.29, 1.64,
+and 1.57 rad. Both remain diagnostic failures, not candidates.
+
 P4 supporting gates: `scripts/benchmark_generalist_g0.py` measured the exported
 ONNX actor at p95 `0.020 ms` (15 ms budget after the 5 ms margin), passing the
 50 Hz inference-budget gate. `scripts/validate_generalist_fallback.py` passed
