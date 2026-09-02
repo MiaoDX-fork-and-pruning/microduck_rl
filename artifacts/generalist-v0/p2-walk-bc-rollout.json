@@ -1,0 +1,41 @@
+{
+  "schema": "generalist-v0",
+  "schema_version": 2,
+  "ticks": 120,
+  "profiles": [
+    {
+      "behavior": "stand",
+      "ticks": 120,
+      "finite": true,
+      "world_displacement_m": [
+        -0.14546790488843478,
+        -0.033395338385830184,
+        -0.0833835519669445
+      ],
+      "max_tilt_rad": 2.003793162045703,
+      "final_tilt_rad": 1.7182030840782165,
+      "max_abs_action": 0.9521979689598083,
+      "stability_gate_rad": 1.1344640137963142,
+      "stable": false,
+      "displacement_gate_m": null,
+      "passed": false
+    },
+    {
+      "behavior": "locomotion",
+      "ticks": 120,
+      "finite": true,
+      "world_displacement_m": [
+        0.1408668592619705,
+        -0.022791757745642426,
+        -0.08562326620181868
+      ],
+      "max_tilt_rad": 1.3059472294944634,
+      "final_tilt_rad": 1.2341372982407837,
+      "max_abs_action": 0.9512656331062317,
+      "stability_gate_rad": 1.1344640137963142,
+      "stable": false,
+      "displacement_gate_m": 0.005,
+      "passed": false
+    }
+  ]
+}

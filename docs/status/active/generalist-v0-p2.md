@@ -21,12 +21,19 @@ Evidence:
 - Independent evaluator `scripts/evaluate_generalist_bc.py` reproduced finite
   outputs and reported MSE `0.00021248` (stand `0.00005215`, locomotion
   `0.00022584`).
+- Student MuJoCo rollout (`scripts/rollout_generalist_bc.py`, 120 ticks) is
+  intentionally recorded as a failed behavior gate: stand max tilt `2.004 rad`
+  and locomotion max tilt `1.306 rad`, both above the `65 deg` (`1.134 rad`)
+  threshold. Outputs remained finite and within range, so this is a control
+  quality failure rather than an ABI failure. Report:
+  `artifacts/generalist-v0/p2-walk-bc-rollout.json`.
 
 Remaining P2 work:
 - Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
 - Add Rust-readable golden vectors and export metadata for the 71D student contract.
-- Add a 71D student inference/rollout adapter, then compare the BC candidate in
-  MuJoCo against P1 per-behavior and transition baselines.
+- Diagnose the rollout stability gap (teacher initialization, action scale, or
+  covariate shift) and rerun the MuJoCo G0 battery before any new behavior is
+  added.
 - Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.
