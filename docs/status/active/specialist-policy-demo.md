@@ -139,6 +139,11 @@ locomotion stability gate, and its post-action handback remains upright.
 Final reports: `artifacts/generalist-v0/specialist-switch-track-a-final.json`
 and `artifacts/generalist-v0/specialist-switch-track-b-final.json`.
 
+Dynamic showcase contracts are also available at 62 seconds (Track A) and 33
+seconds (Track B). Their rendered videos include a top-left overlay with the
+active policy, velocity or phase command, elapsed time, tilt, and action jump:
+`artifacts/generalist-v0/specialist-showcase-gallery/index.html`.
+
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 

@@ -8,6 +8,7 @@ from pathlib import Path
 import mujoco
 import numpy as np
 import imageio.v2 as imageio
+from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -54,6 +55,7 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         camera.azimuth = 135.0
         camera.elevation = -18.0
         camera.lookat[:] = data.xpos[trunk]
+    font = ImageFont.load_default() if video else None
     start = data.xpos[trunk].copy(); events = {f.step:f for f in scenario_events(frames)}
     segment = {}; labels=[]; tilts=[]; actions=[]; contacts=set(); previous=None; transitions=[]; finite=True
     first_failure_step = None
@@ -82,15 +84,37 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         jump = float(np.max(np.abs(action - previous_action)))
         policy.apply_action(action)
         for _ in range(4): mujoco.mj_step(model, data)
-        if renderer is not None:
-            camera.lookat[:] = data.xpos[trunk]
-            renderer.update_scene(data, camera=camera)
-            writer.append_data(renderer.render())
         quat = data.xquat[trunk]; tilt = float(2 * math.acos(np.clip(abs(float(quat[0])), 0, 1)))
         tilts.append(tilt); actions.append(action); labels.append(frame.policy_id)
         item = segment[frame.policy_id]; item["frames"] += 1; item["max_tilt_rad"] = max(item["max_tilt_rad"], tilt); item["max_action_jump"] = max(item["max_action_jump"], jump)
         if tilt >= TILT_FAILURE and first_failure_step is None:
             first_failure_step = step
+        if renderer is not None:
+            camera.lookat[:] = data.xpos[trunk]
+            renderer.update_scene(data, camera=camera)
+            frame_image = Image.fromarray(renderer.render())
+            draw = ImageDraw.Draw(frame_image, "RGBA")
+            command = policy.command
+            if frame.policy_id in {"velocity_flat", "velocity_rollers"}:
+                command_text = f"velocity={float(command[0]):+.2f} m/s"
+            elif frame.policy_id in {"ground_pick_flat", "roller_crouch"}:
+                command_text = f"phase=({float(command[0]):+.2f}, {float(command[1]):+.2f})"
+            elif frame.policy_id == "sitstand_flat":
+                command_text = "command=SIT" if float(command[0]) >= 0.5 else "command=STAND"
+            else:
+                command_text = "command=zero"
+            lines = [
+                f"{frame.policy_id}",
+                f"t={step / 50.0:05.1f}s  {command_text}",
+                f"tilt={math.degrees(tilt):.1f} deg  action_jump={jump:.2f}",
+            ]
+            box = (12, 12, 365, 78)
+            draw.rounded_rectangle(box, radius=6, fill=(0, 0, 0, 185))
+            y = 18
+            for line in lines:
+                draw.text((22, y), line, font=font, fill=(255, 255, 255, 255))
+                y += 18
+            writer.append_data(np.asarray(frame_image))
         policy.last_action = np.asarray(action, dtype=np.float32).copy()
         for c in data.contact[:data.ncon]:
             for g in (c.geom1, c.geom2): contacts.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(g)) or str(g))
@@ -117,7 +141,7 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
 
 def main():
     ap=argparse.ArgumentParser(); ap.add_argument("--track", choices=("A","B"), required=True); ap.add_argument("--output", type=Path, required=True); ap.add_argument("--video", type=Path); a=ap.parse_args()
-    scenario = ROOT / ("docs/specialist_demo_scenario.json" if a.track == "A" else "docs/specialist_demo_track_b_scenario.json")
+    scenario = ROOT / ("docs/specialist_showcase_track_a.json" if a.track == "A" else "docs/specialist_showcase_track_b.json")
     result = run(scenario, a.track == "B", a.output, a.video); print(json.dumps(result, indent=2)); raise SystemExit(0 if result["passed"] else 1)
 
 if __name__ == "__main__": main()

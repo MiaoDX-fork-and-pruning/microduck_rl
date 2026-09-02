@@ -1,0 +1,280 @@
+{
+  "schema_version": 1,
+  "scenario": "/home/mi/ws/gogo/microduck_rl/docs/specialist_showcase_track_a.json",
+  "track": "A-showcase",
+  "scene": "walk_all_collisions",
+  "seed": 20260902,
+  "frames": 3100,
+  "expected_frames": 3100,
+  "reset_count": 0,
+  "finite": true,
+  "policy_sequence": [
+    "velstand_flat",
+    "velocity_flat",
+    "sitstand_flat",
+    "ground_pick_flat",
+    "roulade_flat"
+  ],
+  "transitions": [
+    {
+      "step": 0,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 0,
+      "end_step": 399
+    },
+    {
+      "step": 400,
+      "policy_id": "velocity_flat",
+      "command": [
+        0.15,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 400,
+      "end_step": 1099
+    },
+    {
+      "step": 1100,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1100,
+      "end_step": 1249
+    },
+    {
+      "step": 1250,
+      "policy_id": "sitstand_flat",
+      "command": [
+        1.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1250,
+      "end_step": 1549
+    },
+    {
+      "step": 1550,
+      "policy_id": "sitstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1550,
+      "end_step": 1849
+    },
+    {
+      "step": 1850,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1850,
+      "end_step": 1999
+    },
+    {
+      "step": 2000,
+      "policy_id": "ground_pick_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2000,
+      "end_step": 2299
+    },
+    {
+      "step": 2300,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2300,
+      "end_step": 2449
+    },
+    {
+      "step": 2450,
+      "policy_id": "roulade_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2450,
+      "end_step": 2649
+    },
+    {
+      "step": 2650,
+      "policy_id": "velstand_flat",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 2650,
+      "end_step": 3099
+    }
+  ],
+  "segments": {
+    "velstand_flat": {
+      "frames": 1300,
+      "max_tilt_rad": 0.5193979481598929,
+      "max_action_jump": 1.334623098373413
+    },
+    "velocity_flat": {
+      "frames": 700,
+      "max_tilt_rad": 0.04847179551765398,
+      "max_action_jump": 0.1353788524866104
+    },
+    "sitstand_flat": {
+      "frames": 600,
+      "max_tilt_rad": 0.39992581793464366,
+      "max_action_jump": 1.0572413206100464
+    },
+    "ground_pick_flat": {
+      "frames": 300,
+      "max_tilt_rad": 0.7289885507737941,
+      "max_action_jump": 0.3174992501735687
+    },
+    "roulade_flat": {
+      "frames": 200,
+      "max_tilt_rad": 3.1190589823349155,
+      "max_action_jump": 1.3520236015319824
+    }
+  },
+  "max_tilt_rad": 3.1190589823349155,
+  "max_non_dynamic_tilt_rad": 0.7289885507737941,
+  "recovery_max_tilt_rad": null,
+  "first_failure_step": 2461,
+  "world_displacement_m": [
+    0.4747185787058654,
+    0.19703891702223428,
+    -0.008370028081517752
+  ],
+  "contact_geoms": [
+    "26",
+    "49",
+    "76",
+    "9",
+    "floor",
+    "left_foot_collision",
+    "right_foot_collision"
+  ],
+  "max_action_jump": 1.3520236015319824,
+  "video": "/tmp/show-a3.mp4",
+  "stability_gate_rad": 1.1344640137963142,
+  "passed": true,
+  "failure_reason": null
+}

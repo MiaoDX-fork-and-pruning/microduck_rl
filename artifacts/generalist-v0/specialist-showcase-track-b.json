@@ -1,0 +1,155 @@
+{
+  "schema_version": 1,
+  "scenario": "/home/mi/ws/gogo/microduck_rl/docs/specialist_showcase_track_b.json",
+  "track": "B-showcase",
+  "scene": "rollers",
+  "seed": 20260902,
+  "frames": 1650,
+  "expected_frames": 1650,
+  "reset_count": 0,
+  "finite": true,
+  "policy_sequence": [
+    "velocity_rollers",
+    "roller_crouch"
+  ],
+  "transitions": [
+    {
+      "step": 0,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 0,
+      "end_step": 249
+    },
+    {
+      "step": 250,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.25,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 250,
+      "end_step": 999
+    },
+    {
+      "step": 1000,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1000,
+      "end_step": 1149
+    },
+    {
+      "step": 1150,
+      "policy_id": "roller_crouch",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1150,
+      "end_step": 1399
+    },
+    {
+      "step": 1400,
+      "policy_id": "velocity_rollers",
+      "command": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "start_step": 1400,
+      "end_step": 1649
+    }
+  ],
+  "segments": {
+    "velocity_rollers": {
+      "frames": 1400,
+      "max_tilt_rad": 0.09984308266166522,
+      "max_action_jump": 0.44070541858673096
+    },
+    "roller_crouch": {
+      "frames": 250,
+      "max_tilt_rad": 0.24507462482738168,
+      "max_action_jump": 0.4908325970172882
+    }
+  },
+  "max_tilt_rad": 0.24507462482738168,
+  "max_non_dynamic_tilt_rad": 0.24507462482738168,
+  "recovery_max_tilt_rad": null,
+  "first_failure_step": null,
+  "world_displacement_m": [
+    0.06526550753733003,
+    0.015755455159420236,
+    -0.01834266520309033
+  ],
+  "contact_geoms": [
+    "32",
+    "36",
+    "85",
+    "89",
+    "floor"
+  ],
+  "max_action_jump": 0.4908325970172882,
+  "video": "artifacts/generalist-v0/specialist-showcase-track-b.mp4",
+  "stability_gate_rad": 1.1344640137963142,
+  "passed": true,
+  "failure_reason": null
+}
