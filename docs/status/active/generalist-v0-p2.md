@@ -49,6 +49,18 @@ Remaining P2 work:
   input experiment were both run. Neither passed the G0 rollout gate; the
   normalized candidate also regressed locomotion. These are retained as failed
   diagnostics, not as accepted baselines.
+- A raw-input DAgger candidate with separate immutable teachers and a bounded
+  output head passed stand (max tilt `0.090 rad`) but failed locomotion (max
+  tilt `1.365 rad`). The prior unbounded small-model DAgger candidate showed the
+  opposite tradeoff. This is evidence of shared-actor behavior interference;
+  the next experiment should use explicit per-behavior heads or a continuity
+  objective, not more untracked hyperparameter sweeps.
+- Added an explicit `g0_multihead` actor with a shared 71D trunk and separate
+  stand/locomotion heads. Its routing test passes; the bounded candidate passes
+  stand (max tilt `0.037 rad`) but locomotion remains outside the gate
+  (`1.308 rad`). The unbounded control also fails and exceeds action range.
+  This validates the behavior-interference hypothesis but does not qualify the
+  model for rollout.
 - Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.
