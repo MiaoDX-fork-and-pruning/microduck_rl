@@ -61,6 +61,12 @@ stand, locomotion, and sit/stand (max tilt 1.85, 1.65, and 1.50 rad). The
 student-state pass did not cure the shared covariate-shift failure, so this is
 not an accepted candidate and hybrid PPO remains the next experiment.
 
+Canonical evaluator proof: `/tmp/g0-canonical-eval.json` is a finite PyTorch
+report covering all three behaviors, all four legal edges, and both unsupported
+direct edges marked unexercised. Its short 40-tick diagnostic still shows
+large tilt excursions (stand 0.83, locomotion 0.27, sit/stand 1.46 rad), so it
+does not supersede the failed 120-tick acceptance battery.
+
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
 tests/test_generalist_model.py tests/test_collect_generalist_dagger.py
