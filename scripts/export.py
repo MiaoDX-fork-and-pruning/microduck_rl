@@ -7,6 +7,7 @@ from dataclasses import asdict, dataclass
 from pathlib import Path
 from typing import Literal
 
+import numpy as np
 import torch
 import tyro
 from rsl_rl.runners import OnPolicyRunner
@@ -24,6 +25,8 @@ from mjlab.viewer import NativeMujocoViewer, ViserPlayViewer
 @dataclass(frozen=True)
 class ExportConfig:
     onnx_file: str = "output.onnx"
+    golden_file: str | None = None
+    golden_seed: int = 20260829
     agent: Literal["zero", "random", "trained"] = "trained"
     registry_name: str | None = None
     wandb_run_path: str | None = None
@@ -241,6 +244,40 @@ def run_export(task_id: str, cfg: ExportConfig):
     attach_metadata_to_onnx(onnx_path, metadata)
 
     print(f"Written {onnx_path}")
+
+    if cfg.golden_file is not None:
+        observation_dim = 61
+        rng = np.random.default_rng(cfg.golden_seed)
+        observations = rng.normal(0.0, 0.25, size=(8, observation_dim)).astype(np.float32)
+        observations[:4, -13:] = 0.0
+        command_cases = ((1.0, 1.0), (-1.0, -1.0), (2.0, -2.0), (-2.0, 2.0))
+        for offset, (linear, angular) in enumerate(command_cases, start=4):
+            observations[offset, -13:] = 0.0
+            observations[offset, -13] = linear
+            observations[offset, -12] = angular
+        case_ids = np.asarray(
+            [
+                "zero_command:0", "zero_command:1", "zero_command:2", "zero_command:3",
+                "command_extreme:+1", "command_extreme:-1",
+                "command_extreme:+2", "command_extreme:-2",
+            ]
+        )
+        with torch.inference_mode():
+            actor_obs = torch.from_numpy(observations).to(device)
+            pt_actions = policy({"actor": actor_obs}).cpu().numpy()
+        if pt_actions.shape != (len(observations), 14) or not np.isfinite(pt_actions).all():
+            raise ValueError(
+                f"exported policy must produce finite [N, 14] actions, got {pt_actions.shape}"
+            )
+        golden_path = Path(cfg.golden_file).resolve()
+        golden_path.parent.mkdir(parents=True, exist_ok=True)
+        np.savez(
+            golden_path,
+            observations=observations,
+            pt_actions=pt_actions.astype(np.float32),
+            case_ids=case_ids,
+        )
+        print(f"Written {golden_path}")
 
     env.close()
 
