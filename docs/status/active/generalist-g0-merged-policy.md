@@ -145,6 +145,11 @@ edge fails the 65-degree stability/success gate. Direct maxima are 1.48, 1.50,
 and 1.49 rad (stand, locomotion, sit/stand); hybrid maxima are 2.29, 1.64,
 and 1.57 rad. Both remain diagnostic failures, not candidates.
 
+Authoritative P4 decision: running the fail-closed gate on the direct report
+returns `DIAGNOSTIC_FAIL` for all three behavior success gates and all four
+legal transition gates. Parity, latency, fallback, finite, and ABI evidence
+pass, but the plan's acceptance criteria are not met.
+
 P4 supporting gates: `scripts/benchmark_generalist_g0.py` measured the exported
 ONNX actor at p95 `0.020 ms` (15 ms budget after the 5 ms margin), passing the
 50 Hz inference-budget gate. `scripts/validate_generalist_fallback.py` passed
