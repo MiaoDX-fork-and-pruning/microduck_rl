@@ -72,9 +72,15 @@ def main() -> None:
     ap.add_argument("--output", type=Path, default=Path("artifacts/generalist-v0/p2-walk-bc-smoke"))
     ap.add_argument("--epochs", type=int, default=20)
     ap.add_argument("--seed", type=int, default=7)
+    ap.add_argument("--extra-data", type=Path, default=None)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
     x, y, manifest = collect(args.trace_root)
+    if args.extra_data:
+        with np.load(args.extra_data, allow_pickle=False) as extra:
+            validate_batch(extra["inputs"], extra["actions"])
+            x = np.concatenate((x, extra["inputs"])); y = np.concatenate((y, extra["actions"]))
+            manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
     metrics = train(x, y, args.output, args.epochs, args.seed)
