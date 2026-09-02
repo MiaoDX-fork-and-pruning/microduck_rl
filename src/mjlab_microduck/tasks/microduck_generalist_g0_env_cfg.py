@@ -9,22 +9,42 @@ from __future__ import annotations
 
 import copy
 import torch
+from dataclasses import dataclass
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import EventTermCfg, ObservationTermCfg
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg
 from mjlab.managers import RewardTermCfg
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
 from mjlab_microduck.tasks import mdp as _mdp
-from mjlab_microduck.generalist_transition_graph import LEGAL_EDGES, route_transition
-from mjlab.tasks.velocity import mdp
-
-from mjlab_microduck.tasks import mdp as microduck_mdp
 from mjlab_microduck.tasks.microduck_velstand_env_cfg import make_microduck_velstand_env_cfg
 from mjlab_microduck.tasks.symmetry import PpoWithSymmetryCfg
 
 G0_BEHAVIORS = ("VELSTAND", "VELOCITY", "SITSTAND")
 G0_OBS_DIM = 71
 G0_ACTION_DIM = 14
+
+
+@dataclass(frozen=True)
+class G0TransitionContract:
+    source: int
+    destination: int
+    dwell_s: float
+    command: tuple[float, float, float]
+    handoff_at_end: bool = False
+
+
+# Exact G0 subset of docs/specialist_demo_scenario.json.  SITSTAND ->
+# VELSTAND first issues the stand posture command to the sit/stand policy; only
+# after its proven 6 s rise dwell does ownership pass back to VELSTAND.
+G0_INITIAL_STAND_DWELL_S = 8.0
+G0_TRANSITION_CONTRACTS = (
+    G0TransitionContract(0, 1, 14.0, (0.15, 0.0, 0.0)),
+    G0TransitionContract(1, 0, 8.0, (0.0, 0.0, 0.0)),
+    G0TransitionContract(0, 2, 6.0, (1.0, 0.0, 0.0)),
+    G0TransitionContract(2, 0, 6.0, (0.0, 0.0, 0.0), handoff_at_end=True),
+)
+_G0_CONTRACT_BY_EDGE = {(item.source, item.destination): item for item in G0_TRANSITION_CONTRACTS}
+_G0_OUTGOING = {0: (1, 2), 1: (0,), 2: (0,)}
 
 
 def _behavior_id(env) -> torch.Tensor:
@@ -84,22 +104,89 @@ def initialize_g0_state(env, env_ids):
         env.g0_phase = torch.zeros((env.num_envs, 2), device=env.device)
         env.g0_posture = torch.zeros(env.num_envs, device=env.device)
         env.g0_side = torch.zeros(env.num_envs, device=env.device)
+        env.g0_transition_source = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        env.g0_transition_destination = torch.full(
+            (env.num_envs,), -1, device=env.device, dtype=torch.long
+        )
+        env.g0_transition_elapsed_s = torch.zeros(env.num_envs, device=env.device)
+        env.g0_transition_dwell_s = torch.full(
+            (env.num_envs,), G0_INITIAL_STAND_DWELL_S, device=env.device
+        )
     env.g0_behavior_id[env_ids] = 0
     env.g0_phase[env_ids] = 0
     env.g0_posture[env_ids] = 0
     env.g0_side[env_ids] = 0
+    env.g0_transition_source[env_ids] = 0
+    env.g0_transition_destination[env_ids] = -1
+    env.g0_transition_elapsed_s[env_ids] = 0
+    env.g0_transition_dwell_s[env_ids] = G0_INITIAL_STAND_DWELL_S
+    _write_g0_command(env, env_ids, (0.0, 0.0, 0.0))
     return None
 
 
+def _write_g0_command(env, env_ids, command: tuple[float, float, float]) -> None:
+    """Make the frozen command authoritative over command-term resampling."""
+    manager = getattr(env, "command_manager", None)
+    if manager is None or not hasattr(manager, "get_term"):
+        return
+    term = manager.get_term("twist")
+    buffer = getattr(term, "vel_command_b", None)
+    if buffer is None:
+        buffer = term.command
+    buffer[env_ids, :3] = torch.as_tensor(command, device=buffer.device, dtype=buffer.dtype)
+    world_buffer = getattr(term, "vel_command_w", None)
+    if world_buffer is not None:
+        world_buffer[env_ids, :3] = buffer[env_ids, :3]
+
+
+def _activate_g0_edge(env, env_id: int, destination: int) -> None:
+    source = int(env.g0_behavior_id[env_id])
+    contract = _G0_CONTRACT_BY_EDGE[(source, destination)]
+    env.g0_transition_source[env_id] = source
+    env.g0_transition_destination[env_id] = destination
+    env.g0_transition_elapsed_s[env_id] = 0.0
+    env.g0_transition_dwell_s[env_id] = contract.dwell_s
+    if not contract.handoff_at_end:
+        env.g0_behavior_id[env_id] = destination
+    env.g0_posture[env_id] = contract.command[0] if destination == 2 or source == 2 else 0.0
+    _write_g0_command(env, torch.as_tensor([env_id], device=env.device), contract.command)
+
+
 def sample_g0_transition(env, env_ids):
-    """Sample only frozen graph edges; callers may override destination explicitly."""
+    """Advance Track A dwell timers and sample exclusively from its four edges."""
     if not hasattr(env, "g0_behavior_id"):
         initialize_g0_state(env, env_ids)
-    current = env.g0_behavior_id[env_ids]
-    choices = {0: (1, 2), 1: (0,), 2: (0,)}
-    for row, eid in enumerate(env_ids.tolist()):
-        destination = choices[int(current[row])][int(torch.randint(len(choices[int(current[row])]), (1,), device=env.device))]
-        env.g0_behavior_id[eid] = destination
+    dt = float(getattr(env, "step_dt", 0.02))
+    env.g0_transition_elapsed_s[env_ids] += dt
+    for eid in env_ids.tolist():
+        destination = int(env.g0_transition_destination[eid])
+        elapsed = float(env.g0_transition_elapsed_s[eid])
+        dwell = float(env.g0_transition_dwell_s[eid])
+        if destination >= 0:
+            contract = _G0_CONTRACT_BY_EDGE[(int(env.g0_transition_source[eid]), destination)]
+            _write_g0_command(env, torch.as_tensor([eid], device=env.device), contract.command)
+            if elapsed < dwell:
+                continue
+            if contract.handoff_at_end:
+                env.g0_behavior_id[eid] = destination
+                env.g0_posture[eid] = 0.0
+                env.g0_transition_destination[eid] = -1
+                env.g0_transition_elapsed_s[eid] = 0.0
+                env.g0_transition_dwell_s[eid] = G0_INITIAL_STAND_DWELL_S
+                continue
+        elif elapsed < dwell:
+            _write_g0_command(env, torch.as_tensor([eid], device=env.device), (0.0, 0.0, 0.0))
+            continue
+
+        source = int(env.g0_behavior_id[eid])
+        choices = _G0_OUTGOING[source]
+        choice = int(torch.randint(len(choices), (1,), device=env.device))
+        _activate_g0_edge(env, eid, choices[choice])
+
+    active = env.g0_transition_destination[env_ids] >= 0
+    progress = env.g0_transition_elapsed_s[env_ids] / env.g0_transition_dwell_s[env_ids].clamp_min(1e-6)
+    env.g0_phase[env_ids, 0] = progress.clamp(0.0, 1.0)
+    env.g0_phase[env_ids, 1] = active.to(env.g0_phase.dtype)
     return None
 
 
@@ -111,7 +198,7 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
     cfg.g0_action_dim = G0_ACTION_DIM
     cfg.events["g0_state"] = EventTermCfg(func=initialize_g0_state, mode="reset")
     cfg.events["g0_transition"] = EventTermCfg(
-        func=sample_g0_transition, mode="interval", interval_range_s=(4.0, 8.0)
+        func=sample_g0_transition, mode="interval", interval_range_s=(0.02, 0.02)
     )
     # Existing VelStand terms are retained but task-specific terms are active
     # only under their corresponding condition.
