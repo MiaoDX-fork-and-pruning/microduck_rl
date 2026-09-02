@@ -189,6 +189,15 @@ still failed all included behavior and legal-edge success cases. This rules out
 the five-iteration checkpoint being merely too early and points to reward/router
 activation and task conditioning as the next implementation investigation.
 
+After distributing reset nodes and activating `sitstand_pose`, a fresh
+20-iteration direct-PPO smoke/diagnostic completed successfully with
+`WANDB_MODE=disabled`. The canonical 120-tick battery remains diagnostic:
+stand, locomotion, sit/stand, and all four legal edges report `success=false`
+(maximum tilts approximately 1.50, 1.81, and 3.07 rad by behavior). The change
+removed the proven reward starvation condition but is insufficient for P4
+acceptance; longer training or further reward/state-coverage diagnosis is still
+required.
+
 Evaluator gate integration: behavior and edge reports now emit explicit
 `success`/`passed` fields from finite, action-range, tilt, and reset criteria.
 The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four
