@@ -240,6 +240,16 @@ fallback, and fail-closed gate tests are covered. This verifies the software
 contract but does not substitute for the still-failing physical behavior and
 transition battery.
 
+Corrected hybrid smoke: the available diagnostic BC artifacts were multi-head
+and intentionally rejected by the dense hybrid runner. A new bounded dense
+71-512-256-128-14 BC artifact was trained from the frozen 4,200-sample traces
+(`validation_mse=0.0324`, SHA-256
+`489dd2b8fc044756fd3dc1e4e4cf898cc88d63cb8557965643ededae886a43c0`).
+Using it through `MICRODUCK_G0_BC_ACTOR`, the corrected hybrid task completed
+the required 64-environment, 5-iteration smoke without error. The artifact is
+diagnostic and remains outside Git; longer hybrid behavior evidence is still
+required.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
