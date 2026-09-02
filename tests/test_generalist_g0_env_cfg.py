@@ -94,9 +94,11 @@ def test_g0_router_holds_initial_stand_then_uses_velocity_contract():
     # must carry its frozen command and expose a live transition phase.
     assert int(env.g0_behavior_id[0]) in (1, 2)
     assert float(env.g0_phase[0, 1]) == 1.0
-    assert tuple(env.command_manager.term.vel_command_b[0].tolist()) in {
-        (0.15, 0.0, 0.0), (1.0, 0.0, 0.0)
-    }
+    command = env.command_manager.term.vel_command_b[0]
+    assert any(
+        torch.allclose(command, torch.tensor(expected), atol=1e-6)
+        for expected in ((0.15, 0.0, 0.0), (1.0, 0.0, 0.0))
+    )
 
 
 def test_g0_router_never_emits_direct_velocity_sit_edge():

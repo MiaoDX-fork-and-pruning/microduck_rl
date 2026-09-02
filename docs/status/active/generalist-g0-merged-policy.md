@@ -115,8 +115,9 @@ Mjlab-GeneralistG0-Flat-MicroDuck --env.scene.num-envs 64
 --agent.max_iterations 5` completed all five iterations with finite rewards,
 observations, actions, and no NaN termination.
 
-The updated router/config/evaluator focused tests pass 17 tests, and the smoke
-completed after the dwell-aware routing and Gaussian distribution fixes.
+The updated router/config/evaluator focused tests pass 42 tests, and the smoke
+completed after the dwell-aware routing and Gaussian distribution fixes. The
+full focused G0 regression suite is green (`42 passed`, 2 exporter warnings).
 
 ONNX proof: `scripts/export_generalist_g0.py` exported the bounded DAgger actor
 to `/tmp/g0-dagger.onnx` with a 71D input and 14D output. The 32-sample golden
@@ -178,9 +179,10 @@ The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four
 legal transition cases fail their success gates, while stand/locomotion remain
 finite. This is the authoritative P4 decision for the current DAgger actor.
 
-Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
-collection before that gate. (The reproduction gate is now satisfied; the next
-proof is P1 dataset shape, balance, replay-state, and determinism validation.)
+Next proof: improve the merged-policy behavior and transition gates. The current
+implementation is test-clean and operationally measurable, but it is not an
+accepted candidate because the canonical P4 behavior/edge success criteria
+remain unmet.
 
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
@@ -192,4 +194,5 @@ scheduler/state machine, roller configuration, hardware rollout, and excluded
 skills (`ground_pick`, `ball_kick`, `roulade`).
 
 Parked work: P1 balanced collection, P2 comparable BC/direct/hybrid baselines,
-P3 rollout and ONNX batteries, and P4 decision.
+P3 rollout and ONNX batteries, and P4 decision. These artifacts are retained as
+diagnostic evidence and must not be treated as final acceptance.
