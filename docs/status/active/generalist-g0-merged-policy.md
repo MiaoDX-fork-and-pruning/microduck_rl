@@ -198,6 +198,12 @@ removed the proven reward starvation condition but is insufficient for P4
 acceptance; longer training or further reward/state-coverage diagnosis is still
 required.
 
+Reward-contract diagnosis found a second omission: the G0 task had only the
+generic velocity-template pose term, so SITSTAND lacked the validated commanded
+height/pose/composite stack used by its specialist. G0 now imports those four
+posture terms and masks them exclusively to SITSTAND. The configuration still
+requires a fresh PPO battery to establish whether this restores stability.
+
 Evaluator gate integration: behavior and edge reports now emit explicit
 `success`/`passed` fields from finite, action-range, tilt, and reset criteria.
 The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four

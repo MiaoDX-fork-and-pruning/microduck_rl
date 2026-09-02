@@ -200,6 +200,17 @@ def sample_g0_transition(env, env_ids):
 
 def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False) -> ManagerBasedRlEnvCfg:
     cfg = make_microduck_velstand_env_cfg(play=play, rough=rough)
+    # Reuse the validated commanded posture stack from SITSTAND. The
+    # velstand template has no height/pose target for this behavior, so merely
+    # masking its generic `pose` term leaves the sit task under-specified.
+    from mjlab_microduck.tasks.microduck_sitstand_env_cfg import make_microduck_sitstand_env_cfg
+    sit_cfg = make_microduck_sitstand_env_cfg(play=play, rough=rough)
+    for name in ("posture_pose_legs", "posture_pose_l1", "posture_height", "posture_composite"):
+        if name in sit_cfg.rewards:
+            term = sit_cfg.rewards[name]
+            cfg.rewards[f"sitstand_{name}"] = RewardTermCfg(
+                func=_masked(term.func, "SITSTAND"), weight=term.weight, params=term.params
+            )
     cfg.g0_behaviors = G0_BEHAVIORS
     cfg.g0_transition_graph = "docs/generalist_g0_transition_graph.json"
     cfg.g0_observation_dim = G0_OBS_DIM
