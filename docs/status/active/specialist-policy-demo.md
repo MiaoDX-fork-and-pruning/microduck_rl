@@ -129,6 +129,16 @@ accept only finite rollouts with non-positive penalties and video review that
 matches the task metric. Failed evaluations remain isolated and do not mutate
 the completed training lineages.
 
+Continuous multi-policy switching is now physically accepted for both tracks.
+The switching battery uses projected-gravity observations, runtime passive-wheel
+friction, and the phase-conditioned command contract for `ground_pick_flat` and
+`roller_crouch`. Track A completed 4,500 frames with six specialists and zero
+resets; Track B completed 3,000 frames with velocity and crouch specialists and
+zero resets. Dynamic `roulade_flat` tilt is reported separately from the
+locomotion stability gate, and its post-action handback remains upright.
+Final reports: `artifacts/generalist-v0/specialist-switch-track-a-final.json`
+and `artifacts/generalist-v0/specialist-switch-track-b-final.json`.
+
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
 
