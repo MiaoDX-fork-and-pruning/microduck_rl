@@ -7,6 +7,7 @@ separate training task.
 """
 from __future__ import annotations
 
+import copy
 import torch
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import EventTermCfg, ObservationTermCfg
@@ -164,3 +165,14 @@ GeneralistG0RlCfg = RslRlOnPolicyRunnerCfg(
     num_steps_per_env=24,
     max_iterations=20_000,
 )
+
+# Keep baseline identities distinct in experiment tracking.  The environment
+# and algorithm budget are intentionally identical; only initialization differs
+# (the launcher below enforces that distinction at the command boundary).
+GeneralistG0DirectPpoRlCfg = copy.deepcopy(GeneralistG0RlCfg)
+GeneralistG0DirectPpoRlCfg.experiment_name = "generalist_g0_direct_ppo"
+GeneralistG0DirectPpoRlCfg.run_name = "direct_ppo"
+
+GeneralistG0HybridPpoRlCfg = copy.deepcopy(GeneralistG0RlCfg)
+GeneralistG0HybridPpoRlCfg.experiment_name = "generalist_g0_hybrid_ppo"
+GeneralistG0HybridPpoRlCfg.run_name = "hybrid_ppo"
