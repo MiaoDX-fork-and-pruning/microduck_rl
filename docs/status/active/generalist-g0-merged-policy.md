@@ -61,6 +61,13 @@ stand, locomotion, and sit/stand (max tilt 1.85, 1.65, and 1.50 rad). The
 student-state pass did not cure the shared covariate-shift failure, so this is
 not an accepted candidate and hybrid PPO remains the next experiment.
 
+Hybrid bridge proof: `scripts/prepare_generalist_hybrid.py` validates nested BC
+manifests and strict actor state dictionaries, then emits matched direct and
+hybrid commands. It successfully prepared `/tmp/g0-hybrid-bridge.json` for the
+bounded DAgger artifact. The bridge deliberately does not pretend a standalone
+BC checkpoint is an `rsl_rl` resume checkpoint; actual actor injection remains
+an integration task before hybrid training can be claimed.
+
 Canonical evaluator proof: `/tmp/g0-canonical-eval.json` is a finite PyTorch
 report covering all three behaviors, all four legal edges, and both unsupported
 direct edges marked unexercised. Its short 40-tick diagnostic still shows
