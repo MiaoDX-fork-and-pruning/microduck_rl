@@ -21,10 +21,12 @@ from infer_policy import DEFAULT_POSE, PolicyInference
 
 
 class Policy:
-    def __init__(self, run: Path | None, onnx: Path | None):
-        if (run is None) == (onnx is None):
-            raise ValueError("choose exactly one of --run or --onnx")
-        self.backend = "onnx" if onnx else "pytorch"
+    def __init__(self, run: Path | None = None, onnx: Path | None = None,
+                 checkpoint: Path | None = None, task: str = "Mjlab-GeneralistG0-DirectPPO-Flat-MicroDuck",
+                 device: str | None = None):
+        if sum(value is not None for value in (run, onnx, checkpoint)) != 1:
+            raise ValueError("choose exactly one of --run, --onnx, or --checkpoint")
+        self.backend = "onnx" if onnx else ("rsl_rl" if checkpoint else "pytorch")
         if onnx:
             import onnxruntime as ort
             self.session = ort.InferenceSession(str(onnx), providers=["CPUExecutionProvider"])
@@ -32,18 +34,49 @@ class Policy:
             if len(inputs) != 1 or inputs[0].shape[-1] != 71:
                 raise ValueError("G0 ONNX must expose one 71D input")
             self.input_name = inputs[0].name
-        else:
+        elif run:
             import torch
             bundle = torch.load(run / "model.pt", weights_only=False)
             metadata = json.loads((run / "manifest.json").read_text()).get("metrics", {})
             self.model = build_actor(metadata)
             self.model.load_state_dict(bundle["state_dict"])
             self.model.eval()
+        else:
+            self._load_rsl_checkpoint(checkpoint, task, device)
+
+    def _load_rsl_checkpoint(self, checkpoint: Path, task: str, device: str | None) -> None:
+        """Load an rsl_rl actor through the task registry (critic is ignored)."""
+        import torch
+        from dataclasses import asdict
+        from mjlab.envs import ManagerBasedRlEnv
+        from mjlab.rl import RslRlVecEnvWrapper
+        from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+        import mjlab.tasks  # noqa: F401
+        target = device or ("cuda:0" if torch.cuda.is_available() else "cpu")
+        env_cfg = load_env_cfg(task, play=True)
+        env_cfg.scene.num_envs = 1
+        env_cfg.seed = 42
+        raw_env = ManagerBasedRlEnv(cfg=env_cfg, device=target)
+        env = RslRlVecEnvWrapper(raw_env, clip_actions=load_rl_cfg(task).clip_actions)
+        agent_cfg = load_rl_cfg(task)
+        runner_cls = load_runner_cls(task)
+        if runner_cls is None:
+            from rsl_rl.runners import OnPolicyRunner
+            runner_cls = OnPolicyRunner
+        runner = runner_cls(env, asdict(agent_cfg), device=target)
+        runner.load(str(checkpoint), load_cfg={"actor": True}, strict=True, map_location=target)
+        self._runner_env = env
+        self._torch_policy = runner.get_inference_policy(device=target)
+        self._device = target
 
     def __call__(self, observation: np.ndarray) -> np.ndarray:
         if self.backend == "onnx":
             return np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
         import torch
+        if self.backend == "rsl_rl":
+            with torch.inference_mode():
+                value = self._torch_policy(torch.from_numpy(observation[None, :]).to(self._device))
+            return value.detach().cpu().numpy()[0].astype(np.float32)
         with torch.inference_mode():
             return self.model(torch.from_numpy(observation)).numpy()[0].astype(np.float32)
 
@@ -95,6 +128,10 @@ def main() -> None:
     source = parser.add_mutually_exclusive_group(required=True)
     source.add_argument("--run", type=Path, help="BC run directory containing model.pt and manifest.json")
     source.add_argument("--onnx", type=Path, help="exported 71D G0 ONNX policy")
+    source.add_argument("--checkpoint", type=Path, help="rsl_rl model_*.pt checkpoint")
+    parser.add_argument("--task", default="Mjlab-GeneralistG0-DirectPPO-Flat-MicroDuck",
+                        help="registered task used to construct the rsl_rl runner")
+    parser.add_argument("--device", default=None)
     parser.add_argument("--observation-reference-onnx", type=Path, required=True,
                         help="61D specialist ONNX used by the established observation harness only")
     parser.add_argument("--ticks", type=int, default=120)
@@ -102,7 +139,7 @@ def main() -> None:
     parser.add_argument("--output", type=Path, default=Path("artifacts/generalist-g0/evaluation.json"))
     args = parser.parse_args()
     np.random.seed(args.seed)
-    policy = Policy(args.run, args.onnx)
+    policy = Policy(args.run, args.onnx, args.checkpoint, args.task, args.device)
     model = mujoco.MjModel.from_xml_path("src/mjlab_microduck/robot/microduck/scene.xml")
     model.opt.timestep = 0.005
     behaviors = []
