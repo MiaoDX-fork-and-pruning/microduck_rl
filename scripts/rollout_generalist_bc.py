@@ -65,6 +65,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--run", type=Path, default=Path("/tmp/p2-walk-bc-100"))
     ap.add_argument("--teacher-onnx", type=Path, default=Path("artifacts/specialists/velocity_flat/policy.onnx"))
+    ap.add_argument("--sitstand-teacher-onnx", type=Path, default=Path("artifacts/specialists/sitstand_flat/policy.onnx"))
     ap.add_argument("--ticks", type=int, default=120)
     ap.add_argument("--speed", type=float, default=0.20)
     ap.add_argument("--output", type=Path, default=Path("/tmp/p2-walk-bc-rollout.json"))
@@ -78,7 +79,8 @@ def main() -> None:
     model.opt.timestep = 0.005
     report = {"schema": bundle.get("schema"), "schema_version": bundle.get("schema_version"), "ticks": args.ticks,
               "profiles": [run_case(model, net, args.teacher_onnx, "stand", 0.0, args.ticks),
-                           run_case(model, net, args.teacher_onnx, "locomotion", args.speed, args.ticks)]}
+                           run_case(model, net, args.teacher_onnx, "locomotion", args.speed, args.ticks),
+                           run_case(model, net, args.sitstand_teacher_onnx, "sit_stand", 1.0, args.ticks)]}
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))
