@@ -8,7 +8,10 @@ Control plane: root Codex session
 
 Latest user intent: implement the full plan through `intuitive-flow`.
 
-Current slice: P0 evidence and contract freeze complete for `velstand_flat`,
+Current slice: P1 contract/data utilities complete; training-only G0 task
+surface registered, with scheduler/reward integration still incomplete.
+
+P0 evidence and contract freeze complete for `velstand_flat`,
 `velocity_flat`, and `sitstand_flat` on the all-collisions/no-wheel model.
 
 Last proven evidence: `artifacts/specialist_artifact_manifest.json` contains
@@ -23,8 +26,18 @@ graph in `docs/generalist_g0_transition_graph.json` exposes exactly four legal
 directed edges and rejects unproven direct pairs. Existing BC/DAgger candidates
 are diagnostics only; none has passed the G0 rollout gate.
 
-Next slice: reproduce each frozen teacher and legal Track A edge with fixed
-seeds, then begin balanced P1 collection only if that evidence passes.
+P1 data slice: the BC collector now includes all three behaviors with
+deterministic balancing and strict replay validation. Boundary extraction uses
+the authoritative Track A report, emits phase/bucket metadata, covers exactly
+the four legal edges, and rejects direct velocity/sit transitions.
+
+P2 scaffold: `Mjlab-GeneralistG0-Flat-MicroDuck` is registered with a distinct
+runner and CPU config tests. It is not yet PPO-ready because behavior state is
+currently a placeholder and reward/transition masking is not wired.
+
+Next slice: implement live behavior/phase state, legal-edge transition
+scheduling, and masked reward terms in the training-only task; then run the
+64-env, 5-iteration smoke test.
 
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
@@ -41,6 +54,9 @@ report proves the accepted `VELSTAND -> VELOCITY -> VELSTAND` and
 
 P0 gate result: PASSED. P1 balanced collection may begin; excluded skills and
 unproven direct edges remain out of the dataset.
+
+P1/P2 proof: focused collection/schema/model/graph/G0-config tests pass (24
+tests across the current focused files). No PPO smoke claim yet.
 
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
