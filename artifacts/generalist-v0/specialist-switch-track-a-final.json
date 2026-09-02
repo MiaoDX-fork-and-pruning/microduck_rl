@@ -324,6 +324,7 @@
     "right_foot_collision"
   ],
   "max_action_jump": 1.7853989601135254,
+  "video": "artifacts/generalist-v0/specialist-switch-track-a-final.mp4",
   "stability_gate_rad": 1.1344640137963142,
   "passed": true,
   "failure_reason": null

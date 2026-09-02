@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import mujoco
 import numpy as np
+import imageio.v2 as imageio
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -17,7 +18,7 @@ PATHS = {p.name: str(p / "policy.onnx") for p in (ROOT / "artifacts/specialists"
 TILT_FAILURE = math.radians(65)
 
 
-def run(scenario_path: Path, roller: bool, output: Path) -> dict:
+def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = None) -> dict:
     scenario, frames = load_scenario(scenario_path)
     model = mujoco.MjModel.from_xml_path(str(ROOT / (MICRODUCK_ROLLERS_XML if roller else MICRODUCK_XML)))
     model.opt.timestep = 0.005
@@ -44,10 +45,20 @@ def run(scenario_path: Path, roller: bool, output: Path) -> dict:
     for i, idx in enumerate(policy.joint_qpos_indices): data.qpos[idx] = policy.default_pose[i]
     data.ctrl[:] = policy.default_pose; mujoco.mj_forward(model, data)
     trunk = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+    writer = imageio.get_writer(str(video), fps=50, codec="libx264", quality=7) if video else None
+    renderer = mujoco.Renderer(model, height=368, width=640) if video else None
+    camera = mujoco.MjvCamera() if video else None
+    if camera is not None:
+        mujoco.mjv_defaultCamera(camera)
+        camera.distance = 1.0
+        camera.azimuth = 135.0
+        camera.elevation = -18.0
+        camera.lookat[:] = data.xpos[trunk]
     start = data.xpos[trunk].copy(); events = {f.step:f for f in scenario_events(frames)}
     segment = {}; labels=[]; tilts=[]; actions=[]; contacts=set(); previous=None; transitions=[]; finite=True
     first_failure_step = None
-    for step, frame in enumerate(frames):
+    try:
+      for step, frame in enumerate(frames):
         if step in events:
             if previous is not None: transitions[-1]["end_step"] = step - 1
             policy.activate_specialist_policy(events[step].policy_id, events[step].command)
@@ -71,6 +82,10 @@ def run(scenario_path: Path, roller: bool, output: Path) -> dict:
         jump = float(np.max(np.abs(action - previous_action)))
         policy.apply_action(action)
         for _ in range(4): mujoco.mj_step(model, data)
+        if renderer is not None:
+            camera.lookat[:] = data.xpos[trunk]
+            renderer.update_scene(data, camera=camera)
+            writer.append_data(renderer.render())
         quat = data.xquat[trunk]; tilt = float(2 * math.acos(np.clip(abs(float(quat[0])), 0, 1)))
         tilts.append(tilt); actions.append(action); labels.append(frame.policy_id)
         item = segment[frame.policy_id]; item["frames"] += 1; item["max_tilt_rad"] = max(item["max_tilt_rad"], tilt); item["max_action_jump"] = max(item["max_action_jump"], jump)
@@ -79,13 +94,18 @@ def run(scenario_path: Path, roller: bool, output: Path) -> dict:
         policy.last_action = np.asarray(action, dtype=np.float32).copy()
         for c in data.contact[:data.ncon]:
             for g in (c.geom1, c.geom2): contacts.add(mujoco.mj_id2name(model, mujoco.mjtObj.mjOBJ_GEOM, int(g)) or str(g))
+    finally:
+      if writer is not None:
+        writer.close()
+      if renderer is not None:
+        renderer.close()
     if transitions: transitions[-1]["end_step"] = len(labels) - 1
     displacement = (data.xpos[trunk] - start).tolist()
     dynamic_policy_ids = {"roulade_flat", "ball_kick_flat"}
     non_dynamic_tilts = [tilt for label, tilt in zip(labels, tilts) if label not in dynamic_policy_ids]
     recovery_start = next((t["start_step"] for t in transitions if t["policy_id"] == "velstand_flat" and t["start_step"] > 3500), None)
     recovery_max_tilt = (max(tilts[recovery_start:], default=None) if recovery_start is not None else None)
-    report = {"schema_version": 1, "scenario": str(scenario_path), "track": scenario["track"], "scene": "rollers" if roller else "walk_all_collisions", "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0)}
+    report = {"schema_version": 1, "scenario": str(scenario_path), "track": scenario["track"], "scene": "rollers" if roller else "walk_all_collisions", "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0), "video": str(video) if video else None}
     report["stability_gate_rad"] = TILT_FAILURE
     physical_ok = (report["max_non_dynamic_tilt_rad"] is None or report["max_non_dynamic_tilt_rad"] < TILT_FAILURE)
     recovery_ok = recovery_max_tilt is None or recovery_max_tilt < TILT_FAILURE
@@ -96,8 +116,8 @@ def run(scenario_path: Path, roller: bool, output: Path) -> dict:
 
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--track", choices=("A","B"), required=True); ap.add_argument("--output", type=Path, required=True); a=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument("--track", choices=("A","B"), required=True); ap.add_argument("--output", type=Path, required=True); ap.add_argument("--video", type=Path); a=ap.parse_args()
     scenario = ROOT / ("docs/specialist_demo_scenario.json" if a.track == "A" else "docs/specialist_demo_track_b_scenario.json")
-    result = run(scenario, a.track == "B", a.output); print(json.dumps(result, indent=2)); raise SystemExit(0 if result["passed"] else 1)
+    result = run(scenario, a.track == "B", a.output, a.video); print(json.dumps(result, indent=2)); raise SystemExit(0 if result["passed"] else 1)
 
 if __name__ == "__main__": main()

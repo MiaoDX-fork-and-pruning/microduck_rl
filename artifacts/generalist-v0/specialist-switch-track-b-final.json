@@ -127,6 +127,7 @@
     "floor"
   ],
   "max_action_jump": 0.4908110201358795,
+  "video": "artifacts/generalist-v0/specialist-switch-track-b-final.mp4",
   "stability_gate_rad": 1.1344640137963142,
   "passed": true,
   "failure_reason": null
