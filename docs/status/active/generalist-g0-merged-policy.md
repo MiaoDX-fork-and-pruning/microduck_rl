@@ -33,8 +33,18 @@ tests/test_specialist_artifacts.py` -> 23 passed. `uv run python
 scripts/freeze_generalist_teachers.py --output
 docs/plans/generalist-g0-teacher-manifest.json --verify` passed all hashes.
 
+P0 reproduction evidence: fixed-seed smoke batteries for each frozen teacher
+(`velstand_flat`, `velocity_flat`, `sitstand_flat`) passed finite 61D/14D,
+tilt, and action-range gates at seed 42. The retained no-reset Track A final
+report proves the accepted `VELSTAND -> VELOCITY -> VELSTAND` and
+`VELSTAND -> SITSTAND -> VELSTAND` sequence with zero resets.
+
+P0 gate result: PASSED. P1 balanced collection may begin; excluded skills and
+unproven direct edges remain out of the dataset.
+
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
-collection before that gate.
+collection before that gate. (The reproduction gate is now satisfied; the next
+proof is P1 dataset shape, balance, replay-state, and determinism validation.)
 
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
