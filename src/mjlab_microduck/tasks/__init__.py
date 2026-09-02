@@ -47,6 +47,10 @@ from .microduck_sitstand_env_cfg import (
     make_microduck_sitstand_env_cfg,
     MicroduckSitStandRlCfg,
 )
+from .microduck_generalist_g0_env_cfg import (
+    make_microduck_generalist_g0_env_cfg,
+    GeneralistG0RlCfg,
+)
 from .microduck_velocity_rollers_env_cfg import (
     make_microduck_velocity_rollers_env_cfg,
     MicroduckRollersRlCfg,
@@ -142,6 +146,15 @@ register_mjlab_task(
     env_cfg=make_microduck_sitstand_env_cfg(rough=True),
     play_env_cfg=make_microduck_sitstand_env_cfg(play=True, rough=True),
     rl_cfg=MicroduckSitStandRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+# Training-only conditioned G0 policy; production specialist ABI is unchanged.
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0RlCfg,
     runner_cls=MicroduckOnPolicyRunner,
 )
 
