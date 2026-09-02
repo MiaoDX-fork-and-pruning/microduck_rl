@@ -1,0 +1,43 @@
+{
+  "policy_id": "swizzle",
+  "task": "Mjlab-Velocity-Swizzle-MicroDuck",
+  "profile": "rollers",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene_rollers.xml",
+  "checkpoint_sha256": "fab6b9d061573ad4da2e8ade171cbe338e94f3ec1297c2c726a7fcf0017bf700",
+  "onnx_sha256": "1817a76d3d6037c3418cf326699e380462c0d1aca1fb5a05b89980bc7ab902c6",
+  "parity_report_sha256": "59fdc5977cb5c327c1d69084913435a7738141cc619fa5b0d555c3173765f91c",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.9135570473549004,
+        0.0716568539404514,
+        -0.018350688478570354
+      ],
+      "max_tilt_rad": 0.10708008469655604,
+      "final_tilt_rad": 0.04750762933108141,
+      "final_height_m": 0.12014931152142966,
+      "max_abs_raw_action": 0.7198492288589478,
+      "max_abs_applied_action": 0.7198492288589478,
+      "contact_geoms": [
+        "floor",
+        "geom_32",
+        "geom_36",
+        "geom_85",
+        "geom_89"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/swizzle/canonical.npz"
+    }
+  ]
+}

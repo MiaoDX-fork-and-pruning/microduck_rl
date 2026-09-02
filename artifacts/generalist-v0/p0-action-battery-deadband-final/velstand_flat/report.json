@@ -1,0 +1,42 @@
+{
+  "policy_id": "velstand_flat",
+  "task": "Mjlab-VelStand-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5",
+  "onnx_sha256": "1b7b6330121e62cf1c90c7303be48ceea62a5cb90d9c5608454abc2d16e7abde",
+  "parity_report_sha256": "2022cfcaeaeb30401f2acd3301b0dfa20f1d51e79ada5de11a987053ccd66340",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.002721235003440347,
+        1.497165265025134e-05,
+        -0.008432253295739947
+      ],
+      "max_tilt_rad": 0.011648301954006833,
+      "final_tilt_rad": 0.0003985087414240005,
+      "final_height_m": 0.11656774670426005,
+      "max_abs_raw_action": 0.16951841115951538,
+      "max_abs_applied_action": 0.16951841115951538,
+      "contact_geoms": [
+        "floor",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-deadband-final/velstand_flat/canonical.npz"
+    }
+  ]
+}
