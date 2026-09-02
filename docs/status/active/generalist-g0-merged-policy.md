@@ -8,7 +8,8 @@ Control plane: root Codex session
 
 Latest user intent: implement the full plan through `intuitive-flow`.
 
-Current slice: P2 PPO scaffold executes the required five-iteration smoke;
+Current slice: P2 baseline/evaluation scaffold executes the required
+five-iteration smoke;
 behavior state, legal interval transitions, and compatible masked reward terms
 are wired in the training-only task.
 
@@ -32,14 +33,17 @@ deterministic balancing and strict replay validation. Boundary extraction uses
 the authoritative Track A report, emits phase/bucket metadata, covers exactly
 the four legal edges, and rejects direct velocity/sit transitions.
 
-P2 scaffold: `Mjlab-GeneralistG0-Flat-MicroDuck` is registered with a distinct
-runner, Gaussian actor distribution, reset/interval behavior state, legal-edge
-sampling, and masked compatible reward terms. Class-based manager terms remain
-unwrapped to preserve mjlab invocation semantics.
+P2 scaffold: the base, direct-PPO, and hybrid-PPO tasks are registered with
+distinct experiment identities and matched budgets. The runner has a Gaussian
+actor distribution, reset/interval behavior state, legal-edge sampling, and
+masked compatible reward terms. Class-based manager terms remain unwrapped to
+preserve mjlab invocation semantics. The canonical evaluator covers all three
+behaviors and four legal edges, records unsupported edges, and supports
+PyTorch or 71D ONNX inputs.
 
-Next slice: replace placeholder transition state with command/dwell-aware
-router semantics, add direct-vs-hybrid training entrypoints, and evaluate the
-three-behavior rollout battery.
+Next slice: run comparable BC/direct/hybrid training artifacts and execute the
+canonical three-behavior plus legal-transition rollout battery, including ONNX
+parity and P4 metrics.
 
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
@@ -62,6 +66,9 @@ tests across the current focused files). `WANDB_MODE=disabled uv run train
 Mjlab-GeneralistG0-Flat-MicroDuck --env.scene.num-envs 64
 --agent.max_iterations 5` completed all five iterations with finite rewards,
 observations, actions, and no NaN termination.
+
+The updated router/config/evaluator focused tests pass 17 tests, and the smoke
+completed after the dwell-aware routing and Gaussian distribution fixes.
 
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
