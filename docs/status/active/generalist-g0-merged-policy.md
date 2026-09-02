@@ -125,6 +125,14 @@ export tests pass for dense and multi-head actors. Full-seed behavior,
 transition, inference-budget, and specialist-regression gates are still
 missing, so no candidate is accepted.
 
+P3 checkpoint adapter: the canonical evaluator accepts `rsl_rl` checkpoints
+and loads actor-only state through the registered task runner. A direct PPO
+checkpoint was constructed successfully, but rollout against the standalone
+MuJoCo helper exposed an observation-shape mismatch between the runner's
+grouped environment observation and the raw 71D harness. This is a concrete
+integration blocker for checkpoint-level P3 evaluation; BC/ONNX evaluation
+continues to pass, and no acceptance claim is made for PPO checkpoints.
+
 P4 supporting gates: `scripts/benchmark_generalist_g0.py` measured the exported
 ONNX actor at p95 `0.020 ms` (15 ms budget after the 5 ms margin), passing the
 50 Hz inference-budget gate. `scripts/validate_generalist_fallback.py` passed
