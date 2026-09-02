@@ -4,6 +4,8 @@ from mjlab_microduck.tasks.microduck_generalist_g0_env_cfg import (
     G0_BEHAVIORS,
     G0_OBS_DIM,
     GeneralistG0RlCfg,
+    GeneralistG0DirectPpoRlCfg,
+    GeneralistG0HybridPpoRlCfg,
     behavior_mask,
     make_microduck_generalist_g0_env_cfg,
     G0_TRANSITION_CONTRACTS,
@@ -36,6 +38,14 @@ def test_g0_runner_has_distinct_identity():
     assert GeneralistG0RlCfg.experiment_name == "generalist_g0"
     assert GeneralistG0RlCfg.actor.distribution_cfg["class_name"] == "GaussianDistribution"
     assert GeneralistG0RlCfg.algorithm is not None
+
+
+def test_g0_baseline_runner_identities_are_comparable_but_distinct():
+    assert GeneralistG0DirectPpoRlCfg.experiment_name == "generalist_g0_direct_ppo"
+    assert GeneralistG0HybridPpoRlCfg.experiment_name == "generalist_g0_hybrid_ppo"
+    assert GeneralistG0DirectPpoRlCfg.run_name != GeneralistG0HybridPpoRlCfg.run_name
+    assert GeneralistG0DirectPpoRlCfg.num_steps_per_env == GeneralistG0HybridPpoRlCfg.num_steps_per_env
+    assert GeneralistG0DirectPpoRlCfg.max_iterations == GeneralistG0HybridPpoRlCfg.max_iterations
 
 
 def test_g0_transition_contract_is_exactly_four_track_a_edges():
