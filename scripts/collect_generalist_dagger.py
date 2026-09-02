@@ -8,6 +8,56 @@ import sys
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from infer_policy import DEFAULT_POSE, PolicyInference
 from mjlab_microduck.generalist_schema import ACTION_DIM, OBS_DIM, make_conditioned_observation, validate_batch
+from mjlab_microduck.generalist_transition_graph import validate_transition
+
+_G0_POLICY_STATE = {"velstand_flat": "VELSTAND", "velocity_flat": "VELOCITY", "sitstand_flat": "SITSTAND"}
+
+
+def extract_boundary_windows(report: dict, frames: list[dict], *, before: int = 25, after: int = 25) -> list[dict]:
+    """Extract deterministic, labeled windows around the four proven Track A edges.
+
+    ``frames`` are replay records containing at least ``step`` and ``policy_id``.
+    The returned records retain the original fields and add edge/phase/bucket
+    metadata; no samples are fabricated and direct velocity/sit-stand edges are
+    rejected by the frozen transition graph.
+    """
+    if before < 0 or after < 0:
+        raise ValueError("window sizes must be non-negative")
+    if report.get("track") != "A" or report.get("reset_count") != 0:
+        raise ValueError("boundary source must be a no-reset Track A report")
+    ordered = sorted(frames, key=lambda row: int(row["step"]))
+    by_step = {int(row["step"]): row for row in ordered}
+    result: list[dict] = []
+    seen_edges: set[tuple[str, str]] = set()
+    transitions = report.get("transitions", [])
+    for transition in transitions:
+        start = int(transition.get("start_step", transition.get("step", -1)))
+        policy = transition.get("policy_id")
+        if policy not in _G0_POLICY_STATE:
+            continue
+        prior = max((t for t in transitions if int(t.get("start_step", t.get("step", -1))) < start and t.get("policy_id") in _G0_POLICY_STATE), key=lambda t: int(t.get("start_step", t.get("step", -1))), default=None)
+        if prior is None:
+            continue
+        source, destination = _G0_POLICY_STATE[prior["policy_id"]], _G0_POLICY_STATE[policy]
+        if source == destination:
+            continue
+        validate_transition(source, destination)
+        seen_edges.add((source, destination))
+        for step in range(start - before, start + after):
+            frame = by_step.get(step)
+            if frame is None:
+                raise ValueError(f"missing frame at boundary step {step}")
+            item = dict(frame)
+            item.update({"transition_id": f"{source}->{destination}@{start}",
+                         "transition_source": source, "transition_destination": destination,
+                         "transition_phase": "pre" if step < start else "post",
+                         "transition_bucket": f"{source}->{destination}"})
+            result.append(item)
+    expected = {("VELSTAND", "VELOCITY"), ("VELOCITY", "VELSTAND"),
+                ("VELSTAND", "SITSTAND"), ("SITSTAND", "VELSTAND")}
+    if seen_edges != expected:
+        raise ValueError(f"Track A boundary coverage mismatch: {sorted(seen_edges)}")
+    return result
 
 
 def validate_replay_batch(data: dict[str, np.ndarray]) -> None:

@@ -38,3 +38,35 @@ def test_dataset_rejects_non_g0_behavior_labels():
     x[0, 51] = 1.0
     with pytest.raises(ValueError, match="out-of-scope"):
         mod.validate_dataset(x, y)
+
+
+def _track_a_report():
+    import json
+    return json.loads((ROOT / "artifacts/generalist-v0/specialist-switch-track-a-final.json").read_text())
+
+
+def test_extract_boundary_windows_covers_four_legal_edges():
+    mod = _load("dagger_windows", "scripts/collect_generalist_dagger.py")
+    report = _track_a_report()
+    frames = [{"step": step, "policy_id": "velstand_flat"} for step in range(4500)]
+    for transition in report["transitions"]:
+        for step in range(transition["start_step"], transition["end_step"] + 1):
+            frames[step]["policy_id"] = transition["policy_id"]
+    windows = mod.extract_boundary_windows(report, frames, before=2, after=2)
+    assert {w["transition_bucket"] for w in windows} == {
+        "VELSTAND->VELOCITY", "VELOCITY->VELSTAND",
+        "VELSTAND->SITSTAND", "SITSTAND->VELSTAND",
+    }
+    assert {w["transition_phase"] for w in windows} == {"pre", "post"}
+
+
+def test_extract_boundary_windows_rejects_direct_velocity_sitstand_edge():
+    mod = _load("dagger_bad_edge", "scripts/collect_generalist_dagger.py")
+    report = _track_a_report()
+    report["transitions"] = [
+        {"start_step": 0, "end_step": 9, "policy_id": "velocity_flat"},
+        {"start_step": 10, "end_step": 19, "policy_id": "sitstand_flat"},
+    ]
+    frames = [{"step": i, "policy_id": "velocity_flat" if i < 10 else "sitstand_flat"} for i in range(20)]
+    with pytest.raises(ValueError, match="unsupported G0 transition"):
+        mod.extract_boundary_windows(report, frames, before=0, after=1)
