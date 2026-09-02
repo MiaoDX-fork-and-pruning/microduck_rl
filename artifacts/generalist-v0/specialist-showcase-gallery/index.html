@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Microduck Specialist Switching Showcase</title>
+<style>
+:root { color-scheme: dark; font: 16px/1.4 system-ui,sans-serif; }
+body { margin:0; padding:24px; background:#111827; color:#e5e7eb; }
+header { display:flex; gap:16px; align-items:center; flex-wrap:wrap; margin-bottom:20px; }
+h1 { margin:0; font-size:1.35rem; }
+select,input { background:#1f2937; color:inherit; border:1px solid #4b5563; padding:8px; border-radius:5px; }
+.grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(320px,1fr)); gap:18px; }
+.card { background:#1f2937; border:1px solid #374151; padding:12px; border-radius:6px; }
+.card h2 { margin:0 0 8px; font-size:1rem; }
+video { display:block; width:100%; aspect-ratio:4/3; background:#000; object-fit:contain; }
+.card p { color:#9ca3af; font-size:.8rem; overflow-wrap:anywhere; }
+.metrics { display:grid; grid-template-columns:max-content 1fr; gap:5px 10px; font-size:.78rem; }
+.metrics dt { color:#9ca3af; } .metrics dd { margin:0; min-width:0; overflow-wrap:anywhere; }
+code { font-size:.72rem; }
+</style></head><body>
+<header><h1>Microduck Specialist Switching Showcase</h1>
+<label>Task <select id="task"><option value="">All</option><option value="diagnostic_video">diagnostic_video</option><option value="specialist-showcase-track-a">specialist-showcase-track-a</option><option value="specialist-showcase-track-b">specialist-showcase-track-b</option></select></label>
+<label>Search <input id="search" placeholder="filename or task"></label>
+<span id="count"></span></header>
+<main class="grid"><article class="card" data-task="specialist-showcase-track-a"><h2>specialist-showcase-track-a</h2><video controls preload="metadata" src="videos/specialist-showcase-track-a/001_specialist-showcase-track-a.mp4"></video><p>specialist-showcase-track-a.mp4</p></article><article class="card" data-task="specialist-showcase-track-b"><h2>specialist-showcase-track-b</h2><video controls preload="metadata" src="videos/specialist-showcase-track-b/002_specialist-showcase-track-b.mp4"></video><p>specialist-showcase-track-b.mp4</p></article><article class="card" data-task="diagnostic_video"><h2>diagnostic_video</h2><video controls preload="metadata" src="videos/diagnostic_video/diagnostic_video.mp4"></video><p>diagnostic_video.mp4</p></article><article class="card" data-task="diagnostic_video"><h2>diagnostic_video</h2><video controls preload="metadata" src="videos/diagnostic_video/004_diagnostic_video.mp4"></video><p>diagnostic_video.mp4</p></article><article class="card" data-task="diagnostic_video"><h2>diagnostic_video</h2><video controls preload="metadata" src="videos/diagnostic_video/005_diagnostic_video.mp4"></video><p>diagnostic_video.mp4</p></article><article class="card" data-task="diagnostic_video"><h2>diagnostic_video</h2><video controls preload="metadata" src="videos/diagnostic_video/006_diagnostic_video.mp4"></video><p>diagnostic_video.mp4</p></article></main>
+<script>
+const cards=[...document.querySelectorAll('.card')], task=document.querySelector('#task'), search=document.querySelector('#search'), count=document.querySelector('#count');
+function filter() { const t=task.value, q=search.value.toLowerCase(); let n=0; cards.forEach(c=>{const ok=(!t||c.dataset.task===t)&&(!q||c.textContent.toLowerCase().includes(q)); c.hidden=!ok; if(ok)n++;}); count.textContent=`${n} / ${cards.length} videos`; }
+task.onchange=search.oninput=filter; filter();
+</script></body></html>
