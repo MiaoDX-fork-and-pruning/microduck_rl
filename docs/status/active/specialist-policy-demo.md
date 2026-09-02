@@ -134,3 +134,10 @@ hardware, Rough/Backlash variants, and left-kick expansion.
 
 Parked work: Generalist teacher ingestion is outside this plan and may consume
 the completed specialist manifest.
+
+Important composition boundary: the new physical switching battery now runs
+the canonical Track A and Track B specialist sequences in one MuJoCo episode
+with zero resets. It proves all requested policy transitions execute and remain
+finite, but both sequences currently fail the physical stability gate (Track A
+max tilt `3.140 rad`; Track B `2.870 rad`). The existing PT/ONNX scenario parity
+artifacts prove frame/action parity and are not physical switching acceptance.
