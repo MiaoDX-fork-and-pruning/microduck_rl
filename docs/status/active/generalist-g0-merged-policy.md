@@ -118,6 +118,13 @@ observations, actions, and no NaN termination.
 The updated router/config/evaluator focused tests pass 17 tests, and the smoke
 completed after the dwell-aware routing and Gaussian distribution fixes.
 
+ONNX proof: `scripts/export_generalist_g0.py` exported the bounded DAgger actor
+to `/tmp/g0-dagger.onnx` with a 71D input and 14D output. The 32-sample golden
+vector report passed with maximum absolute PyTorch/ONNX error `1.79e-7`;
+export tests pass for dense and multi-head actors. Full-seed behavior,
+transition, inference-budget, and specialist-regression gates are still
+missing, so no candidate is accepted.
+
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
 proof is P1 dataset shape, balance, replay-state, and determinism validation.)
