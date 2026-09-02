@@ -6,18 +6,18 @@ from torch import nn
 
 
 class G0MultiHeadActor(nn.Module):
-    """One conditioned actor with a shared trunk and stand/locomotion heads."""
+    """One conditioned actor with a shared trunk and three G0 behavior heads."""
 
     def __init__(self, bounded: bool = True):
         super().__init__()
         self.trunk = nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh())
-        self.heads = nn.ModuleList((nn.Linear(256, 14), nn.Linear(256, 14)))
+        self.heads = nn.ModuleList(nn.Linear(256, 14) for _ in range(3))
         self.bounded = bounded
 
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         hidden = self.trunk(observation)
         outputs = torch.stack([head(hidden) for head in self.heads], dim=1)
-        weights = observation[:, 48:50].unsqueeze(-1)
+        weights = observation[:, 48:51].unsqueeze(-1)
         action = (outputs * weights).sum(dim=1)
         return torch.tanh(action) if self.bounded else action
 

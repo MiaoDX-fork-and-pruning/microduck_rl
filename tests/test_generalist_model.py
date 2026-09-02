@@ -10,9 +10,12 @@ def test_multihead_routes_by_behavior_condition():
             parameter.zero_()
         model.heads[0].bias.fill_(1.0)
         model.heads[1].bias.fill_(2.0)
-    x = torch.zeros((2, 71))
+        model.heads[2].bias.fill_(3.0)
+    x = torch.zeros((3, 71))
     x[0, 48] = 1.0
     x[1, 49] = 1.0
+    x[2, 50] = 1.0
     output = model(x)
     assert torch.all(output[0] == 1.0)
     assert torch.all(output[1] == 2.0)
+    assert torch.all(output[2] == 3.0)
