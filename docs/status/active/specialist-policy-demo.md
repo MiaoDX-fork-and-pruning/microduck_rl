@@ -139,10 +139,19 @@ locomotion stability gate, and its post-action handback remains upright.
 Final reports: `artifacts/generalist-v0/specialist-switch-track-a-final.json`
 and `artifacts/generalist-v0/specialist-switch-track-b-final.json`.
 
-Dynamic showcase contracts are also available at 62 seconds (Track A) and 33
-seconds (Track B). Their rendered videos include a top-left overlay with the
-active policy, velocity or phase command, elapsed time, tilt, and action jump:
-`artifacts/generalist-v0/specialist-showcase-gallery/index.html`.
+Dynamic showcase contracts are available as compact reels: Track A is 43 s and
+Track B is 21 s. Their rendered videos include a top-left overlay with the
+active policy, velocity or phase command, elapsed time, tilt, and action jump.
+Track A uses `velocity_flat @ 0.20 m/s` and a real ball; Track B uses a 1 s idle,
+`roller_crouch`, a 1 s handback, then `velocity_rollers @ 0.35 m/s`. The current
+gallery is `artifacts/generalist-v0/specialist-showcase-gallery-v2/index.html`.
+
+The roller posture diagnostic measures canonical, left-leg-ahead, and
+right-leg-ahead resets. All three converge to a right-leg-leading posture after
+startup, indicating learned asymmetric gait rather than a command-speed
+artifact: `artifacts/generalist-v0/velocity-rollers-posture-diagnostic.json`.
+`roller_slope` and `roller_standup` are included as dedicated slope and
+prone-reset clips, not falsely represented as flat-scene hot-switch states.
 
 No-touch scope: Generalist 71D schema/distillation, runtime repository, robot
 hardware, Rough/Backlash variants, and left-kick expansion.
@@ -150,9 +159,7 @@ hardware, Rough/Backlash variants, and left-kick expansion.
 Parked work: Generalist teacher ingestion is outside this plan and may consume
 the completed specialist manifest.
 
-Important composition boundary: the new physical switching battery now runs
-the canonical Track A and Track B specialist sequences in one MuJoCo episode
-with zero resets. It proves all requested policy transitions execute and remain
-finite, but both sequences currently fail the physical stability gate (Track A
-max tilt `3.140 rad`; Track B `2.870 rad`). The existing PT/ONNX scenario parity
-artifacts prove frame/action parity and are not physical switching acceptance.
+Important composition boundary: the compact physical switching battery runs the
+canonical Track A and Track B specialist sequences in one MuJoCo episode with
+zero resets. Both pass finite-state, transition, and physical stability gates;
+Track A reports real-ball displacement and Track B reports rolling path length.

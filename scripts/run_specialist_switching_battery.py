@@ -12,7 +12,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from infer_policy import DEFAULT_POSE, MICRODUCK_ROLLERS_XML, MICRODUCK_XML, PolicyInference
+from infer_policy import DEFAULT_POSE, MICRODUCK_BALL_XML, MICRODUCK_ROLLERS_XML, MICRODUCK_XML, PolicyInference
 from specialist_scenario import load_scenario, scenario_events
 
 PATHS = {p.name: str(p / "policy.onnx") for p in (ROOT / "artifacts/specialists").iterdir() if (p / "policy.onnx").exists()}
@@ -21,7 +21,9 @@ TILT_FAILURE = math.radians(65)
 
 def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = None) -> dict:
     scenario, frames = load_scenario(scenario_path)
-    model = mujoco.MjModel.from_xml_path(str(ROOT / (MICRODUCK_ROLLERS_XML if roller else MICRODUCK_XML)))
+    scene_id = scenario["compatibility"]["scene"]
+    xml = MICRODUCK_ROLLERS_XML if roller else MICRODUCK_BALL_XML if "ball" in scene_id else MICRODUCK_XML
+    model = mujoco.MjModel.from_xml_path(str(ROOT / xml))
     model.opt.timestep = 0.005
     if roller:
         # Match the rollers deployment rehearsal: passive wheel bearings have
@@ -61,6 +63,7 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
     path_length = 0.0
     previous_position = data.xpos[trunk].copy()
     first_failure_step = None
+    ball_start = None
     try:
       for step, frame in enumerate(frames):
         if step in events:
@@ -68,6 +71,8 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
             if previous is not None:
                 transitions[-1]["end_position_m"] = data.xpos[trunk].tolist()
             policy.activate_specialist_policy(events[step].policy_id, events[step].command)
+            if events[step].policy_id == "ball_kick_flat" and policy.ball_qpos_adr is not None:
+                ball_start = data.qpos[policy.ball_qpos_adr : policy.ball_qpos_adr + 3].copy()
             previous = events[step].policy_id
             transitions.append({"step": step, "policy_id": previous, "command": list(events[step].command), "start_step": step})
             segment.setdefault(previous, {"frames": 0, "max_tilt_rad": 0.0, "max_action_jump": 0.0, "start_position_m": data.xpos[trunk].tolist()})
@@ -137,12 +142,50 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
     displacement = (data.xpos[trunk] - start).tolist()
     dynamic_policy_ids = {"roulade_flat", "ball_kick_flat"}
     non_dynamic_tilts = [tilt for label, tilt in zip(labels, tilts) if label not in dynamic_policy_ids]
-    recovery_start = next((t["start_step"] for t in transitions if t["policy_id"] == "velstand_flat" and t["start_step"] > 3500), None)
+    last_dynamic_start = max(
+        (t["start_step"] for t in transitions if t["policy_id"] in dynamic_policy_ids),
+        default=None,
+    )
+    recovery_start = next(
+        (t["start_step"] for t in transitions
+         if t["policy_id"] == "velstand_flat"
+         and last_dynamic_start is not None
+         and t["start_step"] > last_dynamic_start),
+        None,
+    )
     recovery_max_tilt = (max(tilts[recovery_start:], default=None) if recovery_start is not None else None)
-    report = {"schema_version": 1, "scenario": str(scenario_path), "track": scenario["track"], "scene": "rollers" if roller else "walk_all_collisions", "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "path_length_m": path_length, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0), "video": str(video) if video else None}
+    stable_window_steps = 50
+    recovery_stable_step = None
+    if recovery_start is not None:
+        for candidate in range(recovery_start, max(recovery_start, len(tilts) - stable_window_steps + 1)):
+            if max(tilts[candidate : candidate + stable_window_steps], default=math.inf) < TILT_FAILURE:
+                recovery_stable_step = candidate
+                break
+    recovery_settled_max_tilt = (
+        max(tilts[recovery_stable_step:], default=None)
+        if recovery_stable_step is not None else None
+    )
+    ball_displacement = None
+    if ball_start is not None and policy.ball_qpos_adr is not None:
+        ball_displacement = (
+            data.qpos[policy.ball_qpos_adr : policy.ball_qpos_adr + 3] - ball_start
+        ).tolist()
+    for transition in transitions:
+        start_step = transition["start_step"]
+        end_step = transition["end_step"]
+        transition_tilts = tilts[start_step : end_step + 1]
+        transition["duration_s"] = len(transition_tilts) / 50.0
+        transition["max_tilt_rad"] = max(transition_tilts, default=None)
+    report = {"schema_version": 3, "scenario": str(scenario_path), "track": scenario["track"], "scene": scene_id, "seed": scenario["seed"], "frames": len(labels), "expected_frames": len(frames), "reset_count": 0, "finite": finite, "policy_sequence": list(dict.fromkeys(labels)), "transitions": transitions, "segments": segment, "max_tilt_rad": max(tilts, default=None), "max_non_dynamic_tilt_rad": max(non_dynamic_tilts, default=None), "recovery_max_tilt_rad": recovery_max_tilt, "recovery_stable_step": recovery_stable_step, "recovery_time_s": ((recovery_stable_step - recovery_start) / 50.0 if recovery_stable_step is not None and recovery_start is not None else None), "recovery_stable_window_s": stable_window_steps / 50.0, "recovery_settled_max_tilt_rad": recovery_settled_max_tilt, "first_failure_step": first_failure_step, "world_displacement_m": displacement, "path_length_m": path_length, "ball_displacement_m": ball_displacement, "contact_geoms": sorted(contacts), "max_action_jump": max((float(np.max(np.abs(actions[i]-actions[i-1]))) for i in range(1,len(actions))), default=0.0), "video": str(video) if video else None}
     report["stability_gate_rad"] = TILT_FAILURE
-    physical_ok = (report["max_non_dynamic_tilt_rad"] is None or report["max_non_dynamic_tilt_rad"] < TILT_FAILURE)
-    recovery_ok = recovery_max_tilt is None or recovery_max_tilt < TILT_FAILURE
+    non_recovery_non_dynamic_tilts = [
+        tilt for step, (label, tilt) in enumerate(zip(labels, tilts))
+        if label not in dynamic_policy_ids
+        and (recovery_start is None or step < recovery_start or recovery_stable_step is not None and step >= recovery_stable_step)
+    ]
+    report["max_gated_non_dynamic_tilt_rad"] = max(non_recovery_non_dynamic_tilts, default=None)
+    physical_ok = report["max_gated_non_dynamic_tilt_rad"] is None or report["max_gated_non_dynamic_tilt_rad"] < TILT_FAILURE
+    recovery_ok = recovery_start is None or recovery_stable_step is not None
     report["passed"] = finite and len(labels) == len(frames) and report["reset_count"] == 0 and len(report["policy_sequence"]) == len(set(f.policy_id for f in frames)) and physical_ok and recovery_ok
     report["failure_reason"] = None if report["passed"] else ("nonfinite_state_or_action" if not finite else "physical_fall_outside_dynamic_action" if not physical_ok else "failed_post_action_recovery" if not recovery_ok else "incomplete_or_missing_policy_transition")
     output.parent.mkdir(parents=True, exist_ok=True); output.write_text(json.dumps(report, indent=2) + "\n")

@@ -2,19 +2,21 @@
   "version": 1,
   "track": "A-showcase",
   "seed": 20260902,
-  "duration_s": 62,
+  "duration_s": 43,
   "command_rate_hz": 50,
-  "compatibility": {"scene": "microduck_walk_allcollisions_flat", "session": "track_a_showcase"},
+  "compatibility": {"scene": "microduck_ball_allcollisions_flat", "session": "track_a_showcase"},
   "transitions": [
-    {"at_s": 0, "from": "velstand_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 8, "non_interruptible_s": 0, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 8, "from": "velstand_flat", "to": "velocity_flat", "command": [0.15, 0, 0], "min_dwell_s": 14, "non_interruptible_s": 2, "expected_outcome": {"metric": "forward_displacement_m", "operator": "gte", "threshold": 0.5}},
-    {"at_s": 22, "from": "velocity_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 25, "from": "velstand_flat", "to": "sitstand_flat", "command": [1, 0, 0], "min_dwell_s": 6, "non_interruptible_s": 3, "expected_outcome": {"metric": "trunk_height_m", "operator": "lte", "threshold": 0.13}},
-    {"at_s": 31, "from": "sitstand_flat", "to": "sitstand_flat", "command": [0, 0, 0], "min_dwell_s": 6, "non_interruptible_s": 3, "expected_outcome": {"metric": "trunk_height_m", "operator": "gte", "threshold": 0.11}},
-    {"at_s": 37, "from": "sitstand_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 40, "from": "velstand_flat", "to": "ground_pick_flat", "command": [0, 0, 0], "min_dwell_s": 6, "non_interruptible_s": 4, "expected_outcome": {"metric": "ground_pick_completed", "operator": "eq", "threshold": 1}},
-    {"at_s": 46, "from": "ground_pick_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 49, "from": "velstand_flat", "to": "roulade_flat", "command": [0, 0, 0], "min_dwell_s": 4, "non_interruptible_s": 4, "expected_outcome": {"metric": "forward_rotation_rad", "operator": "gte", "threshold": 5.5}},
-    {"at_s": 53, "from": "roulade_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 9, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}}
+    {"at_s": 0, "from": "velstand_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 0, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 3, "from": "velstand_flat", "to": "velocity_flat", "command": [0.2, 0, 0], "min_dwell_s": 6, "non_interruptible_s": 2, "expected_outcome": {"metric": "forward_displacement_m", "operator": "gte", "threshold": 0.3}},
+    {"at_s": 9, "from": "velocity_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 2, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 11, "from": "velstand_flat", "to": "sitstand_flat", "command": [1, 0, 0], "min_dwell_s": 5, "non_interruptible_s": 3, "expected_outcome": {"metric": "trunk_height_m", "operator": "lte", "threshold": 0.13}},
+    {"at_s": 16, "from": "sitstand_flat", "to": "sitstand_flat", "command": [0, 0, 0], "min_dwell_s": 5, "non_interruptible_s": 3, "expected_outcome": {"metric": "trunk_height_m", "operator": "gte", "threshold": 0.11}},
+    {"at_s": 21, "from": "sitstand_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 2, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 23, "from": "velstand_flat", "to": "ground_pick_flat", "command": [0, 0, 0], "min_dwell_s": 4, "non_interruptible_s": 4, "expected_outcome": {"metric": "ground_pick_completed", "operator": "eq", "threshold": 1}},
+    {"at_s": 27, "from": "ground_pick_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 2, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 29, "from": "velstand_flat", "to": "ball_kick_flat", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 3, "expected_outcome": {"metric": "ball_forward_displacement_m", "operator": "gte", "threshold": 0.1}},
+    {"at_s": 32, "from": "ball_kick_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 2, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 34, "from": "velstand_flat", "to": "roulade_flat", "command": [0, 0, 0], "min_dwell_s": 8, "non_interruptible_s": 8, "expected_outcome": {"metric": "forward_rotation_rad", "operator": "gte", "threshold": 5.5}},
+    {"at_s": 42, "from": "roulade_flat", "to": "velstand_flat", "command": [0, 0, 0], "min_dwell_s": 1, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}}
   ]
 }

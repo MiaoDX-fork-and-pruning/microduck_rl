@@ -2,13 +2,13 @@
   "version": 1,
   "track": "B-showcase",
   "seed": 20260902,
-  "duration_s": 25,
+  "duration_s": 21,
   "command_rate_hz": 50,
   "compatibility": {"scene": "microduck_walk_rollers_flat", "session": "track_b_showcase"},
   "transitions": [
-    {"at_s": 0, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 0, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 3, "from": "velocity_rollers", "to": "roller_crouch", "command": [0, 0, 0], "min_dwell_s": 5, "non_interruptible_s": 5, "expected_outcome": {"metric": "crouch_completed", "operator": "eq", "threshold": 1}},
-    {"at_s": 8, "from": "roller_crouch", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 3, "non_interruptible_s": 2, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
-    {"at_s": 11, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0.35, 0, 0], "min_dwell_s": 14, "non_interruptible_s": 2, "expected_outcome": {"metric": "forward_displacement_m", "operator": "gte", "threshold": 2.0}}
+    {"at_s": 0, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 1, "non_interruptible_s": 0, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 1, "from": "velocity_rollers", "to": "roller_crouch", "command": [0, 0, 0], "min_dwell_s": 5, "non_interruptible_s": 5, "expected_outcome": {"metric": "crouch_completed", "operator": "eq", "threshold": 1}},
+    {"at_s": 6, "from": "roller_crouch", "to": "velocity_rollers", "command": [0, 0, 0], "min_dwell_s": 1, "non_interruptible_s": 1, "expected_outcome": {"metric": "trunk_upright", "operator": "gte", "threshold": 0.8}},
+    {"at_s": 7, "from": "velocity_rollers", "to": "velocity_rollers", "command": [0.35, 0, 0], "min_dwell_s": 14, "non_interruptible_s": 2, "expected_outcome": {"metric": "forward_displacement_m", "operator": "gte", "threshold": 2.0}}
   ]
 }
