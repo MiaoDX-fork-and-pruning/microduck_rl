@@ -140,6 +140,12 @@ reports, returns `DIAGNOSTIC_FAIL` with seven missing-success reasons. This
 prevents a numerically valid but behaviorally unmeasured model from being
 accepted.
 
+Evaluator gate integration: behavior and edge reports now emit explicit
+`success`/`passed` fields from finite, action-range, tilt, and reset criteria.
+The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four
+legal transition cases fail their success gates, while stand/locomotion remain
+finite. This is the authoritative P4 decision for the current DAgger actor.
+
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
 proof is P1 dataset shape, balance, replay-state, and determinism validation.)
