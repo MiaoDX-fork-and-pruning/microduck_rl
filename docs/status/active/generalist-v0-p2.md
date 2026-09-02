@@ -18,6 +18,9 @@ Evidence:
 - A 100-epoch baseline reached validation MSE `0.00017076` (stand
   `0.00000327`, locomotion `0.00018422`). Outputs were finite with maximum
   absolute action `0.6105` and no values outside `[-1, 1]`.
+- Independent evaluator `scripts/evaluate_generalist_bc.py` reproduced finite
+  outputs and reported MSE `0.00021248` (stand `0.00005215`, locomotion
+  `0.00022584`).
 
 Remaining P2 work:
 - Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
