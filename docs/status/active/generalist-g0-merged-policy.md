@@ -133,6 +133,13 @@ against `docs/plans/generalist-g0-teacher-manifest.json`, confirming the three
 available as fallback. The older 13-policy manifest is intentionally rejected
 by this narrower G0 validator.
 
+P4 acceptance validator: `scripts/validate_generalist_g0_gate.py` now fails
+closed when behavior or transition success metrics are absent. Running it on
+the current finite canonical diagnostic, passing ONNX parity/budget/fallback
+reports, returns `DIAGNOSTIC_FAIL` with seven missing-success reasons. This
+prevents a numerically valid but behaviorally unmeasured model from being
+accepted.
+
 Next proof: fixed-seed teacher and no-reset Track A reproduction; no P1 data
 collection before that gate. (The reproduction gate is now satisfied; the next
 proof is P1 dataset shape, balance, replay-state, and determinism validation.)
