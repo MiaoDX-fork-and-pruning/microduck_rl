@@ -46,7 +46,7 @@ def sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def official_frame(data: mujoco.MjData, policy: PolicyInference, twist: list[float], *, init: bool = False, shutdown: bool = False) -> dict[str, Any]:
+def official_frame(data: mujoco.MjData, policy: PolicyInference, twist: list[float], *, init: bool = False, shutdown: bool = False, gravity_override: list[float] | None = None) -> dict[str, Any]:
     positions = np.zeros(15, dtype=np.float64)
     velocities = np.zeros(15, dtype=np.float64)
     positions[:MOUTH_INDEX] = data.qpos[policy.joint_qpos_indices[:MOUTH_INDEX]]
@@ -61,7 +61,7 @@ def official_frame(data: mujoco.MjData, policy: PolicyInference, twist: list[flo
         "positions": positions.tolist(),
         "velocities": velocities.tolist(),
         "currents_ma": [0.0] * 15,
-        "gravity": gravity.tolist(),
+        "gravity": (np.asarray(gravity_override, dtype=float) if gravity_override is not None else gravity).tolist(),
         "gyro": np.asarray(gyro, dtype=float).tolist(),
         "quat": quat.tolist(),
         "twist": twist,
@@ -138,6 +138,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         tilt_trace: list[float] = []
         official_fall_seen = False
         official_recovery_seen = False
+        official_limp_seen = False
+        official_recovery_gain_seen = False
         gains: list[int] = []
         targets: list[list[float]] = []
         max_tilt = 0.0
@@ -161,7 +163,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                         break
                     with data_lock:
                         moving = active_target_count < max(0, args.active_ticks - args.zero_tail_ticks)
-                        frame = official_frame(data, policy, list(twists[0] if moving else twists[1]), init=tick == 0)
+                        injected = args.inject_fall_after is not None and args.inject_fall_after <= tick < args.inject_fall_after + args.inject_fall_ticks
+                        frame = official_frame(data, policy, list(twists[0] if moving else twists[1]), init=tick == 0, gravity_override=[0.0, 0.0, 0.0] if injected else None)
                     process.stdin.write(json.dumps(frame) + "\n")
                     process.stdin.flush()
                     time.sleep(0.02)
@@ -188,7 +191,10 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                     requested_commands.append(list(movement.get("requested", [0.0, 0.0, 0.0])))
                     applied_commands.append(list(movement.get("applied", [0.0, 0.0, 0.0])))
                     safety = state.get("safety", {})
+                    was_fallen = official_fall_seen
                     official_fall_seen = official_fall_seen or bool(safety.get("fallen", False))
+                    official_limp_seen = official_limp_seen or bool(safety.get("limp", False))
+                    official_recovery_gain_seen = official_recovery_gain_seen or (was_fallen and not bool(safety.get("limp", False)) and int(safety.get("gain", 0)) >= 160)
                     official_recovery_seen = official_recovery_seen or (
                         official_fall_seen and not bool(safety.get("fallen", False))
                     )
@@ -265,6 +271,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             "recovery_seen": physical_recovery_seen and official_recovery_seen,
             "physical_recovery_seen": physical_recovery_seen,
             "official_recovery_seen": official_recovery_seen,
+            "official_limp_seen": official_limp_seen,
+            "official_recovery_gain_seen": official_recovery_gain_seen,
             "reset_count": 0,
             "passed": passed,
             "failure_reason": failure_reason,
@@ -283,6 +291,8 @@ def main() -> int:
     parser.add_argument("--active-ticks", type=int)
     parser.add_argument("--walk-speed", type=float, default=0.20)
     parser.add_argument("--zero-tail-ticks", type=int, default=5)
+    parser.add_argument("--inject-fall-after", type=int, default=None)
+    parser.add_argument("--inject-fall-ticks", type=int, default=20)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
     if args.ticks <= 0:
@@ -292,6 +302,8 @@ def main() -> int:
         parser.error("--active-ticks must be positive")
     if args.zero_tail_ticks < 0 or args.zero_tail_ticks >= args.active_ticks:
         parser.error("--zero-tail-ticks must be non-negative and smaller than --active-ticks")
+    if args.inject_fall_after is not None and (args.inject_fall_after < 0 or args.inject_fall_ticks <= 0):
+        parser.error("fall injection requires a non-negative start and positive duration")
     reports = [run_profile(args, roller=False), run_profile(args, roller=True)]
     result = {"schema_version": 1, "mode": "smoke" if args.ticks <= 20 else "full", "profiles": reports, "passed": all(r["passed"] for r in reports)}
     args.output.parent.mkdir(parents=True, exist_ok=True)

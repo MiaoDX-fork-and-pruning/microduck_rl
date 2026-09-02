@@ -23,6 +23,32 @@ class MicroduckOnPolicyRunner(VelocityOnPolicyRunner):
             alg["symmetry_cfg"] = {k: v for k, v in sym.items() if k != "_env"}
 
 
+class GeneralistG0HybridRunner(MicroduckOnPolicyRunner):
+    """Inject a compatible BC actor while keeping PPO critic/optimizer fresh."""
+
+    def __init__(self, env, train_cfg: dict, log_dir=None, device="cpu", **kwargs):
+        super().__init__(env, train_cfg, log_dir, device, **kwargs)
+        import os
+        import torch
+        path = os.environ.get("MICRODUCK_G0_BC_ACTOR")
+        if not path:
+            raise RuntimeError("hybrid G0 training requires MICRODUCK_G0_BC_ACTOR")
+        payload = torch.load(path, map_location=device, weights_only=False)
+        state = payload.get("state_dict")
+        if not isinstance(state, dict):
+            raise ValueError("BC actor artifact is missing state_dict")
+        keys = ("0.weight", "0.bias", "2.weight", "2.bias", "4.weight", "4.bias", "6.weight", "6.bias")
+        if any(key not in state for key in keys):
+            raise ValueError("BC actor must be dense 71->512->256->128->14 for hybrid PPO")
+        target = self.alg.actor.state_dict()
+        for key in keys:
+            target_key = f"mlp.{key}"
+            if target_key not in target or target[target_key].shape != state[key].shape:
+                raise ValueError(f"BC actor shape mismatch for {key}")
+            target[target_key] = state[key].to(device)
+        self.alg.actor.load_state_dict(target)
+
+
 from .microduck_velocity_env_cfg import (
     make_microduck_velocity_env_cfg,
     MicroduckRlCfg,
@@ -46,6 +72,12 @@ from .microduck_ball_kick_env_cfg import (
 from .microduck_sitstand_env_cfg import (
     make_microduck_sitstand_env_cfg,
     MicroduckSitStandRlCfg,
+)
+from .microduck_generalist_g0_env_cfg import (
+    make_microduck_generalist_g0_env_cfg,
+    GeneralistG0RlCfg,
+    GeneralistG0DirectPpoRlCfg,
+    GeneralistG0HybridPpoRlCfg,
 )
 from .microduck_velocity_rollers_env_cfg import (
     make_microduck_velocity_rollers_env_cfg,
@@ -84,6 +116,22 @@ register_mjlab_task(
     play_env_cfg=make_microduck_velocity_env_cfg(play=True),
     rl_cfg=MicroduckRlCfg,
     runner_cls=MicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-DirectPPO-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0DirectPpoRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-HybridPPO-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0HybridPpoRlCfg,
+    runner_cls=GeneralistG0HybridRunner,
 )
 
 register_mjlab_task(
@@ -142,6 +190,15 @@ register_mjlab_task(
     env_cfg=make_microduck_sitstand_env_cfg(rough=True),
     play_env_cfg=make_microduck_sitstand_env_cfg(play=True, rough=True),
     rl_cfg=MicroduckSitStandRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+# Training-only conditioned G0 policy; production specialist ABI is unchanged.
+register_mjlab_task(
+    task_id="Mjlab-GeneralistG0-Flat-MicroDuck",
+    env_cfg=make_microduck_generalist_g0_env_cfg(),
+    play_env_cfg=make_microduck_generalist_g0_env_cfg(play=True),
+    rl_cfg=GeneralistG0RlCfg,
     runner_cls=MicroduckOnPolicyRunner,
 )
 

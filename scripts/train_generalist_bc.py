@@ -11,13 +11,15 @@ from pathlib import Path
 import numpy as np
 
 from mjlab_microduck.generalist_schema import SCHEMA, SCHEMA_VERSION, make_conditioned_observation, validate_batch
-from mjlab_microduck.generalist_model import G0MultiHeadActor
+from mjlab_microduck.generalist_model import ActionAdapterG0Actor, FiLMG0Actor, G0MultiHeadActor, GatedAdapterG0Actor, OneHotActionAdapterG0Actor
 
 
-def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
-    sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"))
+def collect(trace_root: Path, behaviors: tuple[str, ...] = ("stand", "locomotion", "sit_stand")) -> tuple[np.ndarray, np.ndarray, dict]:
+    sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"), ("sit_stand", "sitstand_flat"))
     xs, ys, manifest_sources = [], [], []
     for behavior, name in sources:
+        if behavior not in behaviors:
+            continue
         paths = sorted((trace_root / name).glob("*.npz"))
         if not paths:
             raise FileNotFoundError(f"no traces for {name} under {trace_root}")
@@ -32,28 +34,108 @@ def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
             ys.append(y)
             manifest_sources.append(str(path))
     x, y = np.concatenate(xs), np.concatenate(ys)
-    return x, y, {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "sources": manifest_sources}
+    validate_dataset(x, y)
+    return x, y, {"schema": SCHEMA, "schema_version": SCHEMA_VERSION, "sources": manifest_sources,
+                  "behavior_counts": behavior_counts(x)}
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False) -> dict:
+def behavior_counts(x: np.ndarray) -> dict[str, int]:
+    """Return counts for the three G0 labels, including explicit zeroes."""
+    labels = np.asarray(x)[:, 48:54].argmax(axis=1)
+    return {name: int(np.sum(labels == i)) for i, name in enumerate(("stand", "locomotion", "sit_stand"))}
+
+
+def dense_architecture(*, small: bool = False, capacity_2x: bool = False,
+                       capacity_4x: bool = False) -> list[int]:
+    """Return the explicit shared dense capacity arm and reject ambiguity."""
+    if sum((small, capacity_2x, capacity_4x)) > 1:
+        raise ValueError("choose exactly one dense architecture arm")
+    if capacity_4x:
+        return [71, 1088, 544, 272, 14]
+    if capacity_2x:
+        return [71, 768, 384, 192, 14]
+    if small:
+        return [71, 256, 256, 14]
+    return [71, 512, 256, 128, 14]
+
+
+def validate_dataset(x: np.ndarray, y: np.ndarray) -> None:
+    """Validate the immutable 71D/14D dataset and its active G0 labels."""
+    validate_batch(np.asarray(x), np.asarray(y))
+    labels = np.asarray(x)[:, 48:54]
+    if not np.allclose(labels.sum(axis=1), 1.0) or not np.isin(labels.argmax(axis=1), (0, 1, 2)).all():
+        raise ValueError("dataset contains invalid or out-of-scope G0 behavior labels")
+
+
+def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarray | None = None) -> np.ndarray:
+    """Deterministically oversample each behavior (and optional bucket) equally."""
+    labels = np.asarray(labels, dtype=np.int64)
+    if labels.ndim != 1 or len(labels) == 0:
+        raise ValueError("labels must be a non-empty vector")
+    keys = labels if bucket_labels is None else np.stack((labels, np.asarray(bucket_labels)), axis=1)
+    groups = [np.flatnonzero(np.all(keys == key, axis=1)) for key in np.unique(keys, axis=0)] if keys.ndim == 2 else [np.flatnonzero(keys == key) for key in np.unique(keys)]
+    target = max(len(group) for group in groups)
+    rng = np.random.default_rng(seed)
+    selected = np.concatenate([rng.choice(group, target, replace=len(group) < target) for group in groups])
+    return selected[rng.permutation(len(selected))]
+
+
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, init_model: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, gated_adapter: bool = False, film: bool = False, action_adapter: bool = False, onehot_action_adapter: bool = False, capacity_2x: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None, fit_all: bool = False) -> dict:
     import torch
     from torch import nn
 
     torch.manual_seed(seed)
     torch.use_deterministic_algorithms(True)
+    validate_dataset(x, y)
     labels = x[:, 48:54].argmax(axis=1)
+    # Split whole trajectories first. Balancing before this point leaks near-
+    # duplicate frames across train/validation and invalidates closed-loop
+    # generalization evidence.
+    if trajectory_ids is None:
+        trajectory_ids = np.arange(len(x), dtype=np.int64)
+    trajectory_ids = np.asarray(trajectory_ids)
+    if trajectory_ids.shape != (len(x),):
+        raise ValueError("trajectory_ids must align with samples")
+    unique = np.unique(trajectory_ids)
+    rng = np.random.default_rng(seed)
+    train_trajectories = set(rng.choice(unique, max(1, int(len(unique) * 0.9)), replace=False).tolist())
+    train_mask = np.isin(trajectory_ids, list(train_trajectories))
+    val_mask = ~train_mask
+    if fit_all:
+        train_mask[:] = True
+        val_mask[:] = False
+    if not fit_all and not val_mask.any() and len(unique) > 1:
+        moved = next(iter(train_trajectories - {min(train_trajectories)}))
+        train_mask[trajectory_ids == moved] = False
+        val_mask = ~train_mask
+    train_base = np.flatnonzero(train_mask)
+    val_idx = torch.from_numpy(np.flatnonzero(val_mask).astype(np.int64))
     if balance:
-        rng = np.random.default_rng(seed)
-        groups = [np.flatnonzero(labels == i) for i in (0, 1)]
-        target = max(len(g) for g in groups)
-        balanced = np.concatenate([rng.choice(g, target, replace=len(g) < target) for g in groups])
-        order = torch.from_numpy(balanced[rng.permutation(len(balanced))].astype(np.int64))
+        train_bucket = None if bucket_labels is None else np.asarray(bucket_labels)[train_base]
+        local = balanced_indices(labels[train_base], seed=seed, bucket_labels=train_bucket)
+        train_idx = torch.from_numpy(train_base[local].astype(np.int64))
     else:
-        order = torch.randperm(len(x))
-    split = max(1, int(len(x) * 0.9))
-    train_idx, val_idx = order[:split], order[split:]
-    model = G0MultiHeadActor(bounded=bounded) if multihead else (nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh(), nn.Linear(256, 14)) if small else nn.Sequential(nn.Linear(71, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 128), nn.Tanh(), nn.Linear(128, 14)))
-    if bounded and not multihead:
+        train_idx = torch.from_numpy(train_base[rng.permutation(len(train_base))].astype(np.int64))
+    if (multihead or gated_adapter or film or action_adapter or onehot_action_adapter) and (small or capacity_2x or capacity_4x):
+        raise ValueError("capacity flags apply only to the shared dense actor")
+    if sum((multihead, gated_adapter, film, action_adapter, onehot_action_adapter)) > 1:
+        raise ValueError("choose one conditioned actor variant")
+    architecture = dense_architecture(small=small, capacity_2x=capacity_2x, capacity_4x=capacity_4x)
+    if init_checkpoint and (capacity_2x or capacity_4x):
+        raise ValueError("capacity ablations do not support specialist checkpoint initialization")
+    if init_checkpoint and (gated_adapter or film or action_adapter or onehot_action_adapter):
+        raise ValueError("conditioned actor does not support specialist checkpoint initialization")
+    if init_checkpoint and init_model:
+        raise ValueError("choose one initialization source")
+    model = (
+        G0MultiHeadActor(bounded=bounded) if multihead else
+        GatedAdapterG0Actor(bounded=bounded) if gated_adapter else
+        FiLMG0Actor(bounded=bounded) if film else
+        ActionAdapterG0Actor(bounded=bounded) if action_adapter else
+        OneHotActionAdapterG0Actor(bounded=bounded) if onehot_action_adapter else
+        nn.Sequential(*[layer for index, (source, target) in enumerate(zip(architecture, architecture[1:])) for layer in ((nn.Linear(source, target),) if index == len(architecture) - 2 else (nn.Linear(source, target), nn.Tanh()))])
+    )
+    if bounded and not (multihead or gated_adapter or film or action_adapter or onehot_action_adapter):
         model.add_module("output_tanh", nn.Tanh())
     if init_checkpoint:
         source = torch.load(init_checkpoint, weights_only=False)["actor_state_dict"]
@@ -63,6 +145,15 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
             model[0].bias.copy_(source["mlp.0.bias"])
             for dst, key in ((2, "mlp.2"), (4, "mlp.4"), (6, "mlp.6")):
                 model[dst].weight.copy_(source[key + ".weight"]); model[dst].bias.copy_(source[key + ".bias"])
+    if init_model:
+        payload = torch.load(init_model, map_location="cpu", weights_only=False)
+        state = payload.get("state_dict")
+        if not isinstance(state, dict):
+            raise ValueError("generalist initialization model must contain a state_dict")
+        try:
+            model.load_state_dict(state, strict=True)
+        except RuntimeError as exc:
+            raise ValueError("generalist initialization model is incompatible with the selected actor") from exc
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4)
     tx, ty = torch.from_numpy(x), torch.from_numpy(y)
     for _ in range(epochs):
@@ -74,7 +165,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
         val = ((val_pred - ty[val_idx]) ** 2).mean().item() if len(val_idx) else float("nan")
         labels = x[:, 48:54].argmax(axis=1)
         per_behavior = {}
-        for index, name in enumerate(("stand", "locomotion")):
+        for index, name in enumerate(("stand", "locomotion", "sit_stand")):
             selected = val_idx.numpy()[labels[val_idx.numpy()] == index]
             if len(selected):
                 per_behavior[name] = float(((model(tx[selected]) - ty[selected]) ** 2).mean().item())
@@ -84,7 +175,10 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14] if small else [71, 512, 256, 128, 14], "model_kind": "g0_multihead" if multihead else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None}
+            "architecture": [71, 512, 14] if action_adapter or onehot_action_adapter else [71, 512, 256, 14] if film else [71, 256, 256, 14] if gated_adapter else architecture, "parameter_count": sum(parameter.numel() for parameter in model.parameters()), "model_kind": "g0_multihead" if multihead else "gated_adapter" if gated_adapter else "film" if film else "onehot_action_adapter" if onehot_action_adapter else "action_adapter" if action_adapter else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None, "init_model": str(init_model) if init_model else None,
+            "hidden_dim": 512 if film or action_adapter or onehot_action_adapter else 256 if gated_adapter else None, "output_hidden_dim": 256 if film else None, "adapter_dim": 32 if gated_adapter or action_adapter or onehot_action_adapter else None,
+            "behavior_count": 3 if gated_adapter or film or action_adapter or onehot_action_adapter else None,
+            "trajectory_split": True, "train_trajectories": len(train_trajectories), "validation_trajectories": len(unique) - len(train_trajectories)}
 
 
 def main() -> None:
@@ -96,12 +190,21 @@ def main() -> None:
     ap.add_argument("--extra-data", type=Path, default=None)
     ap.add_argument("--no-balance", action="store_true")
     ap.add_argument("--init-checkpoint", type=Path, default=None)
+    ap.add_argument("--init-model", type=Path, default=None, help="initialize from a compatible generalist model.pt")
+    ap.add_argument("--fit-all", action="store_true", help="fit every trajectory; diagnostic only")
     ap.add_argument("--small-model", action="store_true")
     ap.add_argument("--bounded-actions", action="store_true")
     ap.add_argument("--multihead", action="store_true")
+    ap.add_argument("--gated-adapter", action="store_true", help="use the shared trunk/gated residual adapter actor")
+    ap.add_argument("--film", action="store_true", help="use shared trunk with condition-dependent FiLM modulation")
+    ap.add_argument("--action-adapter", action="store_true", help="use condition-gated low-rank action residuals")
+    ap.add_argument("--onehot-action-adapter", action="store_true", help="use frozen one-hot low-rank action residuals")
+    ap.add_argument("--capacity-4x", action="store_true", help="use the explicit larger shared dense actor ablation")
+    ap.add_argument("--capacity-2x", action="store_true", help="use the approximately 2x shared dense actor ablation")
+    ap.add_argument("--behavior", choices=("stand", "locomotion", "sit_stand"), default=None)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    x, y, manifest = collect(args.trace_root)
+    x, y, manifest = collect(args.trace_root, (args.behavior,) if args.behavior else ("stand", "locomotion", "sit_stand"))
     if args.extra_data:
         with np.load(args.extra_data, allow_pickle=False) as extra:
             validate_batch(extra["inputs"], extra["actions"])
@@ -109,7 +212,7 @@ def main() -> None:
             manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
-    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead)
+    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, init_model=args.init_model, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, gated_adapter=args.gated_adapter, film=args.film, action_adapter=args.action_adapter, onehot_action_adapter=args.onehot_action_adapter, capacity_2x=args.capacity_2x, capacity_4x=args.capacity_4x, fit_all=args.fit_all)
     manifest["metrics"] = metrics
     (args.output / "manifest.json").parent.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

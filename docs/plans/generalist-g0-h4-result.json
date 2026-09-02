@@ -1,0 +1,74 @@
+{
+  "schema": "generalist-g0-h4-result",
+  "version": 1,
+  "status": "STOPPED_AT_BC_STANDALONE_GATE",
+  "seed": 7,
+  "contract": {
+    "input_dim": 215,
+    "action_dim": 14,
+    "history_frames": 4,
+    "proprioception_dim": 48,
+    "condition_dim": 23,
+    "control_hz": 50,
+    "history_ms": 80
+  },
+  "data": {
+    "samples": 5600,
+    "trajectories": 7,
+    "segments": 13,
+    "behavior_samples": {"stand": 2000, "locomotion": 2100, "sit_stand": 1500},
+    "finite": true,
+    "teacher_hashes_passed": true,
+    "action_outside_unit_fraction": 0.02052295918367347,
+    "sha256": "af45773d4f6fa014b7ca2838c809be8deafcf28e3a974260417ec3cd13260588"
+  },
+  "bc": {
+    "epochs": 1000,
+    "parameter_count": 124686,
+    "architecture": [215, 256, 256, 14],
+    "train_mse": 0.001000070828013122,
+    "validation_mse": 0.00034759004483930767,
+    "mse_by_behavior": {
+      "stand": 0.000033334112231386825,
+      "locomotion": 0.00026463932590559125,
+      "sit_stand": 0.002839909866452217
+    },
+    "mse_by_joint": [
+      0.00005733396392315626, 0.00017719290917739272,
+      0.00017551523342262954, 0.005706582684069872,
+      0.00015468111087102443, 0.00007334925612667575,
+      0.00003932212712243199, 0.00004662110222852789,
+      0.000027324362235958688, 0.00007142137474147603,
+      0.00021443117293529212, 0.00012073783727828413,
+      0.0052083139307796955, 0.00013286156172398478
+    ],
+    "model_sha256": "06bb9ced554d531315fddb33d2437a5dd972c9c01c8ed14bc6c5ae58e1958817",
+    "manifest_sha256": "3f03cb8a08af7adeb7aeea0f2471b0722adf9eca643fce07dc24d712c50c9f03"
+  },
+  "standalone": {
+    "finite": true,
+    "action_range_valid": true,
+    "passed": 0,
+    "total": 3,
+    "behaviors": {"stand": false, "locomotion": false, "sit_stand": false},
+    "evaluation_sha256": "3b4484fd4e41bcaf2562356fd2dc7a7174d8c5916c1d18f3f59cea2ca2cd37db"
+  },
+  "technical": {
+    "onnx_metadata_inspected": true,
+    "onnx_parity_passed": true,
+    "onnx_max_abs_error": 2.384185791015625e-7,
+    "onnx_sha256": "3d3df627255fcae854706c8a517d1c74dc5097b6ebd8f3d6e932cb0d36c693dd",
+    "parity_report_sha256": "8f10ade480ec8e197b27d935d6cacc53e0d70d3b238ff6486a7df0bfed140dee",
+    "latency_passed": true,
+    "pytorch_p95_ms": 0.06125283543951802,
+    "onnx_p95_ms": 0.01570936874486506,
+    "latency_budget_ms": 15.0,
+    "latency_report_sha256": "1c0abb5fb54f15e563ba6f45a558a4f3fce87ff16003d3bf970438ff6dd15494"
+  },
+  "decision": {
+    "dagger_permitted": false,
+    "ppo_permitted": false,
+    "production_activation": false,
+    "fallback": "unchanged 61D specialists and scheduler"
+  }
+}

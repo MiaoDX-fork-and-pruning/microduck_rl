@@ -28,9 +28,10 @@ def main() -> None:
     report = {"schema": bundle.get("schema"), "samples": len(x), "finite": bool(np.isfinite(pred).all()),
               "max_abs_action": float(np.abs(pred).max()), "outside_unit_range": int((np.abs(pred) > 1).sum()),
               "mse": float(err.mean()), "mse_by_behavior": {}}
-    for i, name in enumerate(("stand", "locomotion")):
+    for i, name in enumerate(("stand", "locomotion", "sit_stand")):
         mask = labels == i
-        report["mse_by_behavior"][name] = float(err[mask].mean())
+        if mask.any():
+            report["mse_by_behavior"][name] = float(err[mask].mean())
     print(json.dumps(report, indent=2))
     if not report["finite"] or report["outside_unit_range"]:
         raise SystemExit("invalid BC output")

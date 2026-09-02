@@ -25,6 +25,10 @@ def make_conditioned_observation(
     specialist_observation: np.ndarray,
     requested_command: np.ndarray,
     behavior: str,
+    *,
+    phase: np.ndarray | None = None,
+    posture: np.ndarray | None = None,
+    side: np.ndarray | None = None,
 ) -> np.ndarray:
     """Adapt legacy 61D observations into the frozen 71D student input."""
     obs = np.asarray(specialist_observation, dtype=np.float32)
@@ -40,7 +44,12 @@ def make_conditioned_observation(
     one_hot = np.zeros((obs.shape[0], BEHAVIOR_DIM), dtype=np.float32)
     one_hot[:, BEHAVIORS.index(behavior)] = 1.0
     # Legacy command block is [twist(3), head_pose(4), body_pose(6)].
-    phase, posture, side = legacy_command_fields(cmd, behavior)
+    defaults = legacy_command_fields(cmd, behavior)
+    phase = defaults[0] if phase is None else np.asarray(phase, dtype=np.float32)
+    posture = defaults[1] if posture is None else np.asarray(posture, dtype=np.float32)
+    side = defaults[2] if side is None else np.asarray(side, dtype=np.float32)
+    if phase.shape != (len(obs), 2) or posture.shape != (len(obs), 1) or side.shape != (len(obs), 1):
+        raise ValueError("phase/posture/side must have shapes [N,2], [N,1], [N,1]")
     condition = np.concatenate((one_hot, cmd[:, :13], phase, posture, side), axis=1)
     result = np.concatenate((obs[:, :PROPRIO_DIM], condition), axis=1)
     if result.shape[1] != OBS_DIM:

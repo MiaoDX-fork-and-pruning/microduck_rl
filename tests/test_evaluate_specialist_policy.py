@@ -146,6 +146,10 @@ def test_report_only_is_explicit_and_disabled_by_default():
 
     assert parser.parse_args(common).report_only is False
     assert parser.parse_args([*common, "--report-only"]).report_only is True
+    assert parser.parse_args(common).trace_output is None
+    traced = parser.parse_args([*common, "--trace-output", "trace.npz", "--trace-reference", "prior.npz"])
+    assert traced.trace_output == Path("trace.npz")
+    assert traced.trace_reference == Path("prior.npz")
 
 
 def test_video_review_recomputes_acceptance_from_existing_checks():

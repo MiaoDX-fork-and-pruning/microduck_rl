@@ -1,0 +1,90 @@
+{
+  "schema": "generalist-g0-teacher-manifest",
+  "version": 1,
+  "teachers": [
+    {
+      "id": "velstand_flat",
+      "task": "Mjlab-VelStand-Flat-MicroDuck",
+      "observation_dim": 61,
+      "action_dim": 14,
+      "source_commit": "facd4f4",
+      "export_command": "uv run scripts/export.py Mjlab-VelStand-Flat-MicroDuck --checkpoint-file checkpoint.pt --onnx-file policy.onnx --golden-file golden-actions.npz",
+      "evaluation_command": "uv run scripts/evaluate_specialist_policy.py",
+      "artifacts": {
+        "checkpoint": "artifacts/specialists/velstand_flat/checkpoint.pt",
+        "onnx": "artifacts/specialists/velstand_flat/policy.onnx",
+        "metadata": "artifacts/specialists/velstand_flat/metadata.json",
+        "evaluation_report": "artifacts/specialists/velstand_flat/evaluation_report.json",
+        "parity_report": "artifacts/specialists/velstand_flat/parity_report.json"
+      },
+      "sha256": {
+        "checkpoint": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5",
+        "onnx": "1b7b6330121e62cf1c90c7303be48ceea62a5cb90d9c5608454abc2d16e7abde",
+        "metadata": "0e633cc5c299f87c7eecc8b5282043dca95b2c72342ff491e3b98b7253c57bc9",
+        "evaluation_report": "fc092eb571683fec4db1e5385c49ef4d1ebb3382215ca76a68641db0d177330d",
+        "parity_report": "2022cfcaeaeb30401f2acd3301b0dfa20f1d51e79ada5de11a987053ccd66340"
+      }
+    },
+    {
+      "id": "velocity_flat",
+      "task": "Mjlab-Velocity-Flat-MicroDuck",
+      "observation_dim": 61,
+      "action_dim": 14,
+      "source_commit": "facd4f4",
+      "export_command": "uv run scripts/export.py Mjlab-Velocity-Flat-MicroDuck --checkpoint-file checkpoint.pt --onnx-file policy.onnx --golden-file golden-actions.npz",
+      "evaluation_command": "uv run scripts/evaluate_specialist_policy.py",
+      "artifacts": {
+        "checkpoint": "artifacts/specialists/velocity_flat/checkpoint.pt",
+        "onnx": "artifacts/specialists/velocity_flat/policy.onnx",
+        "metadata": "artifacts/specialists/velocity_flat/metadata.json",
+        "evaluation_report": "artifacts/specialists/velocity_flat/evaluation_report.json",
+        "parity_report": "artifacts/specialists/velocity_flat/parity_report.json"
+      },
+      "sha256": {
+        "checkpoint": "a71c6c26ff369cb3c2a093649467d3a10bb2dd818dd75f21fb29918ae2cbae3c",
+        "onnx": "a092ee993b691fab1fdc96206a7b3eab832d88c14248e205b3cd43f3c9e73317",
+        "metadata": "4c82c855aebb4aa93c2b9ec963a9bd246f964f8705d2a17a17f2f09d19afe5ba",
+        "evaluation_report": "f5fbc3f19865bd0e29244cb92ae81827557f7fcd888e087279535e41cd32394a",
+        "parity_report": "5b64ac1cb1bd9333c1cdb3f44c60f8ffe03e151c8f673efb2738ac1a590305d5"
+      }
+    },
+    {
+      "id": "sitstand_flat",
+      "task": "Mjlab-SitStand-Flat-MicroDuck",
+      "observation_dim": 61,
+      "action_dim": 14,
+      "source_commit": "facd4f4",
+      "export_command": "uv run scripts/export.py Mjlab-SitStand-Flat-MicroDuck --checkpoint-file checkpoint.pt --onnx-file policy.onnx --golden-file golden-actions.npz",
+      "evaluation_command": "uv run scripts/evaluate_specialist_policy.py",
+      "artifacts": {
+        "checkpoint": "artifacts/specialists/sitstand_flat/checkpoint.pt",
+        "onnx": "artifacts/specialists/sitstand_flat/policy.onnx",
+        "metadata": "artifacts/specialists/sitstand_flat/metadata.json",
+        "evaluation_report": "artifacts/specialists/sitstand_flat/evaluation_report.json",
+        "parity_report": "artifacts/specialists/sitstand_flat/parity_report.json"
+      },
+      "sha256": {
+        "checkpoint": "81550d1a8f90c9b83abaaee4359929ba02fb1eb8ee3bfcf5db95aff5a5a0c581",
+        "onnx": "107c9873c57f00de737f4a876a8b8e6d54c6f8621ecd777ddf6264d756d03015",
+        "metadata": "06a78090a14937d564f6b9d36eb4c71e4236117b4acd2f03c81a3410917a9718",
+        "evaluation_report": "49fee21e241da23c5a9ea74093fa1618f76c96b52f96d6771b999e4e94faf22a",
+        "parity_report": "cccce972d6dafb0bce3134f25b0e2b228c25fdbd0c042ee0501753eac6946743"
+      }
+    }
+  ],
+  "contract": {
+    "observation_dim": 61,
+    "action_dim": 14,
+    "input_dim": 71,
+    "behavior_order": [
+      "VELSTAND",
+      "VELOCITY",
+      "SITSTAND"
+    ],
+    "normalization_baked_into_onnx": true,
+    "legal_edges": [
+      "VELSTAND<->VELOCITY",
+      "VELSTAND<->SITSTAND"
+    ]
+  }
+}

@@ -29,3 +29,7 @@ def test_target_mapping_removes_only_the_mouth_slot():
         (official[: _MODULE.MOUTH_INDEX], official[_MODULE.MOUTH_INDEX + 1 :])
     )
     assert servo.tolist() == list(range(9)) + list(range(10, 15))
+
+
+def test_official_frame_accepts_explicit_fall_gravity_override():
+    assert "gravity_override" in _MODULE.official_frame.__kwdefaults__

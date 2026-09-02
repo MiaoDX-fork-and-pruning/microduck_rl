@@ -693,7 +693,9 @@ class PolicyInference:
         obs.append(self.last_action)
         obs.append(self.command)
 
-        return np.concatenate(obs).astype(np.float32)
+        # Checkpoint-backed evaluators may return singleton batch dimensions;
+        # the deployment contract is always a flat 61D vector.
+        return np.concatenate([np.asarray(item, dtype=np.float32).reshape(-1) for item in obs]).astype(np.float32)
 
     def trigger_ground_pick(self):
         """Start one ground pick cycle. Automatically returns to walking when done."""

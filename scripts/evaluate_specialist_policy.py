@@ -331,6 +331,37 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
     env_cfg.viewer.env_idx = 0
     env_cfg.viewer.max_extra_envs = 0
 
+    trace = None
+    trace_output = getattr(args, "trace_output", None)
+    trace_reference = getattr(args, "trace_reference", None)
+    if trace_reference is not None and trace_output is None:
+        raise ValueError("--trace-reference requires --trace-output")
+    if trace_output is not None:
+        from importlib.metadata import version
+        from mjlab.utils.os import dump_yaml
+
+        from capture_specialist_reset_contract import EvaluatorTrace
+
+        if trace_reference is not None and trace_output.resolve() == trace_reference.resolve():
+            raise ValueError("trace output must not overwrite the reference")
+        cfg_output = trace_output.with_suffix(".env.yaml")
+        agent_output = trace_output.with_suffix(".agent.yaml")
+        dump_yaml(cfg_output, env_cfg)
+        dump_yaml(agent_output, agent_cfg)
+        trace = EvaluatorTrace({
+            "schema": "specialist-evaluator-trace", "version": 1,
+            "task": args.task, "seed": args.seed, "num_envs": args.episodes,
+            "device": str(device), "checkpoint_sha256": _sha256(checkpoint),
+            "environment_cfg_sha256": _sha256(cfg_output),
+            "agent_cfg_sha256": _sha256(agent_output),
+            "versions": {name: version(name) for name in ("torch", "mujoco", "mjlab", "rsl-rl-lib")},
+            "sampling": "before env.step; done/reward/termination describe that step",
+            "reset_route": "RslRlVecEnvWrapper construction; no extra reset or state overrides",
+            "replay_route": "full seeded evaluator prefix, including managers and RNG",
+            "clip_actions": agent_cfg.clip_actions,
+            "historical_reset_equivalence": "requires comparison with frozen evaluation evidence",
+        })
+
     raw_env = ManagerBasedRlEnv(cfg=env_cfg, device=device, render_mode="rgb_array")
     env = RslRlVecEnvWrapper(raw_env, clip_actions=agent_cfg.clip_actions)
     runner_cls = load_runner_cls(args.task) or OnPolicyRunner
@@ -339,6 +370,14 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         str(checkpoint), load_cfg={"actor": True}, strict=True, map_location=device
     )
     policy = runner.get_inference_policy(device=device)
+    if trace is not None:
+        trace.contract.update({
+            "control_dt": raw_env.step_dt,
+            "max_episode_length": raw_env.max_episode_length,
+            "termination_names": list(raw_env.termination_manager.active_terms),
+            "main_task_term": args.main_task_term,
+            "success_threshold": args.success_threshold,
+        })
 
     reward_names = list(raw_env.reward_manager.active_terms)
     reward_weights = {
@@ -391,7 +430,11 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
                 fatal_reason = "nonfinite_action"
                 break
 
+            if trace is not None:
+                trace.before_step(env, observation, action, active)
             observation, reward, dones, _ = env.step(action)
+            if trace is not None:
+                trace.after_step(raw_env, reward, dones)
             rollout_steps += 1
             if len(frames) < video_steps and bool(dones[0].item()):
                 video_reset_count += 1
@@ -477,6 +520,11 @@ def run_evaluation(args: argparse.Namespace) -> dict[str, Any]:
         video_reset_count=video_reset_count,
         video_review=args.video_review,
     )
+    if trace is not None:
+        report["trace"] = trace.write(trace_output, trace_reference)
+        if trace_reference is not None:
+            report["acceptance_checks"]["prefix_replay"] = report["trace"]["prefix_replay"]["passed"]
+            report["accepted"] = all(report["acceptance_checks"].values())
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2, sort_keys=True) + "\n")
     return report
@@ -493,6 +541,8 @@ def make_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--episodes", type=int, default=32)
+    parser.add_argument("--trace-output", type=Path, help="record native pre-step state/action evidence to NPZ")
+    parser.add_argument("--trace-reference", type=Path, help="compare a full seeded rerun to this native trace")
     parser.add_argument(
         "--device", help="torch device (default: cuda:0 when available)"
     )

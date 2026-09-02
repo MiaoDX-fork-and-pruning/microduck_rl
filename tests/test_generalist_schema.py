@@ -32,6 +32,14 @@ def test_documented_offsets_and_legacy_fields():
     np.testing.assert_array_equal(side, [[0.0]])
 
 
+def test_explicit_transition_fields_override_legacy_defaults():
+    out = make_conditioned_observation(
+        np.zeros((1, 61), np.float32), np.zeros((1, 13), np.float32), "sit_stand",
+        phase=np.array([[0.5, 1.0]], np.float32), posture=np.array([[0.0]], np.float32),
+    )
+    np.testing.assert_array_equal(out[0, 67:71], [0.5, 1.0, 0.0, 0.0])
+
+
 def test_non_finite_input_is_rejected():
     with pytest.raises(ValueError):
         make_conditioned_observation(np.full((1, 61), np.nan), np.zeros((1, 13)), "stand")

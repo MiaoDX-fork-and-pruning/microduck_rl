@@ -7,6 +7,7 @@ import re
 from pathlib import Path
 import mujoco
 import numpy as np
+import onnxruntime as ort
 import imageio.v2 as imageio
 from PIL import Image, ImageDraw, ImageFont
 
@@ -17,9 +18,10 @@ from specialist_scenario import load_scenario, scenario_events
 
 PATHS = {p.name: str(p / "policy.onnx") for p in (ROOT / "artifacts/specialists").iterdir() if (p / "policy.onnx").exists()}
 TILT_FAILURE = math.radians(65)
+MERGED_ROUTES = {"velstand_flat": 0, "velocity_flat": 1, "sitstand_flat": 2, "ground_pick_flat": 3, "ball_kick_flat": 4, "roulade_flat": 5}
 
 
-def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = None) -> dict:
+def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = None, merged_policy: Path | None = None) -> dict:
     scenario, frames = load_scenario(scenario_path)
     scene_id = scenario["compatibility"]["scene"]
     xml = MICRODUCK_ROLLERS_XML if roller else MICRODUCK_BALL_XML if "ball" in scene_id else MICRODUCK_XML
@@ -42,6 +44,11 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         if pid not in PATHS or pid not in mapping: raise ValueError(f"missing compatible policy artifact: {pid}")
         kwargs[mapping[pid]] = PATHS[pid]
     policy = PolicyInference(model, data, **kwargs)
+    merged_session = ort.InferenceSession(str(merged_policy), providers=["CPUExecutionProvider"]) if merged_policy else None
+    if merged_session is not None:
+        unsupported = sorted({f.policy_id for f in frames} - MERGED_ROUTES.keys())
+        if unsupported:
+            raise ValueError(f"merged foot-mode policy does not support profiles: {unsupported}; use the roller specialist route")
     policy.validate_specialist_policies(f.policy_id for f in frames)
     free = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
     q = int(model.jnt_qposadr[free]); data.qpos[q:q+3] = [0, 0, 0.1385 if roller else 0.125]; data.qpos[q+3:q+7] = [1,0,0,0]
@@ -87,7 +94,15 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         elif frame.policy_id == "ground_pick_flat":
             phase = min(elapsed_s / 4.0, 0.7)
             policy.command[:3] = (math.cos(2.0 * math.pi * phase), math.sin(2.0 * math.pi * phase), 0.0)
-        obs = policy.get_observations(); previous_action = policy.last_action.copy(); action = policy.infer()
+        obs = policy.get_observations(); previous_action = policy.last_action.copy()
+        if merged_session is None:
+            action = policy.infer()
+        else:
+            route = MERGED_ROUTES[frame.policy_id]
+            condition = np.zeros(23, dtype=np.float32); condition[route] = 1.0
+            condition[6:19] = policy.command
+            merged_obs = np.concatenate((obs[:48], condition)).astype(np.float32)[None]
+            action = merged_session.run(None, {merged_session.get_inputs()[0].name: merged_obs})[0][0]
         finite = finite and bool(np.isfinite(obs).all() and np.isfinite(action).all() and np.isfinite(data.qpos).all() and np.isfinite(data.qvel).all())
         if not finite: break
         jump = float(np.max(np.abs(action - previous_action)))
@@ -193,8 +208,8 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
 
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument("--track", choices=("A","B"), required=True); ap.add_argument("--output", type=Path, required=True); ap.add_argument("--video", type=Path); a=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument("--track", choices=("A","B"), required=True); ap.add_argument("--output", type=Path, required=True); ap.add_argument("--video", type=Path); ap.add_argument("--merged-policy", type=Path); a=ap.parse_args()
     scenario = ROOT / ("docs/specialist_showcase_track_a.json" if a.track == "A" else "docs/specialist_showcase_track_b.json")
-    result = run(scenario, a.track == "B", a.output, a.video); print(json.dumps(result, indent=2)); raise SystemExit(0 if result["passed"] else 1)
+    result = run(scenario, a.track == "B", a.output, a.video, a.merged_policy); print(json.dumps(result, indent=2)); raise SystemExit(0 if result["passed"] else 1)
 
 if __name__ == "__main__": main()
