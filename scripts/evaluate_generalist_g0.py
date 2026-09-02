@@ -75,7 +75,7 @@ class Policy:
         import torch
         if self.backend == "rsl_rl":
             with torch.inference_mode():
-                value = self._torch_policy(torch.from_numpy(observation[None, :]).to(self._device))
+                value = self._torch_policy({"actor": torch.from_numpy(observation[None, :]).to(self._device)})
             return value.detach().cpu().numpy()[0].astype(np.float32)
         with torch.inference_mode():
             return self.model(torch.from_numpy(observation)).numpy()[0].astype(np.float32)
