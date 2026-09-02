@@ -21,6 +21,12 @@ def test_g0_cfg_composes_all_collision_recipe_and_conditioning():
     assert cfg.g0_action_dim == 14
     assert cfg.g0_behaviors == G0_BEHAVIORS
     assert {"g0_behavior", "g0_phase", "g0_posture", "g0_side"} <= set(cfg.observations["actor"].terms)
+    assert {
+        "sitstand_posture_pose_legs",
+        "sitstand_posture_pose_l1",
+        "sitstand_posture_height",
+        "sitstand_posture_composite",
+    } <= set(cfg.rewards)
 
 
 def test_g0_condition_masks_are_exclusive_and_finite():
