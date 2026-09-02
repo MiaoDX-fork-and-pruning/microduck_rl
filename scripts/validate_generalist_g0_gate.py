@@ -16,9 +16,14 @@ def validate(evaluation: dict, parity: dict, budget: dict, fallback: dict) -> di
     if not budget.get("passed", False): reasons.append("50 Hz inference budget failed or is missing")
     if not fallback.get("preserved", False): reasons.append("specialist fallback gate failed or is missing")
     for item in evaluation.get("behaviors", []):
-        if not item.get("metrics", {}).get("finite", False): reasons.append(f"non-finite behavior: {item.get('behavior')}")
+        metrics = item.get("metrics", {})
+        if not metrics.get("finite", False): reasons.append(f"non-finite behavior: {item.get('behavior')}")
+        if "success" not in item and "passed" not in item:
+            reasons.append(f"missing behavior success gate: {item.get('behavior')}")
     for item in evaluation.get("legal_edges", []):
         if item.get("reset_count", 0) != 0: reasons.append(f"reset on legal edge: {item.get('from')}->{item.get('to')}")
+        if "success" not in item and "passed" not in item:
+            reasons.append(f"missing transition success gate: {item.get('from')}->{item.get('to')}")
     return {"schema": "generalist-g0-acceptance-gate", "version": 1,
             "status": "ACCEPT" if not reasons else "DIAGNOSTIC_FAIL", "accepted": not reasons,
             "reasons": reasons, "legal_edges": len(LEGAL_EDGES), "unsupported_edges": len(UNSUPPORTED_EDGES)}
