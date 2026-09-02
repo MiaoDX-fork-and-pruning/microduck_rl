@@ -56,8 +56,8 @@ def prepare(bc_root: Path, output: Path, num_envs: int = 4096, iterations: int =
                         "command": shlex.join(base + ["--agent.run_name", "direct_ppo"])},
             "hybrid": {"experiment_name": "generalist_g0_hybrid_ppo", "initialization": "bc_actor",
                         "bc_actor": bc["model"],
-                        "command": shlex.join(base + ["--agent.run_name", "hybrid_ppo"])},
-            "note": "Hybrid BC actor injection is performed by the PPO runner integration; do not pass model.pt to --agent.load-checkpoint."}
+            "command": "MICRODUCK_G0_BC_ACTOR=" + shlex.quote(bc["model"]) + " " + shlex.join(base + ["--agent.run_name", "hybrid_ppo"])},
+            "note": "Hybrid runner injects only the BC actor; critic and PPO optimizer state remain fresh. Do not pass model.pt to --agent.load-checkpoint."}
 
 
 def main() -> None:

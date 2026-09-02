@@ -68,6 +68,12 @@ bounded DAgger artifact. The bridge deliberately does not pretend a standalone
 BC checkpoint is an `rsl_rl` resume checkpoint; actual actor injection remains
 an integration task before hybrid training can be claimed.
 
+Hybrid integration proof: `GeneralistG0HybridRunner` now injects only a dense
+71->512->256->128->14 BC actor from `MICRODUCK_G0_BC_ACTOR`; critic and PPO
+optimizer state remain fresh. A dense BC artifact was prepared and the hybrid
+task completed the required 64-env, five-iteration smoke with finite rewards
+and no NaN termination. This is an integration smoke, not a behavior pass.
+
 Canonical evaluator proof: `/tmp/g0-canonical-eval.json` is a finite PyTorch
 report covering all three behaviors, all four legal edges, and both unsupported
 direct edges marked unexercised. Its short 40-tick diagnostic still shows
