@@ -45,6 +45,15 @@ Next slice: run comparable BC/direct/hybrid training artifacts and execute the
 canonical three-behavior plus legal-transition rollout battery, including ONNX
 parity and P4 metrics.
 
+P2 BC artifact: `/tmp/g0-bc-multihead-bounded` contains a deterministic
+three-behavior balanced dataset (4,200 samples) and bounded actor. Offline
+evaluation is finite and in range, but the 120-tick MuJoCo battery fails stand,
+locomotion, and sit/stand tilt gates (max tilt 1.88, 1.66, and 1.65 rad).
+This remains a failed diagnostic; no G0 candidate is accepted.
+
+Next slice: run student-state DAgger and hybrid-PPO initialization from this
+artifact, then repeat the same battery without relaxing acceptance thresholds.
+
 Last proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest -q
 tests/test_generalist_transition_graph.py tests/test_generalist_schema.py
 tests/test_generalist_model.py tests/test_collect_generalist_dagger.py
