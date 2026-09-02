@@ -112,15 +112,23 @@ def initialize_g0_state(env, env_ids):
         env.g0_transition_dwell_s = torch.full(
             (env.num_envs,), G0_INITIAL_STAND_DWELL_S, device=env.device
         )
-    env.g0_behavior_id[env_ids] = 0
+    # Direct PPO must see every node before it can survive a full Track A
+    # dwell. Starting every reset in VELSTAND starves VELOCITY/SITSTAND when a
+    # fresh policy falls early; node sampling does not invent a graph edge.
+    initial = torch.randint(len(G0_BEHAVIORS), (len(env_ids),), device=env.device)
+    env.g0_behavior_id[env_ids] = initial
     env.g0_phase[env_ids] = 0
     env.g0_posture[env_ids] = 0
     env.g0_side[env_ids] = 0
-    env.g0_transition_source[env_ids] = 0
+    env.g0_transition_source[env_ids] = initial
     env.g0_transition_destination[env_ids] = -1
     env.g0_transition_elapsed_s[env_ids] = 0
-    env.g0_transition_dwell_s[env_ids] = G0_INITIAL_STAND_DWELL_S
-    _write_g0_command(env, env_ids, (0.0, 0.0, 0.0))
+    dwell = torch.tensor((G0_INITIAL_STAND_DWELL_S, 14.0, 6.0), device=env.device)
+    env.g0_transition_dwell_s[env_ids] = dwell[initial]
+    for behavior_id, command in enumerate(((0.0, 0.0, 0.0), (0.15, 0.0, 0.0), (1.0, 0.0, 0.0))):
+        selected = env_ids[initial == behavior_id]
+        if len(selected):
+            _write_g0_command(env, selected, command)
     return None
 
 

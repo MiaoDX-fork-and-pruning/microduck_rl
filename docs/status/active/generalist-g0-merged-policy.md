@@ -181,6 +181,14 @@ and in range, but the checkpoint still fails the 65-degree stability gate
 (maximum tilt about 1.83 rad) for the tested behaviors and legal edges. The
 evaluator tests pass; this remains diagnostic evidence rather than acceptance.
 
+Extended direct-PPO diagnostic: a local 100-iteration, 64-environment run
+completed with `WANDB_MODE=disabled` and produced `model_99.pt`. Training was
+numerically finite, but behavior-specific tracking rewards remained effectively
+zero while fall termination stayed frequent. The clipped canonical battery
+still failed all included behavior and legal-edge success cases. This rules out
+the five-iteration checkpoint being merely too early and points to reward/router
+activation and task conditioning as the next implementation investigation.
+
 Evaluator gate integration: behavior and edge reports now emit explicit
 `success`/`passed` fields from finite, action-range, tilt, and reset criteria.
 The current canonical report returns `DIAGNOSTIC_FAIL`: sit/stand and all four
