@@ -443,3 +443,12 @@ stand target). `VELOCITY->VELSTAND` and `VELSTAND->VELOCITY` pass; both
 sit-related legal edges fail. The fail-closed validator remains
 `DIAGNOSTIC_FAIL` with four reasons. This is the authoritative P4 diagnostic;
 the candidate is not accepted.
+
+Extended-training falsification: a fresh fixed-weight anchored hybrid run was
+continued to 600 iterations at 64 envs and remained numerically finite, but its
+corrected-contract battery regressed across all three behaviors and all four
+legal edges. Maximum tilts were 2.012 rad (stand), 2.483 rad (locomotion), and
+2.826 rad (sit/stand); locomotion displacement was only 0.281 m. The formal
+gate reports all seven behavior/edge failures. More iterations with the same
+fixed anchor/sampling setup are not justified; the next experiment must change
+the measured curriculum/state coverage or anchor schedule, not merely duration.
