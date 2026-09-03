@@ -26,12 +26,16 @@ completed: >-
   implementation to floating-point precision (max error 1.4e-16). The wrapper
   imports and the Microduck asset config resolves in the actual 6.0.1 runtime;
   a 2-environment `BamActuator.compute()` smoke also returns finite efforts.
-  CPU/runtime contracts: 28 passed.
+  CPU/runtime contracts: 28 passed. InteractiveScene probing identified that
+  IsaacLab 3.0 beta also requires the bundled
+  `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH.
 next_action: >-
   Verify the wrapper on an instantiated IsaacLab articulation and define how
   its friction budget is applied to PhysX. Run a one-joint dynamic bench for
   target steps, velocity response, voltage sag, and friction scaling. Keep the
-  USD `drive_configured=false` finding visible until that bench passes.
+  USD `drive_configured=false` finding visible until that bench passes. Use the
+  complete IsaacLab source path set, including `isaaclab_contrib`, for the next
+  InteractiveScene/articulation probe.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
