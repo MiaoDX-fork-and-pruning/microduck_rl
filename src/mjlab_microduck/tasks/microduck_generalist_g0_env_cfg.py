@@ -25,6 +25,7 @@ G0_OBS_DIM = 71
 G0_ACTION_DIM = 14
 G0_DISCOVERY_STEPS = 1200 * 24
 G0_INITIAL_TRANSITION_PROB = 0.20
+G0_STAGE_THRESHOLDS = (0.90, 0.90, 0.90)
 
 
 @dataclass
@@ -92,6 +93,33 @@ def behavior_mask(env, behavior: str) -> torch.Tensor:
     if behavior not in G0_BEHAVIORS:
         raise ValueError(f"unknown G0 behavior {behavior!r}")
     return (_behavior_id(env) == G0_BEHAVIORS.index(behavior)).to(torch.float32)
+
+
+def g0_stage_curriculum(env, env_ids=None, success_rates=None):
+    """Unlock G0 stages from measured specialist success, never elapsed steps.
+
+    Metrics providers may set ``env.g0_success_rates`` to three rates. Missing
+    metrics leave the stage unchanged; this avoids silently promoting a stage.
+    """
+    if not hasattr(env, "g0_stage"):
+        env.g0_stage = torch.tensor(0, device=env.device, dtype=torch.long)
+    rates = success_rates if success_rates is not None else getattr(env, "g0_success_rates", None)
+    if rates is None:
+        return int(env.g0_stage)
+    values = [float(value) for value in rates]
+    if len(values) != 3 or not all(math.isfinite(value) for value in values):
+        raise ValueError("g0_success_rates must contain three finite values")
+    stage = 0
+    if values[0] >= G0_STAGE_THRESHOLDS[0]:
+        stage = 1
+    if stage and values[1] >= G0_STAGE_THRESHOLDS[1]:
+        stage = 2
+    if stage == 2 and values[2] >= G0_STAGE_THRESHOLDS[2]:
+        stage = 3
+    stage = max(stage, int(env.g0_stage))
+    env.g0_stage = torch.tensor(stage, device=env.device, dtype=torch.long)
+    env.g0_success_rates = tuple(values)
+    return stage
 
 
 def _masked(func, behavior):
@@ -346,6 +374,7 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
     cfg.events["g0_transition"] = EventTermCfg(
         func=sample_g0_transition, mode="interval", interval_range_s=(0.02, 0.02)
     )
+    cfg.curriculum["g0_stage_unlock"] = CurriculumTermCfg(func=g0_stage_curriculum)
     # Existing VelStand terms are retained but task-specific terms are active
     # only under their corresponding condition.
     pose_source = copy.copy(cfg.rewards.get("pose")) if "pose" in cfg.rewards else None

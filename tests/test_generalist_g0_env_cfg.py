@@ -14,6 +14,7 @@ from mjlab_microduck.tasks.microduck_generalist_g0_env_cfg import (
     initialize_g0_state,
     reset_g0_sitstand_state,
     sample_g0_transition,
+    g0_stage_curriculum,
 )
 
 
@@ -89,6 +90,16 @@ def test_g0_transition_contract_is_exactly_four_track_a_edges():
         (6.0, (1.0, 0.0, 0.0)),
         (6.0, (0.0, 0.0, 0.0)),
     ]
+
+
+def test_g0_stage_unlock_requires_measured_success_in_order():
+    class Env:
+        device = "cpu"
+    env = Env()
+    assert g0_stage_curriculum(env) == 0  # no metric means no promotion
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.1, 0.1]) == 1
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.1]) == 2
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.91]) == 3
 
 
 class _Term:
