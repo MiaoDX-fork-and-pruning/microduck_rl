@@ -1,4 +1,4 @@
-status: ACTIVE
+status: BLOCKED
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
@@ -18,15 +18,21 @@ last_proven_evidence: >-
   has not passed robot prim/joint inspection, so it is not conversion proof.
   Passing the documented `dest_path` argument did not change this behavior;
   the output remains 4,150 bytes.
+  A clean run with NVIDIA's bundled `nv_ant.xml` fixture blocks inside the
+  native `MJCFCreateAsset` call: the Python process remains in
+  `futex_wait_queue` before the wrapper's post-command timeout loop. Three
+  stale conversion containers were removed and the result reproduced from a
+  single clean container, ruling out competing Isaac Sim instances.
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
   lazy package/task registry, 61D/14D policy ABI with golden fixture, and MJCF
   asset parity report. Focused deterministic suite currently passes 14 tests;
   conversion and diagnostic contract tests pass as well.
 next_action: >-
-  Resolve the Isaac Sim 5.0 MJCF conversion artifact issue before running the
-  ArticulationCfg in PhysX. Do not hand-maintain a USD without a reproducible
-  source conversion.
+  Change to an Isaac Sim/IsaacLab image combination whose bundled MJCF importer
+  passes its own `nv_ant.xml` conversion, then retry Microduck before running
+  the ArticulationCfg in PhysX. Do not hand-maintain a USD without a
+  reproducible source conversion.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh ./python.sh -u scripts/isaaclab/probe.py`
   against a completed official Isaac Sim image, plus existing mjlab regression
