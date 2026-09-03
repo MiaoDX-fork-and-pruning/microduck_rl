@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import traceback
 from pathlib import Path
 
 import torch
@@ -73,6 +74,9 @@ def main() -> None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(json.dumps(checks, indent=2, sort_keys=True) + "\n")
         print(json.dumps(checks, indent=2, sort_keys=True))
+    except BaseException:
+        traceback.print_exc()
+        raise
     finally:
         if env is not None:
             env.close()

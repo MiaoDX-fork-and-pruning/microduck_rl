@@ -7,8 +7,15 @@ RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
     gymnasium==1.2.0 \
     h5py==3.16.0 \
     lazy-loader==0.4 \
+    moviepy==1.0.3 \
+    imageio-ffmpeg==0.6.0 \
+    onnx==1.20.0 \
+    onnxscript==0.5.7 \
     prettytable==3.3.0 \
-    warp-lang==1.13.0 \
+    packaging==26.0 \
+    rich==14.2.0 \
+    tqdm==4.67.1 \
+    warp-lang==1.16.0 \
     wcwidth==0.2.13
 
 RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
@@ -18,6 +25,7 @@ RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
 # RSL-RL imports these modules at trainer startup. Install them without
 # dependency resolution so pip cannot replace the Isaac Sim Torch/CUDA stack.
 RUN /isaac-sim/python.sh -m pip install --no-cache-dir --no-deps \
+    newton==1.5.1 \
     tensordict==0.10.0 \
     pyvers==0.1.0 \
     importlib-metadata==8.7.0 \
@@ -41,7 +49,7 @@ RUN /isaac-sim/python.sh -m pip install --no-cache-dir --no-deps \
 # dependencies that are not already supplied by Isaac Sim are listed above or
 # can be diagnosed explicitly by the PPO smoke.
 RUN /isaac-sim/python.sh -m pip install --no-cache-dir --no-deps \
-    rsl-rl-lib==5.0.1
+    rsl-rl-lib==5.4.1
 
 # Isaac Sim keeps a deprecated ML archive with its own older Torch/NCCL tree.
 # Remove that archive so Kit cannot load a conflicting libtorch_cuda.so after

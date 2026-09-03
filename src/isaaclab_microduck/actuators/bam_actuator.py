@@ -46,6 +46,12 @@ class BamActuator(ActuatorBase):
     cfg: BamActuatorCfg
 
     def __init__(self, cfg: BamActuatorCfg, *args, **kwargs):
+        # IsaacLab 3.0 resolves joint stiffness/damping in the articulation
+        # control layer and no longer accepts them in ActuatorBase.__init__.
+        # Keep accepting the resolved kwargs so the same wrapper remains
+        # constructible from the actuator collection.
+        kwargs.pop("stiffness", None)
+        kwargs.pop("damping", None)
         super().__init__(cfg, *args, **kwargs)
         self._params: BamParameters = replace(
             XL330_M6,

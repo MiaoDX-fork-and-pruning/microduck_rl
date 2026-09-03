@@ -2,19 +2,24 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H Velocity-Flat walking run and fixed-seed evaluation
-blocker_kind: evaluation_playback
-  blocker_fingerprint: playback cannot resolve cloned articulation path and produces no video
+current_slice: Task H Velocity-Flat fixed-seed evaluation and mjlab comparison
+blocker_kind: evaluation_battery
+  blocker_fingerprint: fixed command battery and external-load friction parity are not implemented
 last_proven_evidence: >-
-  The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
-  starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
-  and Warp 1.13.0. SimulationContext steps five frames. The current MJCF
-  importer API converts both bundled `nv_ant.xml` and the Microduck walk MJCF
-  reproducibly. Microduck inspection reports 169 active prims, 15 rigid bodies,
-  75 collision geometries, one articulation root at
-  `/microduck/Geometry/trunk_base`, all 14 policy joints with limits, and no
-  missing joints. It also reports `drive_configured=false`: every converted
-  joint has zero PhysX drive stiffness and damping, despite maxForce metadata.
+  The formal `microduck-isaaclab:3.0.0-isaacsim6.0.1` image runs the pinned
+  IsaacLab `release/3.0.0` source at commit
+  `c7fd163736878a4a348a63880ff6001ea8b3143e` with Isaac Sim 6.0.1, Torch
+  2.10.0+cu128, Warp 1.16.0, and Newton 1.5.1. The repository RL launcher
+  pre-registers Microduck tasks before dispatching the official
+  `run_train_cli`/`run_play_cli`. A 5-iteration PPO smoke passes (7,680 steps,
+  finite 61D observations and 14D actions). Official playback loads
+  `model_4.pt`, exports JIT/ONNX, completes rollout, and exits 0. With `--viz
+  kit`, the recorder writes 32 frames to
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_13-02-22/videos/play/clip_0000.mp4`.
+  The warning about `/World/envs/env_0/Robot/Geometry/trunk_base/trunk_base`
+  remains but does not block reset, policy execution, or video capture.
+  The converted USD still reports `drive_configured=false`: BAM is explicit
+  effort control, not implicit PhysX PD.
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
   lazy package/task registry, 61D/14D policy ABI with golden fixture, MJCF
@@ -73,10 +78,10 @@ completed: >-
   1.11 rad/s and the task success rate stayed zero. These are training-chain
   signals, not evidence of a reliable gait or simulator parity.
 next_action: >-
-  Fix the playback articulation-path mismatch, then run the fixed-seed command
-  battery and produce the Task H video/metrics report. Keep the USD
-  `drive_configured=false` finding visible: BAM is explicit effort control,
-  not implicit PhysX PD.
+  Implement the fixed-seed command battery and baseline manifest/report for
+  zero, forward, lateral, and yaw commands; compare against the current mjlab
+  baseline. Keep the USD `drive_configured=false` finding visible: BAM is
+  explicit effort control, not implicit PhysX PD.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
@@ -87,12 +92,11 @@ next_proof: >-
   The container dependency probe is green with `torch==2.10.0+cu128`,
   `tensordict==0.10.0`, and `rsl_rl==5.0.1`.
 stop_condition: >-
-  Do not claim simulator parity or start long PPO until PhysX drive/BAM behavior
-  is explicitly mapped, the deterministic asset/actuator acceptance is green,
-  and no full walking run is started without a user-approved Task H decision.
+  Do not claim simulator parity or reliable walking until the fixed command
+  battery, mjlab comparison, and PhysX drive/BAM behavior are explicitly
+  documented. Do not start another long PPO run without a new Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  Playback/video evaluation is currently blocked by the cloned articulation
-  path mismatch. External-load friction parity remains unresolved; Task H's
-  fixed-seed battery and comparison report remain pending; DCMotorCfg is not
-  accepted as BAM parity.
+  External-load friction parity remains unresolved; Task H's fixed-seed battery
+  and comparison report remain pending; DCMotorCfg is not accepted as BAM
+  parity.

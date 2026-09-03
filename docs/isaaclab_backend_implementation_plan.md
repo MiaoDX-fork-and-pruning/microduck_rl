@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — Phase 0-2 and Phase 6 smoke evidence complete; first walking run is next**  
+Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime, PPO smoke, and playback evidence complete; Task H evaluation remains**
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -690,7 +690,7 @@ Deliver:
 - 64-env 5-iteration smoke result;
 - no long run yet.
 
-Current evidence: the IsaacLab 3.0.0-beta2.patch1 / Isaac Sim 6.0.1 runtime
+Current evidence: the IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime
 passes the 64-environment random-action soak and the official RSL-RL
 5-iteration PPO smoke (7,680 steps). The run uses the checked-in
 `spawn_ground_after_clone` prestartup hook required by the imported USD and
@@ -708,6 +708,14 @@ Deliver:
 - metrics report;
 - video;
 - comparison to current mjlab baseline.
+
+Current evidence: the official IsaacLab 3.0.0 RSL-RL launcher loads the smoke
+checkpoint and exits successfully after a 32-frame Kit playback. The video is
+recorded at
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_13-02-22/videos/play/clip_0000.mp4`;
+see `docs/isaaclab_velocity_flat_playback_report.md`. This proves the runtime
+and recorder path, not gait quality. A fixed-seed command battery and the
+baseline comparison are still required before Task H can be accepted.
 
 ### Task I — decide whether to continue
 
