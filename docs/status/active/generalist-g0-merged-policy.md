@@ -26,6 +26,12 @@ Reset curriculum now seeds 20% of fresh episodes into uniformly sampled legal
 transition edges at a phase in the first 80% of dwell, with source/destination
 and phase labels preserved. Hold-state buckets remain behavior-conditioned.
 
+Measured stage promotion is now online: completed episodes accumulate finite
+per-behavior success rates, require 64 samples and 90% success, and unlock
+behaviors/edges monotonically. Stateful reward terms are wrapped with delegated
+reset semantics so behavior masks apply to class-based terms as well as plain
+functions.
+
 Last proven evidence:
 
 - Focused G0 suite: `49 passed`.
@@ -45,6 +51,8 @@ Last proven evidence:
   finite.
 - Transition-reset smoke completed with 71D observations, finite rewards, and
   no NaN or reset-router failures.
+- Measured-stage and stateful-mask smoke completed with finite rewards; stage 0
+  reports zero SITSTAND reward mass and no NaN/reset failures.
 
 Transition-reset diagnostic: the fresh 300-iteration anchored run completed
 finitely at `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-28-27_g0_transition_reset_300`.
@@ -83,10 +91,10 @@ falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
 this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
 tolerance; the rerun remains a diagnostic failure.
 
-Next hypothesis: the remaining failure is policy/task learning and the plan's
-stage-unlock/measurement contract is still absent. Further training must add
-measured behavior-success unlocks and bucket metrics, or stop after proving
-that the current fixed router cannot learn the contract.
+Next hypothesis: the remaining failure is policy/task learning despite the
+stage-unlock, reset-bucket, and reward-mask contracts now being executable.
+Further training must use the measured stage progression and compare behavior
+success against the corrected Track A battery.
 reset, anchor, or termination plumbing. Any next experiment must change the
 reward curriculum or transition-phase coverage and be compared with this
 baseline.
