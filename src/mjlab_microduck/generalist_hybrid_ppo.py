@@ -15,6 +15,7 @@ from rsl_rl.storage import RolloutStorage
 
 from .generalist_anchor import action_anchor_loss
 from .generalist_anchor_storage import GeneralistAnchorStorage
+from .generalist_teachers import FrozenG0Teachers
 
 
 class GeneralistHybridPPO(PPO):
@@ -25,6 +26,41 @@ class GeneralistHybridPPO(PPO):
         self.anchor_weight = float(anchor_weights if isinstance(anchor_weights, (int, float)) else max(anchor_weights, default=0.0))
         if not isinstance(self.storage, GeneralistAnchorStorage):
             raise TypeError("GeneralistHybridPPO requires GeneralistAnchorStorage")
+        self.teacher_provider = None
+        self.metadata_provider = None
+
+    @staticmethod
+    def construct_algorithm(obs, env, cfg, device):
+        """Construct the hybrid algorithm with metadata-aware RL storage."""
+        from rsl_rl.utils import resolve_callable, resolve_obs_groups, resolve_rnd_config, resolve_symmetry_config
+        alg_class = resolve_callable(cfg["algorithm"].pop("class_name"))
+        actor_class = resolve_callable(cfg["actor"].pop("class_name"))
+        critic_class = resolve_callable(cfg["critic"].pop("class_name"))
+        cfg["obs_groups"] = resolve_obs_groups(obs, cfg["obs_groups"], ["actor", "critic"])
+        cfg["algorithm"] = resolve_rnd_config(cfg["algorithm"], obs, cfg["obs_groups"], env)
+        cfg["algorithm"] = resolve_symmetry_config(cfg["algorithm"], env)
+        actor = actor_class(obs, cfg["obs_groups"], "actor", env.num_actions, **cfg["actor"]).to(device)
+        critic = critic_class(obs, cfg["obs_groups"], "critic", 1, **cfg["critic"]).to(device)
+        storage = GeneralistAnchorStorage(
+            "rl", env.num_envs, cfg["num_steps_per_env"], obs, [env.num_actions], device
+        )
+        algorithm = alg_class(actor, critic, storage, device=device, **cfg["algorithm"], multi_gpu_cfg=cfg["multi_gpu"])
+        algorithm.teacher_provider = FrozenG0Teachers(device=device)
+        algorithm.metadata_provider = lambda _obs: (
+            getattr(env, "g0_transition_destination") < 0,
+            getattr(env, "g0_behavior_id"),
+        )
+        return algorithm
+
+    def act(self, obs):
+        actions = super().act(obs)
+        if self.teacher_provider is None or self.metadata_provider is None:
+            raise RuntimeError("hybrid PPO requires teacher and metadata providers")
+        self.transition.teacher_actions = self.teacher_provider(obs).detach()
+        hold, behaviors = self.metadata_provider(obs)
+        self.transition.hold_mask = hold.detach()
+        self.transition.behavior_ids = behaviors.detach()
+        return actions
 
     def update(self) -> dict[str, float]:
         if self.actor.is_recurrent or self.critic.is_recurrent:

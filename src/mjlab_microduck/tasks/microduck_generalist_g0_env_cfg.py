@@ -299,3 +299,5 @@ GeneralistG0DirectPpoRlCfg.run_name = "direct_ppo"
 GeneralistG0HybridPpoRlCfg = copy.deepcopy(GeneralistG0RlCfg)
 GeneralistG0HybridPpoRlCfg.experiment_name = "generalist_g0_hybrid_ppo"
 GeneralistG0HybridPpoRlCfg.run_name = "hybrid_ppo"
+GeneralistG0HybridPpoRlCfg.algorithm.class_name = "mjlab_microduck.generalist_hybrid_ppo.GeneralistHybridPPO"
+GeneralistG0HybridPpoRlCfg.algorithm.anchor_weights = 0.1
