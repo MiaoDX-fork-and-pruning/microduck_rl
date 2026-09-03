@@ -152,6 +152,48 @@ For hybrid training, add an adaptive teacher-KL anchor per active behavior as
 Every run starts with the 64-env, 5-iteration smoke test. Keep critic and
 behavior sampling changes separate between runs.
 
+#### P2 amendment: supervised hybrid curriculum (2026-09-03)
+
+The initial PPO diagnostics showed that loading a BC actor once is not enough:
+the actor can leave already-validated specialist behavior before it has learned
+the shared task. This amendment makes the teacher anchor an explicit, measured
+hybrid experiment while preserving the direct-PPO comparison.
+
+1. **Direct PPO remains from scratch.** It must not use teacher actions, teacher
+   features, or teacher losses; otherwise the baseline no longer measures
+   learnability without initialization.
+2. **Hybrid anchor uses the available teacher contract.** The frozen specialists
+   are deterministic action policies (checkpoint/ONNX), so the first
+   implementation uses per-step action imitation,
+   `L_anchor = mean((a_student - a_teacher)^2)`, on the active behavior. A
+   distributional KL may be added only when a validated teacher distribution is
+   available; it is not required for this experiment.
+3. **Anchor scope and schedule are explicit.** Apply the anchor during behavior
+   hold windows and ordinary specialist states. Reduce it during legal
+   transition windows so the student can learn handoff dynamics. Decay it only
+   after the active behavior reaches 90% of its teacher success/return target;
+   log anchor weight and per-behavior anchor error every iteration.
+4. **Unlock the task in stages.** Start with `VELSTAND` hold/recovery, then add
+   `VELOCITY` with only small forward and zero commands, then add `SITSTAND`
+   hold/transition behavior, and only then enable all four legal edges. A stage
+   unlocks from measured behavior success, not from elapsed iterations. The
+   legal graph and unsupported direct edges remain unchanged.
+5. **Use behavior/state-bucket resets.** During each stage, reset from the
+   corresponding validated specialist distribution and balance recovery,
+   command, and transition-phase buckets. Do not count a balanced behavior id
+   as sufficient state coverage.
+6. **Delay motion taxes.** During early skill discovery, set action-rate,
+   body-angular-velocity, torque-rate, and rise/descent attempt-tax terms to
+   their minimum measured weights. Restore them gradually after the relevant
+   behavior passes its discovery threshold. All penalty sign and non-positive
+   weighted-mass invariants still apply.
+
+This is a diagnostic curriculum, not a change to the G0 acceptance contract.
+Record each stage's seed list, unlock evidence, anchor schedule, reset-bucket
+counts, and direct-vs-hybrid result. If the anchored hybrid still fails while
+the specialist traces and isolated behavior stages pass, stop and diagnose
+transition coverage or schema/action alignment before adding any skill.
+
 ### P3. Evaluate G0 behavior and transitions
 
 Run fixed-seed batteries matching the specialist evidence:
