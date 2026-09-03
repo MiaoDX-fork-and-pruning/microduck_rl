@@ -351,6 +351,13 @@ a misleading training path. The remaining work is a real hybrid PPO update
 implementation (or an upstream-compatible storage/algorithm extension) plus a
 rollout smoke proving non-zero anchor metrics.
 
+Follow-up review: a second PPO scaffold was also rejected. It computed anchor
+loss in a separate optimizer step before calling `super().update()`, lacked
+custom storage construction, and therefore did not implement the amended
+hybrid objective. The scaffold was removed; the combined anchor/teacher/storage
+regression suite remains green (`16 passed`). No hybrid anchor training claim
+is made until the loss is integrated into the canonical PPO minibatch update.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
