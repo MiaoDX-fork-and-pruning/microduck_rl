@@ -83,14 +83,15 @@ def validate_replay_batch(data: dict[str, np.ndarray]) -> None:
         raise ValueError("replay fields have inconsistent lengths")
 
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('--student-run',type=Path,required=True); ap.add_argument('--output',type=Path,required=True); ap.add_argument('--ticks',type=int,default=120); ap.add_argument('--beta',type=float,default=.5); args=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--student-run',type=Path,required=True); ap.add_argument('--output',type=Path,required=True); ap.add_argument('--ticks',type=int,default=120); ap.add_argument('--beta',type=float,default=.5); ap.add_argument('--behavior', choices=('stand','locomotion','sit_stand'), default='stand'); args=ap.parse_args()
     import torch
     b=torch.load(args.student_run/'model.pt',weights_only=False)
     manifest = json.loads((args.student_run/'manifest.json').read_text()) if (args.student_run/'manifest.json').exists() else {}
     net=build_actor(manifest.get('metrics', {})); net.load_state_dict(b['state_dict']); net.eval()
     model=mujoco.MjModel.from_xml_path('src/mjlab_microduck/robot/microduck/scene.xml'); model.opt.timestep=.005
     xs=[]; ys=[]
-    for behavior,speed,teacher_path in [('stand',0.,'artifacts/specialists/velstand_flat/policy.onnx'),('locomotion',.2,'artifacts/specialists/velocity_flat/policy.onnx'),('sit_stand',1.,'artifacts/specialists/sitstand_flat/policy.onnx')]:
+    profiles = [('stand',0.,'artifacts/specialists/velstand_flat/policy.onnx'),('locomotion',.2,'artifacts/specialists/velocity_flat/policy.onnx'),('sit_stand',1.,'artifacts/specialists/sitstand_flat/policy.onnx')]
+    for behavior,speed,teacher_path in [p for p in profiles if p[0] == args.behavior]:
         data=mujoco.MjData(model); teacher=PolicyInference(model,data,walking_onnx_path=teacher_path,new_cmd_obs=True,use_projected_gravity=True); teacher.command=np.array([speed,0,0]+[0]*10,np.float32)
         jid=mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_JOINT,'trunk_base_freejoint'); qa=int(model.jnt_qposadr[jid]); data.qpos[qa:qa+3]=[0,0,.125]; data.qpos[qa+3:qa+7]=[1,0,0,0]
         for i,q in enumerate(teacher.joint_qpos_indices): data.qpos[q]=DEFAULT_POSE[i]

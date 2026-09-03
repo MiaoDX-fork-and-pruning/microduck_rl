@@ -172,6 +172,13 @@ samples, validation MSE `1.38e-5`, model SHA-256
 `1.6816 rad`. This is a closed-loop failure despite low supervised error; the
 remaining fixed budget is at most three DAgger rounds of 10,000 samples.
 
+DAgger round 1 evidence: stand-only relabeling added 120 student-state samples
+(`beta=0.5`) and retrained `/tmp/g0-velstand-bc-dagger1` (420 total samples,
+validation MSE `1.37e-5`, model SHA-256
+`283766b9749372a281b3fad39b70cc2af6681b3b0c2ef3c0c700c3a2bd658765`). The
+fixed 32-episode battery remains finite with `success_rate=0.0` and max tilt
+`1.6642 rad`; this is the first consecutive no-improvement evaluation.
+
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
 
