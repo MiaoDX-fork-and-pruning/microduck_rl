@@ -193,17 +193,19 @@ class EventsCfg:
 
 @configclass
 class RewardsCfg:
-    alive = RewTerm(func=mdp.is_alive, weight=0.25)
+    # Keep survival useful but small enough that standing still cannot dominate
+    # a commanded velocity error.
+    alive = RewTerm(func=mdp.is_alive, weight=0.20)
     terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
     track_lin_vel = RewTerm(
         func=mdp.track_lin_vel_xy_exp,
-        weight=2.0,
-        params={"std": 0.45, "command_name": "base_velocity"},
+        weight=3.5,
+        params={"std": 0.25, "command_name": "base_velocity"},
     )
     track_ang_vel = RewTerm(
         func=mdp.track_ang_vel_z_exp,
-        weight=1.0,
-        params={"std": 0.7, "command_name": "base_velocity"},
+        weight=1.5,
+        params={"std": 0.50, "command_name": "base_velocity"},
     )
     flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
     joint_vel = RewTerm(
