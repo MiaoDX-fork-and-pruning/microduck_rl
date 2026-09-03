@@ -355,6 +355,15 @@ fail (1.333, 1.341, 2.561, and 2.447 rad). The fail-closed validator returns
 produce an accepted G0 candidate; transition curriculum/state coverage and
 adaptive per-behavior anchoring remain the next diagnostic focus.
 
+Per-behavior anchor slice: the hybrid objective now accepts distinct weights
+for VELSTAND, VELOCITY, and SITSTAND, applies each coefficient only to held
+rows of that behavior, and logs sample-weighted per-behavior anchor errors and
+effective weights every update. Scalar configuration remains compatible by
+expanding across the explicit three-behavior contract. Focused anchor/storage/
+teacher/G0-config verification passes (`19 passed`). Threshold-driven weight
+mutation still needs a behavior-success signal from the training/evaluation
+loop; no arbitrary decay was enabled without that evidence.
+
 Current integration contract: the hybrid algorithm must override
 `construct_algorithm` to instantiate `GeneralistAnchorStorage`, override
 `act` to populate teacher actions plus hold/behavior metadata before each
