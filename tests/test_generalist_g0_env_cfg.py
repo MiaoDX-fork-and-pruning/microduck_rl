@@ -35,6 +35,12 @@ def test_g0_cfg_composes_all_collision_recipe_and_conditioning():
     assert reset_events.index("g0_sitstand_state") > reset_events.index("random_prone_init")
     assert cfg.terminations["fell_over"].params["limit_angle"] == torch.pi
     assert "fell_over_disable" not in cfg.curriculum
+    for name, expected in (("action_rate_l2", -0.1), ("body_ang_vel", -0.05),
+                           ("joint_torque_rate_l2", -0.002)):
+        stages = cfg.curriculum[f"g0_{name}_discovery"].params["weight_stages"]
+        assert stages[0]["weight"] == 0.0
+        assert stages[1]["weight"] == expected
+        assert stages[1]["step"] == 1200 * 24
 
 
 def test_g0_observation_terms_follow_frozen_abi_order():

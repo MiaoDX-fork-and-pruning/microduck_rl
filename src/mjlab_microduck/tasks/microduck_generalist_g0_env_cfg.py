@@ -12,7 +12,7 @@ import math
 import torch
 from dataclasses import dataclass
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.managers import EventTermCfg, ObservationTermCfg
+from mjlab.managers import CurriculumTermCfg, EventTermCfg, ObservationTermCfg
 from mjlab.rl import RslRlModelCfg, RslRlOnPolicyRunnerCfg
 from mjlab.managers import RewardTermCfg
 from mjlab.tasks.velocity.rl import VelocityOnPolicyRunner
@@ -23,6 +23,7 @@ from mjlab_microduck.tasks.symmetry import PpoWithSymmetryCfg
 G0_BEHAVIORS = ("VELSTAND", "VELOCITY", "SITSTAND")
 G0_OBS_DIM = 71
 G0_ACTION_DIM = 14
+G0_DISCOVERY_STEPS = 1200 * 24
 
 
 @dataclass
@@ -276,6 +277,18 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
     if "fell_over" in cfg.terminations:
         cfg.terminations["fell_over"].params["limit_angle"] = math.pi
     cfg.curriculum.pop("fell_over_disable", None)
+    # Delay motion-blocking taxes until the merged actor has discovered the
+    # three specialist behaviors and their transitions.
+    for reward_name, weight in (("action_rate_l2", -0.1), ("body_ang_vel", -0.05),
+                                ("joint_torque_rate_l2", -0.002)):
+        if reward_name in cfg.rewards:
+            cfg.curriculum[f"g0_{reward_name}_discovery"] = CurriculumTermCfg(
+                func=_mdp.reward_weight,
+                params={"reward_name": reward_name, "weight_stages": [
+                    {"step": 0, "weight": 0.0},
+                    {"step": G0_DISCOVERY_STEPS, "weight": weight},
+                ]},
+            )
     # Reuse the validated commanded posture stack from SITSTAND. The
     # velstand template has no height/pose target for this behavior, so merely
     # masking its generic `pose` term leaves the sit task under-specified.
