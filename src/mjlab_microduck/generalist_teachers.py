@@ -11,6 +11,22 @@ from .generalist_schema import BEHAVIOR_OFFSET, TWIST_OFFSET
 _BEHAVIOR_TO_TEACHER = {0: "velstand_flat", 1: "velocity_flat", 2: "sitstand_flat"}
 
 
+def compare_action_batches(native: torch.Tensor, reconstructed: torch.Tensor) -> dict[str, float | bool]:
+    """Return deterministic Phase-A parity metrics for two action batches."""
+    if native.ndim != 2 or reconstructed.shape != native.shape or native.shape[1] != 14:
+        raise ValueError("native and reconstructed actions must both have shape [N,14]")
+    if not torch.isfinite(native).all() or not torch.isfinite(reconstructed).all():
+        raise ValueError("native and reconstructed actions must be finite")
+    delta = (reconstructed - native).abs()
+    return {
+        "finite": True,
+        "samples": float(native.shape[0]),
+        "max_abs": float(delta.max().item()) if delta.numel() else 0.0,
+        "mean_abs": float(delta.mean().item()) if delta.numel() else 0.0,
+        "passed": bool((delta.max() <= 1e-4) and (delta.mean() <= 1e-5)),
+    }
+
+
 class FrozenG0Teachers(nn.Module):
     """Run the selected frozen 61D specialist on a batch of 71D observations."""
 
