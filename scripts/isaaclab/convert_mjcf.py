@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import argparse
 import os
+import time
 
 from isaacsim import SimulationApp
 
@@ -41,8 +42,13 @@ def main() -> None:
     )
     if not status:
         raise RuntimeError(f"MJCF importer failed for {args.input}")
-    stage = omni.usd.get_context().get_stage()
-    stage.Export(os.path.abspath(args.output))
+    output = os.path.abspath(args.output)
+    # Import runs asynchronously; keep Kit alive until the destination is written.
+    deadline = time.monotonic() + 60.0
+    while time.monotonic() < deadline and not os.path.exists(output):
+        app.update()
+    if not os.path.exists(output):
+        raise TimeoutError(f"MJCF importer did not write {output} within 60 seconds")
     print(f"ISAACLAB_MJCF_CONVERTED:{args.output} prim={prim_path}", flush=True)
 
 
