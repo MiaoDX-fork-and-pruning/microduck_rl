@@ -14,6 +14,12 @@ def main() -> None:
     compatibility = json.loads(args.compatibility.read_text())
     rollout = json.loads(args.rollout.read_text())
     stand = next((p for p in rollout.get("profiles", []) if p.get("behavior") == "stand"), None)
+    if stand is None and rollout.get("episodes"):
+        episodes = rollout["episodes"]
+        stand = {"passed": all(e.get("passed", False) for e in episodes),
+                 "finite": all(e.get("finite", False) for e in episodes),
+                 "max_tilt_rad": max(e.get("max_tilt_rad", float("inf")) for e in episodes),
+                 "stability_gate_rad": episodes[0].get("stability_gate_rad")}
     if stand is None:
         raise ValueError("rollout report has no VELSTAND/stand profile")
     phase_a = bool(compatibility.get("passed"))
