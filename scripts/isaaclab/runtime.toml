@@ -9,6 +9,9 @@ torch_version = "unselected"
 cuda_version = "unselected"
 installation = "official_docker_image"
 launcher_env = "ISAACLAB_LAUNCHER or ISAACSIM_PYTHON"
+isaaclab_source = "https://github.com/isaac-sim/IsaacLab.git"
+isaaclab_source_tag = "v2.2.0"
+isaaclab_source_revision = "46dff135f44683f031edf346e544fcfd8456b2bb"
 
 [validation]
 status = "blocked_runtime_unavailable"

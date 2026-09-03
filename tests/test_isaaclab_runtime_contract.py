@@ -27,6 +27,13 @@ def test_docker_runner_is_pinned_and_executable() -> None:
     assert "nvcr.io/nvidia/isaac-sim:5.0.0" in DOCKER_RUNNER.read_text()
 
 
+def test_source_pin_is_reproducible() -> None:
+    manifest = tomllib.loads(MANIFEST.read_text())
+
+    assert manifest["isaaclab_source_tag"] == "v2.2.0"
+    assert len(manifest["isaaclab_source_revision"]) == 40
+
+
 def test_runner_fails_clearly_without_selected_runtime() -> None:
     env = os.environ.copy()
     env.pop("ISAACLAB_LAUNCHER", None)
