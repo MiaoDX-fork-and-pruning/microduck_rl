@@ -48,10 +48,11 @@ class GeneralistHybridPPO(PPO):
             "rl", env.num_envs, cfg["num_steps_per_env"], obs, [env.num_actions], device
         )
         algorithm = alg_class(actor, critic, storage, device=device, **cfg["algorithm"], multi_gpu_cfg=cfg["multi_gpu"])
+        base_env = getattr(env, "unwrapped", env)
         algorithm.teacher_provider = FrozenG0Teachers(device=device)
         algorithm.metadata_provider = lambda _obs: (
-            getattr(env, "g0_transition_destination") < 0,
-            getattr(env, "g0_behavior_id"),
+            getattr(base_env, "g0_transition_destination") < 0,
+            getattr(base_env, "g0_behavior_id"),
         )
         return algorithm
 
