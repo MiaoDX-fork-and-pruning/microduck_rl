@@ -143,6 +143,13 @@ using the existing `/tmp/g0-bc-dagger` candidate as a diagnostic starting point,
 then record the primary gate result and root-cause classification. Do not start
 PPO.
 
+Phase B diagnostic evidence: the existing bounded candidate was evaluated with
+`uv run scripts/rollout_generalist_bc.py` for 120 ticks. Its VELSTAND profile is
+finite but fails closed-loop stability (`max_tilt=1.8503 rad` versus the
+`1.1345 rad` safety threshold); the same candidate also fails the other legacy
+profiles. This is diagnosis-only because it is not the manifest's 32-episode
+seed-42 battery or main-task metric gate.
+
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
 
