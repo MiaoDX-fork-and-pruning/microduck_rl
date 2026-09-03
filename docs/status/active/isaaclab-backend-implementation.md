@@ -2,13 +2,12 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: deterministic IsaacLab physics battery and one-joint friction
-  sweep; external-load parity remains the simulator gate
-blocker_kind: physx_friction_bridge_unresolved
-  blocker_fingerprint: explicit BAM voltage effort is running on the real
-  articulation, and the available motor-only friction budget is now written
-  through IsaacLab's static/dynamic/viscous joint fields; the load-dependent
-  external effort is not exposed by the explicit actuator callback
+current_slice: Velocity-Flat direct-RL task and staged runtime smoke
+blocker_kind: isaaclab_rsl_rl_dependency_unavailable
+  blocker_fingerprint: the pinned Isaac Sim/IsaacLab image has no rsl_rl module
+  or rsl-rl-lib distribution; PPO smoke cannot start until the training
+  dependency is installed in the image or an approved alternate backend is
+  selected
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -57,25 +56,34 @@ completed: >-
   The fixed-root sweep shows monotonic response across friction scales
   0.5/1.0/1.5: static friction 0.0181/0.0362/0.0543 N-m and peak speed
   1.217/1.071/0.884 rad/s.
+  Added an IsaacLab ManagerBasedRLEnv Velocity-Flat task with canonical HOME
+  action offsets, named PhysX-to-policy joint ordering, native velocity
+  commands, and a 61D policy observation group. The task-only simulator spawn
+  HOME clamps right_hip_yaw to its authored 0.436 rad limit while preserving
+  the hardware HOME in the policy ABI. The staged smoke harness passes real
+  Isaac Sim 6.0.1 reset and random-action stepping for one robot and 64
+  environments; both reports are finite with 61D observations and 14D actions.
+  The 64-env run records 4 controlled episode resets in 20 steps. Isaac Sim's
+  entity ground-plane clone issue is handled by injecting the plane after scene
+  cloning, matching the physics battery workaround.
 next_action: >-
-  Extend the constrained one-joint friction sweep against the mjlab reference
-  and determine how to expose or estimate solved external joint load for full
-  BAM parity. Keep the USD
-  `drive_configured=false` finding visible: BAM is explicit effort control,
-  not implicit PhysX PD.
+  Install or mount a pinned rsl-rl-lib package in the IsaacLab runtime, then run
+  the required 64-env / 5-iteration PPO smoke against the new task. Do not
+  launch long training. Keep the USD `drive_configured=false` finding visible:
+  BAM is explicit effort control, not implicit PhysX PD.
 next_proof: >-
-  `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
-  scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
-  --headless --output .cache/isaaclab-assets/microduck_walk.usd.report.json'`,
-  followed by `scripts/isaaclab/articulation_probe.py --headless`,
-  `scripts/isaaclab/bam_dynamic_bench.py --headless --steps 20`,
-  `scripts/isaaclab/physics_battery.py --headless --steps 200`, actuator
-  numerical tests, and existing mjlab regression checks.
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
+  tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
+  tests/test_isaaclab_asset_cfg.py tests/test_isaaclab_friction_sweep_contract.py`,
+  plus `.cache/isaaclab-assets/velocity_flat_smoke_1.json` and
+  `.cache/isaaclab-assets/velocity_flat_smoke_64.json`. The next proof is a
+  64-env / 5-iteration PPO smoke after rsl-rl-lib is available.
 stop_condition: >-
-  Do not claim simulator parity or start PPO until PhysX drive/BAM behavior is
-  explicitly mapped and the deterministic asset/actuator acceptance is green.
+  Do not claim simulator parity or start long PPO until PhysX drive/BAM behavior
+  is explicitly mapped, the deterministic asset/actuator acceptance is green,
+  and the 64-env / 5-iteration PPO smoke passes.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  Plan Tasks E-I (BAM bench, physics battery, Velocity-Flat smoke, walking run,
-  continuation decision) remain pending; DCMotorCfg is not accepted as BAM
-  parity.
+  External-load friction parity remains unresolved; plan Tasks H-I (walking
+  run and continuation decision) remain pending; DCMotorCfg is not accepted as
+  BAM parity; rsl-rl-lib image installation is pending.

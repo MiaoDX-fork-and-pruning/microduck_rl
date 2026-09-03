@@ -8,6 +8,7 @@ RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
     h5py==3.16.0 \
     lazy-loader==0.4 \
     prettytable==3.3.0 \
+    rsl-rl-lib==5.0.1 \
     warp-lang==1.13.0 \
     wcwidth==0.2.13
 
