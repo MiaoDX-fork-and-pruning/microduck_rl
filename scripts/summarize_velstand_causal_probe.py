@@ -28,6 +28,12 @@ def main() -> None:
                     "finite": stand.get("finite"), "max_tilt_rad": stand.get("max_tilt_rad"),
                     "safety_gate_rad": stand.get("stability_gate_rad")},
         "diagnosis": diagnosis,
+        "rejected_alternatives": [
+            "teacher_adapter_incompatibility (Phase A passes against ONNX)",
+            "NaN_or_action_range_failure (all student actions and observations are finite and bounded)",
+            "merged_transition_router_failure (VELSTAND-only battery was used)",
+        ],
+        "bounded_parent_amendment": "Add a VELSTAND-only state-coverage/initialization experiment with the same scene, termination, action scaling, and evaluator; require the 32-episode gate before any merge.",
         "recommendation": "Do not start merged PPO; repair coverage, initialization, action representation, or capacity and rerun the fixed battery." if phase_a and not phase_b else "Repair teacher semantics before interpreting student results." if not phase_a else "Freeze the student and request a parent-plan increment.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)

@@ -16,4 +16,6 @@ def test_phase_b_failure_is_fail_closed(tmp_path: Path):
     assert report["phase_a"]["passed"] is True
     assert report["phase_b"]["passed"] is False
     assert report["diagnosis"] == "state_distribution_coverage_or_model_capacity"
+    assert report["rejected_alternatives"]
+    assert "VELSTAND-only" in report["bounded_parent_amendment"]
     assert report["recommendation"].startswith("Do not start merged PPO")
