@@ -40,7 +40,14 @@ def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     assert '"IsaacLab-Velocity-Flat-MicroDuck"' in source
     assert "torch.isfinite" in source
     assert "uniform_(-1.0, 1.0)" in source
-    assert "GroundPlaneCfg" in source
+    assert "ground_event_ready" in source
+
+
+def test_ground_is_injected_at_the_prestartup_hook() -> None:
+    source = _source(TASK)
+    assert "def spawn_ground_after_clone" in source
+    assert 'mode="prestartup"' in source
+    assert 'cfg.func("/World/ground", cfg)' in source
 
 
 def test_lazy_task_registry_points_at_velocity_cfg() -> None:

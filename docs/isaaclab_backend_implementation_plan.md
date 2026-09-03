@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — Phase 0-2 evidence complete; actuator parity is the current gate**  
+Status: **active execution plan — Phase 0-2 and Phase 6 smoke evidence complete; first walking run is next**  
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -689,6 +689,15 @@ Deliver:
 - reward/config tests;
 - 64-env 5-iteration smoke result;
 - no long run yet.
+
+Current evidence: the IsaacLab 3.0.0-beta2.patch1 / Isaac Sim 6.0.1 runtime
+passes the 64-environment random-action soak and the official RSL-RL
+5-iteration PPO smoke (7,680 steps). The run uses the checked-in
+`spawn_ground_after_clone` prestartup hook required by the imported USD and
+records finite 61D observations / 14D actions. It produces a smoke checkpoint
+under the ignored `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/` path.
+The smoke is an integration gate only; its falling behavior is not evidence of
+a trained gait.
 
 ### Task H — first full walking run
 

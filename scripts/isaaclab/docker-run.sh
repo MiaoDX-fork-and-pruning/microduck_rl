@@ -14,6 +14,8 @@ fi
 
 repo_mount="${repo_root}:/workspace/microduck_rl:ro"
 if [[ "${ISAACLAB_DOCKER_WRITE:-0}" == "1" ]]; then
+  mkdir -p "${repo_root}/logs"
+  chmod a+rwx "${repo_root}/logs"
   repo_mount="${repo_root}:/workspace/microduck_rl"
 fi
 
@@ -24,6 +26,7 @@ fi
 exec docker run --rm --gpus all --network host \
   -e ACCEPT_EULA=Y \
   -e PRIVACY_CONSENT=Y \
+  -e GIT_PYTHON_REFRESH=quiet \
   -e TERM=xterm \
   -v "${repo_mount}" \
   -v "${isaaclab_source}:/workspace/IsaacLab:ro" \

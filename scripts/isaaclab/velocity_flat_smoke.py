@@ -40,13 +40,7 @@ def main() -> None:
         )
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:env_made", flush=True)
         base_env = env.unwrapped
-        # Isaac Sim 6.0.1 cannot clone a GroundPlaneCfg entity with this
-        # imported articulation. Add the plane after ManagerBasedRLEnv has
-        # cloned the robot, as in the deterministic physics battery.
-        import isaaclab.sim as sim_utils
-
-        sim_utils.GroundPlaneCfg().func("/World/ground", sim_utils.GroundPlaneCfg())
-        print("ISAACLAB_VELOCITY_FLAT_SMOKE:ground_ready", flush=True)
+        print("ISAACLAB_VELOCITY_FLAT_SMOKE:ground_event_ready", flush=True)
         obs, _ = env.reset(seed=7)
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:reset_ok", flush=True)
         policy_obs = obs["policy"] if isinstance(obs, dict) else obs

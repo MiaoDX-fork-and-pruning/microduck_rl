@@ -24,6 +24,8 @@ from isaaclab.managers import TerminationTermCfg as DoneTerm
 from isaaclab.scene import InteractiveSceneCfg
 from isaaclab.utils.configclass import configclass
 
+import isaaclab.sim as sim_utils
+
 from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 from isaaclab_microduck.policy_abi import HOME_POSITION, POLICY_JOINT_ORDER
 
@@ -87,6 +89,20 @@ def fallen(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("rob
     return (torch.linalg.norm(gravity_xy, dim=-1) > 0.75) | (height < 0.055)
 
 
+def spawn_ground_after_clone(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
+    """Create the flat plane after USD cloning and before PhysX reset.
+
+    Isaac Sim 6.0.1 has a scene-construction failure when a ground-plane
+    entity is cloned alongside this imported articulation.  ``prestartup`` is
+    the framework-supported point after ``InteractiveScene`` cloning and
+    before the first ``SimulationContext.reset``.
+    """
+
+    del env, env_ids
+    cfg = sim_utils.GroundPlaneCfg(size=(100.0, 100.0))
+    cfg.func("/World/ground", cfg)
+
+
 def _task_robot_cfg() -> ArticulationCfg:
     """Copy the shared asset and use canonical HOME only for this task."""
 
@@ -118,6 +134,10 @@ class SceneCfg(InteractiveSceneCfg):
     """
 
     robot: ArticulationCfg = _task_robot_cfg()
+
+    # Required by IsaacLab for USD-level ``prestartup`` events. The plane is a
+    # single global prim, so replication is not useful here anyway.
+    replicate_physics = False
 
 
 @configclass
@@ -167,6 +187,7 @@ class ObservationsCfg:
 
 @configclass
 class EventsCfg:
+    spawn_ground = EventTerm(func=spawn_ground_after_clone, mode="prestartup")
     reset_scene_to_default = EventTerm(func=mdp.reset_scene_to_default, mode="reset")
 
 

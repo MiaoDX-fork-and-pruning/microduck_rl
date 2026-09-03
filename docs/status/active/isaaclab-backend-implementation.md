@@ -3,11 +3,8 @@ source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
 current_slice: Velocity-Flat direct-RL task and staged runtime smoke
-blocker_kind: ppo_scene_injection_unresolved
-  blocker_fingerprint: rsl_rl 5.0.1 now imports with the validated Torch 2.10/CUDA
-  12.8 image, but the official ManagerBasedRLEnv trainer still needs the
-  post-clone ground-plane injection workaround used by the direct smoke; PPO
-  cannot be called a valid contact-rich training run until that path is wired
+blocker_kind: none
+  blocker_fingerprint: null
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -65,25 +62,27 @@ completed: >-
   environments; both reports are finite with 61D observations and 14D actions.
   The 64-env run records 4 controlled episode resets in 20 steps. Isaac Sim's
   entity ground-plane clone issue is handled by injecting the plane after scene
-  cloning, matching the physics battery workaround.
+  cloning, matching the physics battery workaround. The official RSL-RL
+  trainer then completes 5 PPO iterations / 7,680 steps with finite metrics and
+  writes model_0.pt and model_4.pt under the ignored logs path.
 next_action: >-
-  Wire the proven post-clone ground-plane workaround into the trainer-facing
-  environment path, then run the required 64-env / 5-iteration PPO smoke. Do
-  not launch long training. Keep the USD `drive_configured=false` finding
-  visible: BAM is explicit effort control, not implicit PhysX PD.
+  Review the smoke metrics and decide whether to start Task H's first full
+  walking run. Do not claim walking parity from this integration smoke. Keep
+  the USD `drive_configured=false` finding visible: BAM is explicit effort
+  control, not implicit PhysX PD.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
   tests/test_isaaclab_asset_cfg.py tests/test_isaaclab_friction_sweep_contract.py`,
-  plus `.cache/isaaclab-assets/velocity_flat_smoke_1.json` and
-  `.cache/isaaclab-assets/velocity_flat_smoke_64.json`. The next proof is a
-  64-env / 5-iteration PPO smoke after the trainer scene-injection path is
-  available; the container dependency probe is already green with
-  `torch==2.10.0+cu128` and `rsl_rl==5.0.1`.
+  plus `.cache/isaaclab-assets/velocity_flat_smoke_1.json`,
+  `.cache/isaaclab-assets/velocity_flat_smoke_64_prestartup.json`, and the
+  smoke run under `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/`.
+  The container dependency probe is green with `torch==2.10.0+cu128`,
+  `tensordict==0.10.0`, and `rsl_rl==5.0.1`.
 stop_condition: >-
   Do not claim simulator parity or start long PPO until PhysX drive/BAM behavior
   is explicitly mapped, the deterministic asset/actuator acceptance is green,
-  and the 64-env / 5-iteration PPO smoke passes.
+  and no full walking run is started without a user-approved Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
   External-load friction parity remains unresolved; plan Tasks H-I (walking

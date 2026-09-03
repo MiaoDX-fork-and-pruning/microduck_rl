@@ -25,13 +25,26 @@ def test_runtime_manifest_keeps_isaaclab_external() -> None:
 
 def test_docker_runner_is_pinned_and_executable() -> None:
     assert DOCKER_RUNNER.stat().st_mode & 0o111
-    assert "microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1" in DOCKER_RUNNER.read_text()
-    assert "/workspace/IsaacLab" in DOCKER_RUNNER.read_text()
-    assert "ISAACLAB_DOCKER_WRITE" in DOCKER_RUNNER.read_text()
+    source = DOCKER_RUNNER.read_text()
+    assert "microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1" in source
+    assert "/workspace/IsaacLab" in source
+    assert "ISAACLAB_DOCKER_WRITE" in source
+    assert "GIT_PYTHON_REFRESH=quiet" in source
+    assert 'chmod a+rwx "${repo_root}/logs"' in source
 
 
 def test_docker_image_installs_isaaclab_lazy_import_dependency() -> None:
     assert "lazy-loader==0.4" in DOCKERFILE.read_text()
+
+
+def test_docker_image_pins_trainer_dependencies_without_resolving_torch() -> None:
+    source = DOCKERFILE.read_text()
+    assert "torch==2.10.0" in source
+    assert "rsl-rl-lib==5.0.1" in source
+    assert "tensordict==0.10.0" in source
+    assert "hydra-core==1.3.2" in source
+    assert "tensorboard==2.20.0" in source
+    assert source.count("--no-deps") >= 2
 
 
 def test_source_pin_is_reproducible() -> None:
