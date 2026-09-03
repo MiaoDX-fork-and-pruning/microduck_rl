@@ -6,11 +6,24 @@ with an actuator or asset failure.
 
 from __future__ import annotations
 
+import argparse
+import signal
+
 from isaacsim import SimulationApp
+
+
+def _timeout_handler(signum, frame):
+    del signum, frame
+    raise TimeoutError("simulation reset exceeded probe timeout")
 
 
 def main() -> None:
     print("ISAACLAB_ARTICULATION_PROBE:app_imported", flush=True)
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--no-collisions", action="store_true")
+    parser.add_argument("--reset-timeout", type=int, default=45)
+    args = parser.parse_args()
     app = SimulationApp({"headless": True})
     print("ISAACLAB_ARTICULATION_PROBE:app_ready", flush=True)
     try:
@@ -30,7 +43,24 @@ def main() -> None:
 
         scene = InteractiveScene(SceneCfg(num_envs=1, env_spacing=2.0))
         print("ISAACLAB_ARTICULATION_PROBE:scene_ready", flush=True)
-        sim.reset()
+        if args.no_collisions:
+            from pxr import UsdPhysics
+
+            removed = 0
+            for prim in scene.stage.Traverse():
+                if prim.HasAPI(UsdPhysics.CollisionAPI):
+                    prim.RemoveAPI(UsdPhysics.CollisionAPI)
+                    removed += 1
+            print(f"ISAACLAB_ARTICULATION_PROBE:collisions_removed={removed}", flush=True)
+        signal.signal(signal.SIGALRM, _timeout_handler)
+        signal.alarm(args.reset_timeout)
+        try:
+            sim.reset()
+        except TimeoutError as exc:
+            print(f"ISAACLAB_ARTICULATION_PROBE:reset_timeout:{exc}", flush=True)
+            return
+        finally:
+            signal.alarm(0)
         print("ISAACLAB_ARTICULATION_PROBE:sim_reset", flush=True)
         robot = scene.articulations["robot"]
         actuator = next(iter(robot.actuators.values()))

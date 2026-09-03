@@ -2,10 +2,12 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: explicit IsaacLab BAM wrapper; PhysX friction integration remains
-  the simulator gate
-blocker_kind: physx_drive_mapping_unresolved
-  blocker_fingerprint: converted Microduck USD has 14 joints and limits but zero authored PhysX drive stiffness/damping; InteractiveScene spawn has not completed in a 240s probe
+current_slice: staged IsaacLab articulation reset/cooking diagnosis; PhysX
+  friction integration remains the simulator gate
+blocker_kind: articulation_reset_hang
+  blocker_fingerprint: with the complete runtime PYTHONPATH, the Microduck
+  InteractiveScene reaches scene_ready but native sim.reset() does not return;
+  the same boundary persists after removing all 75 USD collision APIs
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -28,17 +30,20 @@ completed: >-
   a 2-environment `BamActuator.compute()` smoke also returns finite efforts.
   CPU/runtime contracts: 30 passed. InteractiveScene probing identified that
   IsaacLab 3.0 beta also requires the bundled
-  `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH.
-  A staged articulation probe reaches App, imports, and SimulationContext, but
-  remains before `scene_ready` during InteractiveScene construction at 240s;
-  this is unproven scene-spawn behavior, not a successful articulation test.
+  `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH. PhysX
+  articulation loading additionally probes `isaaclab_newton`, so the runtime
+  command now includes the IsaacLab `newton`, `ov`, and `ovphysx` source paths.
+  A staged articulation probe reaches App, imports, SimulationContext, and
+  `scene_ready` with the project `/src` path included. Both canonical and
+  `--no-collisions` probes then block inside native `sim.reset()` before
+  `sim_reset`, `articulation_ready`, or `step_ok`; this is an explicit
+  articulation-reset/cooking blocker, not a successful articulation test.
 next_action: >-
-  Verify the wrapper on an instantiated IsaacLab articulation and define how
-  its friction budget is applied to PhysX. Run a one-joint dynamic bench for
-  target steps, velocity response, voltage sag, and friction scaling. Keep the
-  USD `drive_configured=false` finding visible until that bench passes. Use the
-  complete IsaacLab source path set, including `isaaclab_contrib`, for the next
-  InteractiveScene/articulation probe.
+  Diagnose the native reset hang with a minimal/reduced-collision diagnostic
+  asset or direct PhysX articulation setup; do not replace the canonical USD.
+  Once reset completes, verify the wrapper on an instantiated articulation and
+  define how its friction budget is applied to PhysX. Keep the USD
+  `drive_configured=false` finding visible until that bench passes.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
