@@ -1,12 +1,12 @@
 # Fill these values only after the selected runtime passes the headless probe.
 # IsaacLab remains outside the root uv lock so mjlab dependency resolution is
 # unchanged.
-runtime = "nvcr.io/nvidia/isaac-sim:5.0.0"
+runtime = "microduck-isaaclab:2.2.0-isaacsim5.0.0"
 isaaclab_version = "2.2.0"
 isaacsim_version = "5.0.0-rc.45"
-python_version = "3.11"
-torch_version = "unselected"
-cuda_version = "unselected"
+python_version = "3.11.13"
+torch_version = "2.7.0+cu128"
+cuda_version = "12.8"
 installation = "official_docker_image"
 launcher_env = "ISAACLAB_LAUNCHER or ISAACSIM_PYTHON"
 isaaclab_source = "https://github.com/isaac-sim/IsaacLab.git"
@@ -14,5 +14,5 @@ isaaclab_source_tag = "v2.2.0"
 isaaclab_source_revision = "46dff135f44683f031edf346e544fcfd8456b2bb"
 
 [validation]
-status = "blocked_runtime_unavailable"
-headless_probe = "scripts/isaaclab/docker-run.sh /workspace/IsaacLab/isaaclab.sh -p /workspace/microduck_rl/scripts/isaaclab/probe.py --headless"
+status = "validated"
+headless_probe = "scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=/workspace/IsaacLab/source/isaaclab:/workspace/IsaacLab/source/isaaclab_assets:/workspace/IsaacLab/source/isaaclab_tasks /isaac-sim/python.sh /workspace/microduck_rl/scripts/isaaclab/probe.py --headless'"

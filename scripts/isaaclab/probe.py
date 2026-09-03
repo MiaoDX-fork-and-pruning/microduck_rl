@@ -10,10 +10,12 @@ from isaaclab.app import AppLauncher
 
 
 def main() -> None:
+    print("ISAACLAB_PROBE:begin", flush=True)
     parser = argparse.ArgumentParser(description="Probe the IsaacLab runtime.")
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     app_launcher = AppLauncher(args)
+    print("ISAACLAB_PROBE:app_created", flush=True)
     simulation_app = app_launcher.app
     try:
         import isaaclab
@@ -25,7 +27,7 @@ def main() -> None:
             "python": platform.python_version(),
             "torch": torch.__version__,
         }
-        print(json.dumps(result, sort_keys=True))
+        print("ISAACLAB_PROBE:" + json.dumps(result, sort_keys=True), flush=True)
     finally:
         simulation_app.close()
 

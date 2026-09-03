@@ -24,7 +24,7 @@ def test_runtime_manifest_keeps_isaaclab_external() -> None:
 
 def test_docker_runner_is_pinned_and_executable() -> None:
     assert DOCKER_RUNNER.stat().st_mode & 0o111
-    assert "nvcr.io/nvidia/isaac-sim:5.0.0" in DOCKER_RUNNER.read_text()
+    assert "microduck-isaaclab:2.2.0-isaacsim5.0.0" in DOCKER_RUNNER.read_text()
     assert "/workspace/IsaacLab" in DOCKER_RUNNER.read_text()
 
 
