@@ -45,9 +45,13 @@ completed: >-
   plane workaround required by Isaac Sim 6.0.1. Its 200-step subset covers
   home settle, free fall, target step, and NaN soak; all samples are finite.
   It applies the motor-only friction bridge and records the limitation as
-  `motor_only_external_effort_unavailable`.
+  `motor_only_external_effort_unavailable`. All four cases are finite, but
+  `home_settle` and `nan_soak` reach a fallen state (max tilt approximately pi,
+  final root z approximately -0.012 m), so the battery is a numerical bring-up
+  only and does not yet establish a stable HOME/contact equilibrium.
 next_action: >-
-  Add the constrained one-joint friction sweep and determine how to expose or
+  First establish a stable IsaacLab HOME/contact equilibrium and add the
+  constrained one-joint friction sweep; then determine how to expose or
   estimate solved external joint load for full BAM parity. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control,
   not implicit PhysX PD.
