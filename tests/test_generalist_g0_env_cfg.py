@@ -140,6 +140,26 @@ def test_g0_sitstand_reset_covers_all_state_goal_pairs(monkeypatch):
     assert pairs == {(0, 0), (0, 1), (1, 0), (1, 1)}
 
 
+def test_g0_reset_bucket_labels_match_behavior_condition():
+    class Env:
+        num_envs = 12
+        device = "cpu"
+
+        def __init__(self):
+            self.command_manager = _Manager(self.num_envs)
+
+    env = Env()
+    ids = torch.arange(env.num_envs)
+    torch.manual_seed(7)
+    initialize_g0_state(env, ids)
+    assert env.g0_reset_bucket.shape == (env.num_envs,)
+    assert torch.equal(
+        env.g0_reset_bucket[env.g0_behavior_id == 0],
+        torch.full_like(env.g0_reset_bucket[env.g0_behavior_id == 0], 2),
+    )
+    assert env.g0_reset_transition_phase.eq(0).all()
+
+
 def test_g0_router_holds_initial_stand_then_uses_velocity_contract():
     torch.manual_seed(0)
     env = _RouterEnv()

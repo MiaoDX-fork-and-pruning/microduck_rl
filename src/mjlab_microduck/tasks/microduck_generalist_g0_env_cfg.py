@@ -110,6 +110,9 @@ def initialize_g0_state(env, env_ids):
         env.g0_phase = torch.zeros((env.num_envs, 2), device=env.device)
         env.g0_posture = torch.zeros(env.num_envs, device=env.device)
         env.g0_side = torch.zeros(env.num_envs, device=env.device)
+        # Reset coverage labels: 0=upright, 1=seated, 2=recovery/prone.
+        env.g0_reset_bucket = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
+        env.g0_reset_transition_phase = torch.zeros(env.num_envs, device=env.device)
         env.g0_transition_source = torch.zeros(env.num_envs, device=env.device, dtype=torch.long)
         env.g0_transition_destination = torch.full(
             (env.num_envs,), -1, device=env.device, dtype=torch.long
@@ -126,6 +129,12 @@ def initialize_g0_state(env, env_ids):
     env.g0_phase[env_ids] = 0
     env.g0_posture[env_ids] = 0
     env.g0_side[env_ids] = 0
+    env.g0_reset_bucket[env_ids] = torch.where(
+        initial == G0_BEHAVIORS.index("VELSTAND"),
+        torch.full_like(initial, 2),
+        torch.zeros_like(initial),
+    )
+    env.g0_reset_transition_phase[env_ids] = 0.0
     env.g0_transition_source[env_ids] = initial
     env.g0_transition_destination[env_ids] = -1
     env.g0_transition_elapsed_s[env_ids] = 0
@@ -171,6 +180,7 @@ def reset_g0_sitstand_state(env, env_ids):
         "standing_z_max": 0.12,
     }
     if seated.any():
+        env.g0_reset_bucket[sitstand_ids[seated]] = 1
         _mdp.set_random_ground_state(
             env,
             sitstand_ids[seated],
@@ -179,6 +189,7 @@ def reset_g0_sitstand_state(env, env_ids):
             **reset_params,
         )
     if (~seated).any():
+        env.g0_reset_bucket[sitstand_ids[~seated]] = 0
         _mdp.set_random_ground_state(
             env,
             sitstand_ids[~seated],
@@ -250,6 +261,7 @@ def sample_g0_transition(env, env_ids):
 
     active = env.g0_transition_destination[env_ids] >= 0
     progress = env.g0_transition_elapsed_s[env_ids] / env.g0_transition_dwell_s[env_ids].clamp_min(1e-6)
+    env.g0_reset_transition_phase[env_ids] = progress.clamp(0.0, 1.0)
     env.g0_phase[env_ids, 0] = progress.clamp(0.0, 1.0)
     env.g0_phase[env_ids, 1] = active.to(env.g0_phase.dtype)
     return None
