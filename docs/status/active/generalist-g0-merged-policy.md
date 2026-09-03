@@ -344,6 +344,13 @@ environment step, and extend PPO minibatch updates with
 storage is outside this bounded slice. No algorithm wiring has been claimed
 until a hybrid smoke proves these fields survive a real rollout/update.
 
+Integration review: a prototype hybrid PPO module was inspected and rejected
+because it delegated `update()` to stock PPO, clearing anchor metadata without
+applying any anchor loss. The incomplete module was removed rather than kept as
+a misleading training path. The remaining work is a real hybrid PPO update
+implementation (or an upstream-compatible storage/algorithm extension) plus a
+rollout smoke proving non-zero anchor metrics.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
