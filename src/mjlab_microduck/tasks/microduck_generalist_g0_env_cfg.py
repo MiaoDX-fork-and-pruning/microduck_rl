@@ -154,7 +154,9 @@ def initialize_g0_state(env, env_ids):
     # Direct PPO must see every node before it can survive a full Track A
     # dwell. Starting every reset in VELSTAND starves VELOCITY/SITSTAND when a
     # fresh policy falls early; node sampling does not invent a graph edge.
-    initial = torch.randint(len(G0_BEHAVIORS), (len(env_ids),), device=env.device)
+    stage = int(getattr(env, "g0_stage", torch.tensor(0, device=env.device)))
+    behavior_count = min(stage + 1, len(G0_BEHAVIORS))
+    initial = torch.randint(behavior_count, (len(env_ids),), device=env.device)
     env.g0_behavior_id[env_ids] = initial
     env.g0_phase[env_ids] = 0
     env.g0_posture[env_ids] = 0
@@ -184,7 +186,7 @@ def initialize_g0_state(env, env_ids):
                 _write_g0_command(env, selected, (float(target), 0.0, 0.0))
     # Reverse-curriculum transition buckets: expose legal handoff states at
     # reset so the last mile is represented before on-policy discovery finds it.
-    transition_mask = torch.rand(len(env_ids), device=env.device) < G0_INITIAL_TRANSITION_PROB
+    transition_mask = (stage >= 3) & (torch.rand(len(env_ids), device=env.device) < G0_INITIAL_TRANSITION_PROB)
     transition_ids = env_ids[transition_mask]
     if len(transition_ids):
         edges = torch.tensor(((0, 1), (1, 0), (0, 2), (2, 0)), device=env.device)

@@ -102,6 +102,22 @@ def test_g0_stage_unlock_requires_measured_success_in_order():
     assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.91]) == 3
 
 
+def test_g0_stage_controls_behavior_and_transition_reset_sampling():
+    class Env:
+        num_envs = 256
+        device = "cpu"
+        def __init__(self):
+            self.command_manager = _Manager(self.num_envs)
+    for stage, max_behavior in ((0, 0), (1, 1), (2, 2)):
+        env = Env()
+        env.g0_stage = torch.tensor(stage)
+        ids = torch.arange(env.num_envs)
+        torch.manual_seed(10 + stage)
+        initialize_g0_state(env, ids)
+        assert int(env.g0_behavior_id.max()) <= max_behavior
+        assert (env.g0_transition_destination < 0).all()
+
+
 class _Term:
     def __init__(self, n):
         self.vel_command_b = torch.zeros(n, 3)
@@ -135,6 +151,7 @@ def test_g0_sitstand_reset_covers_all_state_goal_pairs(monkeypatch):
             self.command_manager = _Manager(self.num_envs)
 
     env = Env()
+    env.g0_stage = torch.tensor(3)
     ids = torch.arange(env.num_envs)
     torch.manual_seed(42)
     initialize_g0_state(env, ids)
@@ -168,6 +185,7 @@ def test_g0_reset_bucket_labels_match_behavior_condition():
             self.command_manager = _Manager(self.num_envs)
 
     env = Env()
+    env.g0_stage = torch.tensor(3)
     ids = torch.arange(env.num_envs)
     torch.manual_seed(7)
     initialize_g0_state(env, ids)
@@ -189,6 +207,7 @@ def test_g0_initial_transition_buckets_are_legal_and_phase_labeled():
             self.command_manager = _Manager(self.num_envs)
 
     env = Env()
+    env.g0_stage = torch.tensor(3)
     ids = torch.arange(env.num_envs)
     torch.manual_seed(3)
     initialize_g0_state(env, ids)
