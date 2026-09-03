@@ -1,14 +1,14 @@
-status: ACTIVE
+status: BLOCKED
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task A, runtime wrapper is implemented; external runtime validation remains
+current_slice: Task A, runtime wrapper is implemented; external runtime validation remains blocked
 blocker_kind: local_runtime_unavailable
 blocker_fingerprint: no IsaacLab/Isaac Sim installation or container image; host Python is 3.13.2 while repo requires Python >=3.12,<3.13
 last_proven_evidence: >-
-  `python` cannot import isaaclab, isaacsim, or omni.isaac.lab; `command -v`
-  finds no isaaclab/isaacsim; Docker inventory contains only generic NVIDIA
-  CUDA images.
+  Revalidated this continuation: `python` cannot import isaaclab, isaacsim, or
+  omni.isaac.lab; `command -v` finds no isaaclab/isaacsim; host Python is
+  3.13.2; no launcher exists under /home/mi.
 completed: >-
   Added scripts/isaaclab/run.sh, scripts/isaaclab/probe.py, and
   scripts/isaaclab/runtime.toml; added a CPU-only contract test (2 passed with
