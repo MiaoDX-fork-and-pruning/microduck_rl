@@ -336,6 +336,16 @@ and missing metadata. Focused storage tests pass (`3 passed`). The hybrid PPO
 algorithm still needs to populate these fields during rollout and add the
 anchor loss/metrics during updates.
 
+Hybrid anchor integration proof: `GeneralistHybridPPO` now constructs
+`GeneralistAnchorStorage`, captures batched frozen-teacher actions from the
+pre-step actor observation, reads hold/behavior metadata from the unwrapped G0
+environment, and adds masked anchor MSE inside the same PPO minibatch loss.
+The hybrid config selects this class while direct PPO remains unchanged. The
+64-env, five-iteration smoke completed successfully; logs show non-zero anchor
+loss (`0.498` to `0.587`) and `384` held samples per update. This proves the
+training path is wired, but not behavior acceptance; a longer hybrid battery
+and P4 evaluation are still required.
+
 Current integration contract: the hybrid algorithm must override
 `construct_algorithm` to instantiate `GeneralistAnchorStorage`, override
 `act` to populate teacher actions plus hold/behavior metadata before each
