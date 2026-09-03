@@ -5,20 +5,22 @@ from __future__ import annotations
 from pathlib import Path
 
 import isaaclab.sim as sim_utils
-from isaaclab.actuators import DCMotorCfg
 from isaaclab.assets.articulation import ArticulationCfg
+
+from isaaclab_microduck.actuators import BamActuatorCfg
 
 from .report import ACTUATED_ORDER, ROOT
 
 USD_PATH = ROOT / ".cache/isaaclab-assets/microduck_walk.usd"
 
-MICRODUCK_ACTUATOR_CFG = DCMotorCfg(
+MICRODUCK_ACTUATOR_CFG = BamActuatorCfg(
     joint_names_expr=list(ACTUATED_ORDER),
-    saturation_effort=1.75,
-    effort_limit=1.75,
-    velocity_limit=10.0,
-    stiffness={".*": 200.0},
-    damping={".*": 0.5},
+    kp_fw=200.0,
+    vin_range=(6.5, 8.2),
+    effort_limit=1.0e9,
+    effort_limit_sim=1.0e9,
+    velocity_limit=100.0,
+    velocity_limit_sim=100.0,
 )
 
 MICRODUCK_CFG = ArticulationCfg(
