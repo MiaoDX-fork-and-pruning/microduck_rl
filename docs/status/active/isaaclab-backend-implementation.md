@@ -2,42 +2,138 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: switching to the officially paired IsaacLab 3.0 beta / Isaac Sim 6.0.1 runtime
-blocker_kind: mjcf_importer_no_artifact
-  blocker_fingerprint: Isaac Sim 6.0.1 NGC image pull stalled before local runtime validation; prior 5.0 importer hang superseded
+current_slice: Task H long Velocity-Flat run complete; walking battery failed acceptance
+blocker_kind: evaluation_battery
+  blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
-  Previous derived image probe exited 0 with CUDA available, Python 3.11.13,
-  Torch 2.7.0+cu128, IsaacLab package 0.44.9 from source release v2.2.0, and
-  Isaac Sim 5.0.0-rc.45 on the RTX 3090. The source checkout is now pinned to
-  IsaacLab v3.0.0-beta2.patch1, whose release notes pair it with Isaac Sim
-  6.0.1, but that image has not yet completed its NGC pull.
-  after 3 SimulationContext steps. Both IsaacLab MjcfConverter and the
-  supported standalone `MJCFCreateImportConfig`/`MJCFCreateAsset` API leave no
-  USD file or success marker; the latter reaches `[app ready]` then exceeds a
-  90-second bound. A 4 KB cached `.usd` is only the default empty stage and
-  has not passed robot prim/joint inspection, so it is not conversion proof.
-  Passing the documented `dest_path` argument did not change this behavior;
-  the output remains 4,150 bytes.
-  A clean run with NVIDIA's bundled `nv_ant.xml` fixture blocks inside the
-  native `MJCFCreateAsset` call: the Python process remains in
-  `futex_wait_queue` before the wrapper's post-command timeout loop. Three
-  stale conversion containers were removed and the result reproduced from a
-  single clean container, ruling out competing Isaac Sim instances.
+  The formal `microduck-isaaclab:3.0.0-isaacsim6.0.1` image runs the pinned
+  IsaacLab `release/3.0.0` source at commit
+  `c7fd163736878a4a348a63880ff6001ea8b3143e` with Isaac Sim 6.0.1, Torch
+  2.10.0+cu128, Warp 1.16.0, and Newton 1.5.1. The repository RL launcher
+  pre-registers Microduck tasks before dispatching the official
+  `run_train_cli`/`run_play_cli`. A 5-iteration PPO smoke passes (7,680 steps,
+  finite 61D observations and 14D actions). Official playback loads
+  `model_4.pt`, exports JIT/ONNX, completes rollout, and exits 0. With `--viz
+  kit`, the recorder writes 32 frames to
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_13-02-22/videos/play/clip_0000.mp4`.
+  The warning about `/World/envs/env_0/Robot/Geometry/trunk_base/trunk_base`
+  remains but does not block reset, policy execution, or video capture.
+  The converted USD still reports `drive_configured=false`: BAM is explicit
+  effort control, not implicit PhysX PD.
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
-  lazy package/task registry, 61D/14D policy ABI with golden fixture, and MJCF
-  asset parity report. Focused deterministic suite currently passes 14 tests;
-  conversion and diagnostic contract tests pass as well.
+  lazy package/task registry, 61D/14D policy ABI with golden fixture, MJCF
+  mechanical report, current Isaac Sim MJCF conversion/diagnostic path, a
+  machine-readable USD inspection script, and a Torch BAM XL330/M6 numerical
+  core and an explicit IsaacLab `BamActuatorCfg`/`BamActuator` wrapper. The
+  225-point voltage/torque/friction grid matches the reference BAM
+  implementation to floating-point precision (max error 1.4e-16). The wrapper
+  imports and the Microduck asset config resolves in the actual 6.0.1 runtime;
+  a 2-environment `BamActuator.compute()` smoke also returns finite efforts.
+  CPU/runtime contracts: 30 passed. InteractiveScene probing identified that
+  IsaacLab 3.0 beta also requires the bundled
+  `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH. PhysX
+  articulation loading additionally probes `isaaclab_newton`, so the runtime
+  command now includes the IsaacLab `newton`, `ov`, and `ovphysx` source paths.
+  The standard IsaacLab `AppLauncher` path reaches `sim_reset`,
+  `articulation_ready`, and `step_ok` for both bundled Cartpole and the
+  Microduck USD. The real Microduck articulation resolves 14 joints with
+  `BamActuator` and produces finite efforts. The dynamic BAM bench report
+  `.cache/isaaclab-assets/bam_dynamic_bench.json` covers 20-step 7.5V and
+  6.5V target steps plus a 7.5V sinusoid; all samples are finite. The report
+  explicitly records `friction_bridge=not_applied_to_physx`.
+  The deterministic battery now runs on the real USD with a post-clone ground
+  plane workaround required by Isaac Sim 6.0.1. Its 200-step subset covers
+  home settle, free fall, target step, and NaN soak; all samples are finite.
+  It applies the motor-only friction bridge and records the limitation as
+  `motor_only_external_effort_unavailable`. All four cases are finite. With
+  the canonical HOME target, `home_settle` and `nan_soak` settle at root z
+  about 0.113 m with max tilt about 0.222 rad; free fall reaches z about
+  0.106 m and max tilt about 0.669 rad. The quaternion check uses IsaacLab's
+  xyzw layout.
+  The imported USD root discovery issue is fixed by explicitly configuring
+  `articulation_root_prim_path="/Geometry/trunk_base"`; the probe reaches
+  `sim_reset`, `articulation_ready`, and `step_ok` with 14 joints. Policy-to-
+  PhysX joint ordering is explicitly mapped and covered by a CPU golden test.
+  The fixed-root sweep shows monotonic response across friction scales
+  0.5/1.0/1.5: static friction 0.0181/0.0362/0.0543 N-m and peak speed
+  1.217/1.071/0.884 rad/s.
+  Added an IsaacLab ManagerBasedRLEnv Velocity-Flat task with canonical HOME
+  action offsets, named PhysX-to-policy joint ordering, native velocity
+  commands, and a 61D policy observation group. The task-only simulator spawn
+  HOME clamps right_hip_yaw to its authored 0.436 rad limit while preserving
+  the hardware HOME in the policy ABI. The staged smoke harness passes real
+  Isaac Sim 6.0.1 reset and random-action stepping for one robot and 64
+  environments; both reports are finite with 61D observations and 14D actions.
+  The 64-env run records 4 controlled episode resets in 20 steps. Isaac Sim's
+  entity ground-plane clone issue is handled by injecting the plane after scene
+  cloning, matching the physics battery workaround. The official RSL-RL
+  trainer then completes 5 PPO iterations / 7,680 steps with finite metrics and
+  writes model_0.pt and model_4.pt under the ignored logs path.
+  A first 4096-environment / 1000-iteration Velocity-Flat run also completed
+  in about 586 seconds (98,304,000 environment steps) and produced
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_12-06-46/model_999.pt`.
+  The run remained finite and reached about 841-step mean episodes with 0.183
+  fallen fraction, but XY/yaw tracking errors remained about 0.399 m/s and
+  1.11 rad/s and the task success rate stayed zero. These are training-chain
+  signals, not evidence of a reliable gait or simulator parity. The fixed-seed
+  command battery now completes on the same smoke checkpoint with 16
+  environments and 250 steps for zero, forward, lateral, and yaw commands.
+  All tensors are finite. Reset fractions are 0.0205, 0.0213, 0.0208, and
+  0.0208; mean XY errors are 0.0911, 0.1421, 0.2493, and 0.0938 m/s. The
+  lateral case is the weakest tracker and maximum tilt is about 0.85 rad in
+  every case. See `docs/isaaclab_velocity_flat_command_battery_report.md`.
+  A dedicated PhysX force timing probe confirms that the force getters exist and
+  return finite tensors, but refresh only after `sim.step()`, after
+  `BamActuator.compute()` has run; no same-step friction bridge is accepted.
+  Reward-local-optimum probe changed IsaacLab Velocity-Flat to alive 0.20,
+  linear tracking weight/std 3.5/0.25, and yaw tracking weight/std 1.5/0.50;
+  focused reward-contract tests pass. A 64-env, 5-iteration official RSL-RL
+  smoke also passes with finite 61D/14D tensors, but early iterations still
+  fall nearly universally. A follow-up 4096-env/1000-iteration diagnostic was
+  started and stopped after about four minutes during scene initialization
+  without producing a checkpoint, so it is not training evidence.
+  A subsequent authorized 4096-env/4000-iteration run completed in about 2393
+  seconds and produced `model_3999.pt` (SHA256
+  `d6d235a3b528079a4a714efbcad1131cb09ec4c7b02e411d3fb3f51f61fed13d`). The
+  final fixed battery is finite, but forward and lateral commands produce only
+  about 0.008 m/s actual XY speed, while yaw reaches about 0.150 rad/s for a
+  0.5 rad/s command with 5 resets and max tilt 1.299 rad. Zero command has no
+  resets. Full details are in
+  `docs/isaaclab_velocity_flat_long_run_report.md` and
+  `.cache/isaaclab-assets/velocity_flat_command_battery_long_3999.json`.
 next_action: >-
-  Finish pulling/building the official Isaac Sim 6.0.1 image, run the headless
-  probe and bundled `nv_ant.xml` conversion, then retry Microduck. Do not
-  hand-maintain a USD without a reproducible source conversion.
+  Do not start VelStand/Task I or another long PPO job. Implement the locked
+  strict-mjlab-semantic parity slice in order: action/BAM/asset semantics;
+  reset/DR and actor sensor corruption; commands and complete rewards;
+  privileged critic observations; then the common fixed battery and 64-env
+  smoke. Launch a replacement 4096-env/6000-iteration run only after those
+  gates pass. The completed long run proves runtime sustainability but fails
+  walking acceptance. Keep the USD `drive_configured=false` finding visible:
+  BAM is explicit effort control, not implicit PhysX PD. PhysX force getters are
+  available, but only as post-step data; same-step external-load friction is an
+  explicit backend limitation, not a reason to alter mjlab semantics.
 next_proof: >-
-  `scripts/isaaclab/docker-run.sh ./python.sh -u scripts/isaaclab/probe.py`
-  against a completed official Isaac Sim image, plus existing mjlab regression
-  checks.
+  `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
+  tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_velocity_flat_rewards.py
+  tests/test_isaaclab_policy_joint_mapping.py tests/test_isaaclab_asset_cfg.py
+  tests/test_isaaclab_friction_sweep_contract.py`,
+  plus `.cache/isaaclab-assets/velocity_flat_smoke_1.json`,
+  `.cache/isaaclab-assets/velocity_flat_smoke_64_prestartup.json`, and the
+  smoke run under `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/`.
+  The container dependency probe is green with `torch==2.10.0+cu128`,
+  `tensordict==0.10.0`, and `rsl_rl==5.4.1` (the IsaacLab image; mjlab remains
+  on `rsl-rl-lib 5.0.1`).
 stop_condition: >-
-  Do not create the backend skeleton or claim implementation completion until
-  Task A acceptance is proven.
+  Do not claim simulator parity or reliable walking, and do not start VelStand/
+  Task I, until a revised Velocity-Flat checkpoint passes the fixed command
+  battery with real translation, bounded tilt, and no yaw instability. Do not
+  start another long PPO run without a new Task H experiment design.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
-parked_todos: full plan Tasks A-I remain pending
+parked_todos: >-
+  External-load friction parity remains unresolved because same-step solved
+  torque is unavailable to the explicit actuator callback; DCMotorCfg is not
+  accepted as BAM parity. The previous 4096-env retry produced no checkpoint
+  and was stopped during initialization; the authorized retry completed but
+  failed the walking battery. The long-run checkpoint remains available for
+  analysis.

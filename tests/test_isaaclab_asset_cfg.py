@@ -10,5 +10,8 @@ def test_asset_cfg_declares_policy_joint_order_without_importing_isaaclab() -> N
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
 
     assert "ArticulationCfg" in names
+    assert "BamActuatorCfg" in names
+    assert "DCMotorCfg" not in names
     assert "ACTUATED_ORDER" in names
     assert "MICRODUCK_CFG" in {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
+    assert "policy_target_to_sim" in {node.name for node in ast.walk(tree) if isinstance(node, ast.FunctionDef)}

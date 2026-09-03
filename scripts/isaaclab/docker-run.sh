@@ -3,9 +3,9 @@ set -euo pipefail
 
 # Isaac Sim publishes the IsaacLab-compatible runtime as a large, GPU-enabled
 # container. Keep it separate from the repository's mjlab uv environment.
-image="${ISAACLAB_DOCKER_IMAGE:-microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1}"
+image="${ISAACLAB_DOCKER_IMAGE:-microduck-isaaclab:3.0.0-isaacsim6.0.1}"
 repo_root="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-isaaclab_source="${repo_root}/.cache/IsaacLab-v3.0.0-beta2.patch1"
+isaaclab_source="${repo_root}/.cache/IsaacLab-v3.0.0"
 
 if [[ ! -d "$isaaclab_source" ]]; then
   echo "error: pinned IsaacLab source is missing; run scripts/isaaclab/fetch_source.sh" >&2
@@ -14,6 +14,8 @@ fi
 
 repo_mount="${repo_root}:/workspace/microduck_rl:ro"
 if [[ "${ISAACLAB_DOCKER_WRITE:-0}" == "1" ]]; then
+  mkdir -p "${repo_root}/logs"
+  chmod a+rwx "${repo_root}/logs"
   repo_mount="${repo_root}:/workspace/microduck_rl"
 fi
 
@@ -24,6 +26,7 @@ fi
 exec docker run --rm --gpus all --network host \
   -e ACCEPT_EULA=Y \
   -e PRIVACY_CONSENT=Y \
+  -e GIT_PYTHON_REFRESH=quiet \
   -e TERM=xterm \
   -v "${repo_mount}" \
   -v "${isaaclab_source}:/workspace/IsaacLab:ro" \

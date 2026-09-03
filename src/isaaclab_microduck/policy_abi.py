@@ -11,6 +11,12 @@ ACTION_SIZE = 14
 COMMAND_SIZE = 13
 ACTION_SCALE = 1.0
 
+POLICY_JOINT_ORDER = (
+    "left_hip_yaw", "left_hip_roll", "left_hip_pitch", "left_knee", "left_ankle",
+    "neck_pitch", "head_pitch", "head_yaw", "head_roll",
+    "right_hip_yaw", "right_hip_roll", "right_hip_pitch", "right_knee", "right_ankle",
+)
+
 # Servo order: left leg, neck/head, right leg.
 HOME_POSITION = np.asarray(
     [0.0, -0.0873, -0.4579, -0.0049, 0.4530,
@@ -51,3 +57,15 @@ def action_to_target(raw_action: Sequence[float], scale: float = ACTION_SCALE) -
     if action.size != ACTION_SIZE:
         raise ValueError(f"expected {ACTION_SIZE} action values, got {action.size}")
     return HOME_POSITION + np.float32(scale) * action
+
+
+def reorder_policy_joints(values: Sequence[float] | np.ndarray, target_order: Sequence[str]) -> np.ndarray:
+    """Reorder canonical policy joints into a simulator's named traversal order."""
+
+    array = np.asarray(values, dtype=np.float32)
+    if array.shape[-1] != ACTION_SIZE:
+        raise ValueError(f"expected {ACTION_SIZE} policy joints, got {array.shape[-1]}")
+    if set(target_order) != set(POLICY_JOINT_ORDER):
+        raise ValueError(f"unexpected simulator joint names: {list(target_order)}")
+    index = {name: i for i, name in enumerate(POLICY_JOINT_ORDER)}
+    return array[..., [index[name] for name in target_order]]
