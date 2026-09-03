@@ -8,6 +8,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "isaaclab" / "run.sh"
+DOCKER_RUNNER = ROOT / "scripts" / "isaaclab" / "docker-run.sh"
 MANIFEST = ROOT / "scripts" / "isaaclab" / "runtime.toml"
 
 
@@ -17,8 +18,13 @@ def test_runtime_manifest_keeps_isaaclab_external() -> None:
     assert manifest["installation"] == "external"
     assert "ISAACLAB_LAUNCHER" in manifest["launcher_env"]
     assert manifest["validation"]["headless_probe"].startswith(
-        "scripts/isaaclab/run.sh"
+        "scripts/isaaclab/docker-run.sh"
     )
+
+
+def test_docker_runner_is_pinned_and_executable() -> None:
+    assert DOCKER_RUNNER.stat().st_mode & 0o111
+    assert "nvcr.io/nvidia/isaac-sim:5.0.0" in DOCKER_RUNNER.read_text()
 
 
 def test_runner_fails_clearly_without_selected_runtime() -> None:
