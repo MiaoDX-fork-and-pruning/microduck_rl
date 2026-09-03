@@ -1,6 +1,6 @@
 # Preflight: G0 VELSTAND Causal Probe
 
-Preflight status: ACTIVE
+Preflight status: COMPLETE-FAILED-PROBE
 Task source: `docs/plans/generalist-g0-velstand-causal-probe.md`
 Canonical source: `docs/plans/generalist-g0-velstand-causal-probe.md`
 Route: durable `$intuitive-flow`
@@ -192,6 +192,11 @@ rounds failed closed-loop reproduction. Diagnosis is
 hypotheses are recorded by `scripts/summarize_velstand_causal_probe.py`.
 Return to parent requires approval of the bounded state-coverage/initialization
 amendment before any new PPO arm.
+
+Final diagnosis artifact: `/tmp/g0-velstand-causal-diagnosis-final.json`.
+Phase B is closed by the fixed early-stop condition; this is not a G0
+acceptance claim and no student is promoted. Generated reports/checkpoints stay
+outside Git as required by the plan.
 
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
