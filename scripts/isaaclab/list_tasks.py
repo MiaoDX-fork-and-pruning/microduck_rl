@@ -1,11 +1,10 @@
 """List Microduck IsaacLab tasks without initializing Isaac Sim."""
 
-from isaaclab_microduck import available_tasks
+from isaaclab_microduck.cli import list_tasks
 
 
 def main() -> None:
-    for task in available_tasks():
-        print(task)
+    list_tasks()
 
 
 if __name__ == "__main__":
