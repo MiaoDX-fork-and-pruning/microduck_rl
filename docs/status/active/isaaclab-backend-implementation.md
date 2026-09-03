@@ -4,13 +4,13 @@ control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
 current_slice: switching to the officially paired IsaacLab 3.0 beta / Isaac Sim 6.0.1 runtime
 blocker_kind: mjcf_importer_no_artifact
-  blocker_fingerprint: prior Isaac Sim 5.0 MJCFCreateAsset hang; superseded by runtime switch
+  blocker_fingerprint: Isaac Sim 6.0.1 NGC image pull stalled before local runtime validation; prior 5.0 importer hang superseded
 last_proven_evidence: >-
-  Revalidated this continuation: `python` cannot import isaaclab, isaacsim, or
-  omni.isaac.lab; `command -v` finds no isaaclab/isaacsim; host Python is
-  Derived image probe exits 0 with CUDA available, Python 3.11.13, Torch
-  2.7.0+cu128, IsaacLab package 0.44.9 from source release v2.2.0, and Isaac
-  Sim 5.0.0-rc.45 on the RTX 3090. Empty-stage smoke also exits successfully
+  Previous derived image probe exited 0 with CUDA available, Python 3.11.13,
+  Torch 2.7.0+cu128, IsaacLab package 0.44.9 from source release v2.2.0, and
+  Isaac Sim 5.0.0-rc.45 on the RTX 3090. The source checkout is now pinned to
+  IsaacLab v3.0.0-beta2.patch1, whose release notes pair it with Isaac Sim
+  6.0.1, but that image has not yet completed its NGC pull.
   after 3 SimulationContext steps. Both IsaacLab MjcfConverter and the
   supported standalone `MJCFCreateImportConfig`/`MJCFCreateAsset` API leave no
   USD file or success marker; the latter reaches `[app ready]` then exceeds a
