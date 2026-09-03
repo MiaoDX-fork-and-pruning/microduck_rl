@@ -5,7 +5,7 @@ latest_intent: implement the IsaacLab backend plan via intuitive-flow
 current_slice: explicit IsaacLab BAM wrapper; PhysX friction integration remains
   the simulator gate
 blocker_kind: physx_drive_mapping_unresolved
-  blocker_fingerprint: converted Microduck USD has 14 joints and limits but zero authored PhysX drive stiffness/damping
+  blocker_fingerprint: converted Microduck USD has 14 joints and limits but zero authored PhysX drive stiffness/damping; InteractiveScene spawn has not completed in a 240s probe
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -29,6 +29,9 @@ completed: >-
   CPU/runtime contracts: 28 passed. InteractiveScene probing identified that
   IsaacLab 3.0 beta also requires the bundled
   `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH.
+  A staged articulation probe reaches App, imports, and SimulationContext, but
+  remains before `scene_ready` during InteractiveScene construction at 240s;
+  this is unproven scene-spawn behavior, not a successful articulation test.
 next_action: >-
   Verify the wrapper on an instantiated IsaacLab articulation and define how
   its friction budget is applied to PhysX. Run a one-joint dynamic bench for
@@ -40,7 +43,8 @@ next_proof: >-
   `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
   --headless --output .cache/isaaclab-assets/microduck_walk.usd.report.json'`,
-  followed by actuator numerical tests and existing mjlab regression checks.
+  followed by the staged `scripts/isaaclab/articulation_probe.py`, actuator
+  numerical tests, and existing mjlab regression checks.
 stop_condition: >-
   Do not claim simulator parity or start PPO until PhysX drive/BAM behavior is
   explicitly mapped and the deterministic asset/actuator acceptance is green.
