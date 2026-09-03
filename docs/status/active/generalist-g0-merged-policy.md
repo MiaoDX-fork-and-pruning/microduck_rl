@@ -52,6 +52,13 @@ The corrected Track A battery is still a diagnostic failure: stand final height
 legal edges fail destination-specific gates. Reset coverage and anchor wiring
 are therefore proven, but behavior learning remains unresolved.
 
+Staged-tax diagnostic: the fresh 600-iteration run under delayed motion taxes
+completed finitely at `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-14-00_g0_discovery_tax_600`.
+Corrected Track A still failed all behavior and legal-edge gates (stand tilt
+`1.450 rad`, locomotion `1.749 rad`, sit/stand `1.501 rad`). Reset routing,
+termination horizon, and tax timing interventions have now each been tested;
+none restores merged-policy behavior.
+
 Schema audit: evaluator conditioning, PPO actor ordering, and frozen-teacher
 reconstruction agree on behavior offset 48, command offset 54, and the frozen
 71D layout. The remaining failure is not an ABI or normalization-slot mismatch.
@@ -63,8 +70,9 @@ falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
 this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
 tolerance; the rerun remains a diagnostic failure.
 
-Next hypothesis: the remaining failure is policy/task learning, likely reward
-economics or missing transition-phase reset coverage, rather than schema,
+Next hypothesis: the remaining failure is policy/task learning, specifically
+the still-unimplemented transition-phase reset/state curriculum, rather than
+schema,
 reset, anchor, or termination plumbing. Any next experiment must change the
 reward curriculum or transition-phase coverage and be compared with this
 baseline.
