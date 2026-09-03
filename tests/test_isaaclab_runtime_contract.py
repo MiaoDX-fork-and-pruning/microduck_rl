@@ -15,7 +15,7 @@ MANIFEST = ROOT / "scripts" / "isaaclab" / "runtime.toml"
 def test_runtime_manifest_keeps_isaaclab_external() -> None:
     manifest = tomllib.loads(MANIFEST.read_text())
 
-    assert manifest["installation"] == "external"
+    assert manifest["installation"] == "official_docker_image"
     assert "ISAACLAB_LAUNCHER" in manifest["launcher_env"]
     assert manifest["validation"]["headless_probe"].startswith(
         "scripts/isaaclab/docker-run.sh"
