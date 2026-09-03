@@ -138,9 +138,8 @@ tests pass after the repair. Phase A report from
 caused by reconstructing with raw `_std` instead of the ONNX denominator
 `_std + 0.01`.
 
-Next action: execute the bounded VELSTAND-only BC/DAgger closed-loop battery
-using the existing `/tmp/g0-bc-dagger` candidate as a diagnostic starting point,
-then record the primary gate result and root-cause classification. Do not start
+Next action: retain the fixed-budget student battery as diagnosis-only and
+separate the missing reward-term metric from the stability result. Do not start
 PPO.
 
 Phase B diagnostic evidence: the existing bounded candidate was evaluated with
@@ -157,6 +156,13 @@ candidate therefore does not justify Phase C or merged PPO. Machine-readable
 diagnosis is `/tmp/g0-velstand-causal-diagnosis.json` and classifies the current
 branch as `state_distribution_coverage_or_model_capacity`; the remaining
 ambiguity requires the full frozen 32-episode recovery-bucket battery.
+
+Battery evidence: `scripts/evaluate_velstand_student_battery.py` ran all 32
+seed-42 episodes (the deterministic harness resets to the same canonical pose
+for each case). The student is finite but has `success_rate=0.0`; every case
+fails the 65-degree stability gate. `main_task_metric` is intentionally `null`
+because this CPU student harness does not expose specialist reward terms, so
+the acceptance report is fail-closed rather than inferred from tilt.
 
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
