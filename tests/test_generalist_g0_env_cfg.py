@@ -1,3 +1,5 @@
+from dataclasses import asdict
+
 import torch
 
 from mjlab_microduck.tasks.microduck_generalist_g0_env_cfg import (
@@ -10,6 +12,7 @@ from mjlab_microduck.tasks.microduck_generalist_g0_env_cfg import (
     make_microduck_generalist_g0_env_cfg,
     G0_TRANSITION_CONTRACTS,
     initialize_g0_state,
+    reset_g0_sitstand_state,
     sample_g0_transition,
 )
 
@@ -27,6 +30,9 @@ def test_g0_cfg_composes_all_collision_recipe_and_conditioning():
         "sitstand_posture_height",
         "sitstand_posture_composite",
     } <= set(cfg.rewards)
+    reset_events = list(cfg.events)
+    assert reset_events.index("g0_sitstand_state") > reset_events.index("g0_state")
+    assert reset_events.index("g0_sitstand_state") > reset_events.index("random_prone_init")
 
 
 def test_g0_observation_terms_follow_frozen_abi_order():
@@ -61,6 +67,8 @@ def test_g0_baseline_runner_identities_are_comparable_but_distinct():
     assert GeneralistG0DirectPpoRlCfg.run_name != GeneralistG0HybridPpoRlCfg.run_name
     assert GeneralistG0DirectPpoRlCfg.num_steps_per_env == GeneralistG0HybridPpoRlCfg.num_steps_per_env
     assert GeneralistG0DirectPpoRlCfg.max_iterations == GeneralistG0HybridPpoRlCfg.max_iterations
+    assert "anchor_weights" not in asdict(GeneralistG0DirectPpoRlCfg)["algorithm"]
+    assert asdict(GeneralistG0HybridPpoRlCfg)["algorithm"]["anchor_weights"] == 0.1
 
 
 def test_g0_transition_contract_is_exactly_four_track_a_edges():
@@ -97,6 +105,39 @@ class _RouterEnv:
 
     def __init__(self):
         self.command_manager = _Manager(1)
+
+
+def test_g0_sitstand_reset_covers_all_state_goal_pairs(monkeypatch):
+    class Env:
+        num_envs = 4096
+        device = "cpu"
+
+        def __init__(self):
+            self.command_manager = _Manager(self.num_envs)
+
+    env = Env()
+    ids = torch.arange(env.num_envs)
+    torch.manual_seed(42)
+    initialize_g0_state(env, ids)
+
+    physical_bucket = torch.full((env.num_envs,), -1, dtype=torch.long)
+
+    def record_reset(_env, selected, *, sitting_prob, standing_prob, **_params):
+        physical_bucket[selected] = 1 if sitting_prob == 1.0 else 0
+        assert sitting_prob + standing_prob == 1.0
+
+    monkeypatch.setattr(
+        "mjlab_microduck.tasks.microduck_generalist_g0_env_cfg._mdp.set_random_ground_state",
+        record_reset,
+    )
+    reset_g0_sitstand_state(env, ids)
+
+    sitstand = env.g0_behavior_id == G0_BEHAVIORS.index("SITSTAND")
+    command_goal = env.command_manager.term.vel_command_b[:, 0].to(torch.long)
+    assert torch.equal(env.g0_posture[sitstand].to(torch.long), command_goal[sitstand])
+    assert physical_bucket[~sitstand].eq(-1).all()
+    pairs = set(zip(physical_bucket[sitstand].tolist(), command_goal[sitstand].tolist()))
+    assert pairs == {(0, 0), (0, 1), (1, 0), (1, 1)}
 
 
 def test_g0_router_holds_initial_stand_then_uses_velocity_contract():

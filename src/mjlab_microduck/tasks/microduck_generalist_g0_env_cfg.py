@@ -8,6 +8,7 @@ separate training task.
 from __future__ import annotations
 
 import copy
+import math
 import torch
 from dataclasses import dataclass
 from mjlab.envs import ManagerBasedRlEnvCfg
@@ -22,6 +23,11 @@ from mjlab_microduck.tasks.symmetry import PpoWithSymmetryCfg
 G0_BEHAVIORS = ("VELSTAND", "VELOCITY", "SITSTAND")
 G0_OBS_DIM = 71
 G0_ACTION_DIM = 14
+
+
+@dataclass
+class GeneralistG0HybridPpoAlgorithmCfg(PpoWithSymmetryCfg):
+    anchor_weights: float = 0.1
 
 
 @dataclass(frozen=True)
@@ -125,10 +131,61 @@ def initialize_g0_state(env, env_ids):
     env.g0_transition_elapsed_s[env_ids] = 0
     dwell = torch.tensor((G0_INITIAL_STAND_DWELL_S, 14.0, 6.0), device=env.device)
     env.g0_transition_dwell_s[env_ids] = dwell[initial]
-    for behavior_id, command in enumerate(((0.0, 0.0, 0.0), (0.15, 0.0, 0.0), (1.0, 0.0, 0.0))):
+    for behavior_id, command in enumerate(((0.0, 0.0, 0.0), (0.15, 0.0, 0.0))):
         selected = env_ids[initial == behavior_id]
         if len(selected):
             _write_g0_command(env, selected, command)
+    sitstand_ids = env_ids[initial == G0_BEHAVIORS.index("SITSTAND")]
+    if len(sitstand_ids):
+        posture = torch.randint(2, (len(sitstand_ids),), device=env.device).to(torch.float32)
+        env.g0_posture[sitstand_ids] = posture
+        for target in (0, 1):
+            selected = sitstand_ids[posture == target]
+            if len(selected):
+                _write_g0_command(env, selected, (float(target), 0.0, 0.0))
+    return None
+
+
+def reset_g0_sitstand_state(env, env_ids):
+    """Apply the specialist's independent seated/standing reset buckets."""
+    if not hasattr(env, "g0_behavior_id"):
+        raise RuntimeError("g0_state must run before reset_g0_sitstand_state")
+    sitstand_ids = env_ids[
+        env.g0_behavior_id[env_ids] == G0_BEHAVIORS.index("SITSTAND")
+    ]
+    if not len(sitstand_ids):
+        return None
+
+    from mjlab_microduck.tasks.microduck_sitstand_env_cfg import SITTING_TARGET_OVERRIDES
+
+    seated = torch.rand(len(sitstand_ids), device=env.device) < 0.5
+    reset_params = {
+        "face_down_prob": 0.0,
+        "face_up_prob": 0.0,
+        "sitting_joint_overrides": SITTING_TARGET_OVERRIDES,
+        "sitting_joint_noise_std": 0.10,
+        "sitting_tilt_max": math.radians(8.0),
+        "sitting_z_min": 0.06,
+        "sitting_z_max": 0.075,
+        "standing_z_min": 0.11,
+        "standing_z_max": 0.12,
+    }
+    if seated.any():
+        _mdp.set_random_ground_state(
+            env,
+            sitstand_ids[seated],
+            sitting_prob=1.0,
+            standing_prob=0.0,
+            **reset_params,
+        )
+    if (~seated).any():
+        _mdp.set_random_ground_state(
+            env,
+            sitstand_ids[~seated],
+            sitting_prob=0.0,
+            standing_prob=1.0,
+            **reset_params,
+        )
     return None
 
 
@@ -216,6 +273,11 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
     cfg.g0_observation_dim = G0_OBS_DIM
     cfg.g0_action_dim = G0_ACTION_DIM
     cfg.events["g0_state"] = EventTermCfg(func=initialize_g0_state, mode="reset")
+    # Dict insertion order is the reset order: route physical state only after
+    # the behavior ID exists and after inherited base/joint/prone reset terms.
+    cfg.events["g0_sitstand_state"] = EventTermCfg(
+        func=reset_g0_sitstand_state, mode="reset"
+    )
     cfg.events["g0_transition"] = EventTermCfg(
         func=sample_g0_transition, mode="interval", interval_range_s=(0.02, 0.02)
     )
@@ -299,5 +361,7 @@ GeneralistG0DirectPpoRlCfg.run_name = "direct_ppo"
 GeneralistG0HybridPpoRlCfg = copy.deepcopy(GeneralistG0RlCfg)
 GeneralistG0HybridPpoRlCfg.experiment_name = "generalist_g0_hybrid_ppo"
 GeneralistG0HybridPpoRlCfg.run_name = "hybrid_ppo"
+GeneralistG0HybridPpoRlCfg.algorithm = GeneralistG0HybridPpoAlgorithmCfg(
+    **vars(GeneralistG0HybridPpoRlCfg.algorithm)
+)
 GeneralistG0HybridPpoRlCfg.algorithm.class_name = "mjlab_microduck.generalist_hybrid_ppo.GeneralistHybridPPO"
-GeneralistG0HybridPpoRlCfg.algorithm.anchor_weights = 0.1
