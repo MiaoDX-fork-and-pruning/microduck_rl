@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task C MJCF conversion attempted; importer produces no USD artifact
+current_slice: Task C MJCF importer diagnostic added; converter still produces no USD artifact
 blocker_kind: mjcf_importer_no_artifact
-blocker_fingerprint: IsaacLab MjcfConverter exits 0 but generates no USD in Isaac Sim 5.0.0 headless app
+  blocker_fingerprint: IsaacLab MjcfConverter exits 0 but generates no USD in Isaac Sim 5.0.0 headless app
 last_proven_evidence: >-
   Revalidated this continuation: `python` cannot import isaaclab, isaacsim, or
   omni.isaac.lab; `command -v` finds no isaaclab/isaacsim; host Python is
@@ -18,8 +18,9 @@ completed: >-
   lazy package/task registry, 61D/14D policy ABI with golden fixture, and MJCF
   asset parity report. Focused deterministic suite currently passes 13 tests.
 next_action: >-
-  Resolve the Isaac Sim 5.0 MJCF importer activation/version issue, or select a
-  supported conversion path, before creating a PhysX ArticulationCfg.
+  Use the diagnostic to resolve the Isaac Sim 5.0 MJCF importer activation/version
+  issue, or select a supported conversion path, before creating a PhysX
+  ArticulationCfg.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh ./python.sh -u scripts/isaaclab/probe.py`
   against a completed official Isaac Sim image, plus existing mjlab regression
