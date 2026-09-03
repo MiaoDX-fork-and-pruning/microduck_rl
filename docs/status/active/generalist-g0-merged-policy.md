@@ -18,6 +18,10 @@ The G0 termination contract now allows arbitrary tilt from step zero; inherited
 VelStand's 70-degree bootstrap termination is removed so sit/rise and recovery
 traces are not truncated. The fallen-time backstop remains enabled.
 
+Discovery economics now delay action-rate, body-angular-velocity, and
+torque-rate penalties until `1200 * 24` environment steps, then restore their
+validated baseline weights.
+
 Last proven evidence:
 
 - Focused G0 suite: `49 passed`.
@@ -31,6 +35,10 @@ Last proven evidence:
 - Long-horizon termination smoke completed at
   `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-02-46_g0_long_horizon_smoke`:
   `fell_over=0`, finite rewards, and no NaN terminations.
+- Discovery-tax smoke completed at
+  `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-12-15_g0_discovery_tax_smoke`;
+  all three staged tax terms reported zero at step zero and training remained
+  finite.
 
 Completed batch: P0-P4 tooling, frozen manifests/graph, 71D ABI correction,
 hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
