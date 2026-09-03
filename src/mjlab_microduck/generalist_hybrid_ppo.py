@@ -43,6 +43,7 @@ class GeneralistHybridPPO(PPO):
         cfg["algorithm"] = resolve_symmetry_config(cfg["algorithm"], env)
         actor = actor_class(obs, cfg["obs_groups"], "actor", env.num_actions, **cfg["actor"]).to(device)
         critic = critic_class(obs, cfg["obs_groups"], "critic", 1, **cfg["critic"]).to(device)
+        cfg["algorithm"].pop("share_cnn_encoders", None)
         storage = GeneralistAnchorStorage(
             "rl", env.num_envs, cfg["num_steps_per_env"], obs, [env.num_actions], device
         )
