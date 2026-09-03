@@ -7,7 +7,7 @@ from mjlab_microduck.generalist_anchor_storage import GeneralistAnchorStorage
 
 
 def _storage():
-    obs = TensorDict({"actor": torch.zeros(3)}, batch_size=[2])
+    obs = TensorDict({"actor": torch.zeros(2, 3)}, batch_size=[2])
     storage = GeneralistAnchorStorage("rl", 2, 2, obs, (2,))
     for t in range(2):
         tr = RolloutStorage.Transition()
@@ -22,12 +22,13 @@ def _storage():
         tr.hold_mask = torch.tensor([t == 0, t == 1])
         tr.behavior_ids = torch.tensor([t, t + 1])
         storage.add_transition(tr)
-    storage.compute_returns(torch.zeros(2, 1), 0.99, 0.95)
+    storage.returns.zero_()
+    storage.advantages.zero_()
     return storage
 
 
 def test_rejects_non_rl_storage():
-    obs = TensorDict({"actor": torch.zeros(3)}, batch_size=[1])
+    obs = TensorDict({"actor": torch.zeros(1, 3)}, batch_size=[1])
     with pytest.raises(ValueError, match="training_type='rl'"):
         GeneralistAnchorStorage("distillation", 1, 1, obs, (2,))
 
@@ -39,7 +40,7 @@ def test_anchor_metadata_is_carried_through_minibatch():
     assert batch.hold_mask.dtype is torch.bool
     assert batch.behavior_ids.dtype is torch.long
     pairs = {(int(a[0]), int(m[0]), int(b[0])) for a, m, b in zip(batch.teacher_actions, batch.hold_mask, batch.behavior_ids)}
-    assert pairs == {(10, 1, 0), (10, 0, 1), (11, 1, 1), (11, 0, 2)}
+    assert pairs == {(10, 1, 0), (10, 0, 1), (11, 1, 2), (11, 0, 1)}
 
 
 def test_missing_anchor_field_fails_fast():
