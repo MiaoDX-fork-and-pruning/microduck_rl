@@ -242,6 +242,15 @@ edges remain unexercised. The ABI mismatch was real and is fixed, but this run
 does not qualify as a G0 candidate; hybrid comparison and final P4 evidence
 remain pending.
 
+Post-ABI hybrid diagnostic: a matched dense-BC-initialized hybrid run
+(`seed=42`, 64 envs, 100 iterations) completed numerically finite. Stand now
+passes the behavior gate (maximum tilt 0.146 rad), but locomotion and sit/stand
+remain failures (1.803 and 2.535 rad). All four legal transition batteries
+also fail: `SITSTAND->VELSTAND` 2.843 rad, `VELOCITY->VELSTAND` 1.803 rad,
+`VELSTAND->SITSTAND` 2.663 rad, and `VELSTAND->VELOCITY` 1.725 rad. The
+fail-closed validator returns `DIAGNOSTIC_FAIL`; hybrid improves stand only and
+is not eligible as a next-skill seed.
+
 Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
 continue as a next-skill seed. Both remain diagnostic failures, while the
 distilled BC/DAgger actor remains the strongest available artifact for schema,
