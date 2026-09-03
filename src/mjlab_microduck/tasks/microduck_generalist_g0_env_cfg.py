@@ -24,6 +24,7 @@ G0_BEHAVIORS = ("VELSTAND", "VELOCITY", "SITSTAND")
 G0_OBS_DIM = 71
 G0_ACTION_DIM = 14
 G0_DISCOVERY_STEPS = 1200 * 24
+G0_INITIAL_TRANSITION_PROB = 0.20
 
 
 @dataclass
@@ -153,6 +154,38 @@ def initialize_g0_state(env, env_ids):
             selected = sitstand_ids[posture == target]
             if len(selected):
                 _write_g0_command(env, selected, (float(target), 0.0, 0.0))
+    # Reverse-curriculum transition buckets: expose legal handoff states at
+    # reset so the last mile is represented before on-policy discovery finds it.
+    transition_mask = torch.rand(len(env_ids), device=env.device) < G0_INITIAL_TRANSITION_PROB
+    transition_ids = env_ids[transition_mask]
+    if len(transition_ids):
+        edges = torch.tensor(((0, 1), (1, 0), (0, 2), (2, 0)), device=env.device)
+        selected_edges = edges[torch.randint(len(edges), (len(transition_ids),), device=env.device)]
+        edge_dwell = torch.tensor((14.0, 8.0, 6.0, 6.0), device=env.device)
+        edge_index = torch.zeros(len(transition_ids), device=env.device, dtype=torch.long)
+        for idx, edge in enumerate(((0, 1), (1, 0), (0, 2), (2, 0))):
+            edge_index[(selected_edges[:, 0] == edge[0]) & (selected_edges[:, 1] == edge[1])] = idx
+        env.g0_transition_dwell_s[transition_ids] = edge_dwell[edge_index]
+        env.g0_transition_source[transition_ids] = selected_edges[:, 0]
+        env.g0_transition_destination[transition_ids] = selected_edges[:, 1]
+        env.g0_transition_elapsed_s[transition_ids] = (
+            torch.rand(len(transition_ids), device=env.device) * 0.8
+            * env.g0_transition_dwell_s[transition_ids]
+        )
+        env.g0_reset_transition_phase[transition_ids] = (
+            env.g0_transition_elapsed_s[transition_ids]
+            / env.g0_transition_dwell_s[transition_ids].clamp_min(1e-6)
+        )
+        # SITSTAND -> VELSTAND hands off only after the rise dwell; other
+        # transitions own the destination immediately, matching the router.
+        handoff = (selected_edges[:, 0] == 2) & (selected_edges[:, 1] == 0)
+        env.g0_behavior_id[transition_ids[~handoff]] = selected_edges[~handoff, 1]
+        for edge_id, (source, destination) in enumerate(((0, 1), (1, 0), (0, 2), (2, 0))):
+            selected = transition_ids[(selected_edges[:, 0] == source) & (selected_edges[:, 1] == destination)]
+            if len(selected):
+                command = _G0_CONTRACT_BY_EDGE[(source, destination)].command
+                _write_g0_command(env, selected, command)
+                env.g0_posture[selected] = command[0] if destination == 2 or source == 2 else 0.0
     return None
 
 

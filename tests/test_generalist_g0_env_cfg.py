@@ -165,7 +165,27 @@ def test_g0_reset_bucket_labels_match_behavior_condition():
         env.g0_reset_bucket[env.g0_behavior_id == 0],
         torch.full_like(env.g0_reset_bucket[env.g0_behavior_id == 0], 2),
     )
-    assert env.g0_reset_transition_phase.eq(0).all()
+    inactive = env.g0_transition_destination < 0
+    assert env.g0_reset_transition_phase[inactive].eq(0).all()
+
+
+def test_g0_initial_transition_buckets_are_legal_and_phase_labeled():
+    class Env:
+        num_envs = 4096
+        device = "cpu"
+
+        def __init__(self):
+            self.command_manager = _Manager(self.num_envs)
+
+    env = Env()
+    ids = torch.arange(env.num_envs)
+    torch.manual_seed(3)
+    initialize_g0_state(env, ids)
+    active = env.g0_transition_destination >= 0
+    assert active.float().mean() > 0.10
+    pairs = set(zip(env.g0_transition_source[active].tolist(), env.g0_transition_destination[active].tolist()))
+    assert pairs <= {(0, 1), (1, 0), (0, 2), (2, 0)}
+    assert torch.all((env.g0_reset_transition_phase[active] > 0) & (env.g0_reset_transition_phase[active] < 0.8))
 
 
 def test_g0_router_holds_initial_stand_then_uses_velocity_contract():
