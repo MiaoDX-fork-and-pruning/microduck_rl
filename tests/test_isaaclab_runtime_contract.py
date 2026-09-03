@@ -9,6 +9,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUNNER = ROOT / "scripts" / "isaaclab" / "run.sh"
 DOCKER_RUNNER = ROOT / "scripts" / "isaaclab" / "docker-run.sh"
+DOCKERFILE = ROOT / "scripts" / "isaaclab" / "Dockerfile"
 MANIFEST = ROOT / "scripts" / "isaaclab" / "runtime.toml"
 
 
@@ -27,6 +28,10 @@ def test_docker_runner_is_pinned_and_executable() -> None:
     assert "microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1" in DOCKER_RUNNER.read_text()
     assert "/workspace/IsaacLab" in DOCKER_RUNNER.read_text()
     assert "ISAACLAB_DOCKER_WRITE" in DOCKER_RUNNER.read_text()
+
+
+def test_docker_image_installs_isaaclab_lazy_import_dependency() -> None:
+    assert "lazy-loader==0.4" in DOCKERFILE.read_text()
 
 
 def test_source_pin_is_reproducible() -> None:
