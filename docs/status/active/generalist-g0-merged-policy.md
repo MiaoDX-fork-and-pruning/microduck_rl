@@ -415,3 +415,12 @@ updates. The complete generalist-focused regression suite passes (`46 passed`).
 The latest anchored 100-iteration battery remains `DIAGNOSTIC_FAIL`: isolated
 locomotion and sit/stand pass, but stand and all four legal transitions fail.
 No G0 acceptance or next-skill seed claim is made.
+
+Extended anchored diagnostic: a fresh 300-iteration hybrid run completed
+finite with active anchor metrics. The 120-tick battery passes stand (0.521 rad)
+and locomotion (0.605 rad); both velocity handoffs also pass
+(`VELOCITY->VELSTAND` 0.682 rad, `VELSTAND->VELOCITY` 0.810 rad). Sit/stand
+still fails (1.606 rad), as do `SITSTAND->VELSTAND` (2.085 rad) and
+`VELSTAND->SITSTAND` (3.030 rad). The formal gate is `DIAGNOSTIC_FAIL` with
+three remaining sit-related reasons. This is the strongest current candidate,
+but the fixed G0 acceptance contract is not met.
