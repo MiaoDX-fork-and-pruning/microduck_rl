@@ -25,6 +25,7 @@ completed: >-
   225-point voltage/torque/friction grid matches the reference BAM
   implementation to floating-point precision (max error 1.4e-16). The wrapper
   imports and the Microduck asset config resolves in the actual 6.0.1 runtime;
+  a 2-environment `BamActuator.compute()` smoke also returns finite efforts.
   CPU/runtime contracts: 28 passed.
 next_action: >-
   Verify the wrapper on an instantiated IsaacLab articulation and define how
