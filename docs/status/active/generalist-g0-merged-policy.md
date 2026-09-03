@@ -37,10 +37,13 @@ The corrected Track A battery is still a diagnostic failure: stand final height
 legal edges fail destination-specific gates. Reset coverage and anchor wiring
 are therefore proven, but behavior learning remains unresolved.
 
+Schema audit: evaluator conditioning, PPO actor ordering, and frozen-teacher
+reconstruction agree on behavior offset 48, command offset 54, and the frozen
+71D layout. The remaining failure is not an ABI or normalization-slot mismatch.
+
 Next hypothesis: the remaining failure is policy/task learning rather than
-reset or anchor plumbing. Do not claim P4 acceptance; any next experiment must
-change reward/curriculum or transition-phase coverage and be compared with this
-baseline.
+schema, reset, or anchor plumbing. Any next experiment must change the reward
+curriculum or transition-phase coverage and be compared with this baseline.
 
 Next proof: run the fail-closed gate on `/tmp/g0-reset-anchor-300-eval.json`
 with the existing parity/latency/fallback artifacts, then choose the next
