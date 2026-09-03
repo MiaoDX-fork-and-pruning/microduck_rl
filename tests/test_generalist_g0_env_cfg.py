@@ -29,6 +29,15 @@ def test_g0_cfg_composes_all_collision_recipe_and_conditioning():
     } <= set(cfg.rewards)
 
 
+def test_g0_observation_terms_follow_frozen_abi_order():
+    cfg = make_microduck_generalist_g0_env_cfg()
+    names = list(cfg.observations["actor"].terms)
+    assert names[:5] == ["base_ang_vel", "projected_gravity", "joint_pos", "joint_vel", "actions"]
+    assert names[5] == "g0_behavior"
+    assert names[6:9] == ["command", "head_command", "body_command"]
+    assert names[9:] == ["g0_phase", "g0_posture", "g0_side"]
+
+
 def test_g0_condition_masks_are_exclusive_and_finite():
     class Env:
         num_envs = 3

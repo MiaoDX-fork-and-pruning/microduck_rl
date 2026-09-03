@@ -238,7 +238,16 @@ def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False
         )
     for group in ("actor", "critic"):
         terms = cfg.observations[group].terms
+        # The frozen G0 ABI is [48D proprio, 6D behavior, 13D commands,
+        # phase/posture/side].  The velocity template appends command terms
+        # after proprioception, so insert conditioning before those terms.
+        command_terms = {
+            name: terms.pop(name)
+            for name in tuple(terms)
+            if name in {"command", "velocity_commands", "twist", "head_command", "body_command"}
+        }
         terms["g0_behavior"] = ObservationTermCfg(func=g0_behavior_one_hot)
+        terms.update(command_terms)
         terms["g0_phase"] = ObservationTermCfg(func=g0_phase)
         terms["g0_posture"] = ObservationTermCfg(func=g0_posture)
         terms["g0_side"] = ObservationTermCfg(func=g0_side)
