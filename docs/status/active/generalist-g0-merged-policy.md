@@ -234,6 +234,14 @@ the corrected direct-PPO 64-env/5-iteration smoke completes finite with a 71D
 actor and no NaN termination. This is a contract fix, not behavior acceptance;
 the full P3/P4 battery must be rerun from a fresh checkpoint.
 
+Post-ABI diagnostic: a fresh corrected direct-PPO run (`seed=42`, 64 envs,
+100 iterations) completed numerically finite. Its canonical 120-tick battery
+remains below the behavior gates: maximum tilt is 1.190 rad for stand, 2.103
+rad for locomotion, and 1.941 rad for sit/stand. The two unsupported direct
+edges remain unexercised. The ABI mismatch was real and is fixed, but this run
+does not qualify as a G0 candidate; hybrid comparison and final P4 evidence
+remain pending.
+
 Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
 continue as a next-skill seed. Both remain diagnostic failures, while the
 distilled BC/DAgger actor remains the strongest available artifact for schema,
