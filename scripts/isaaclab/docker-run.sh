@@ -12,6 +12,11 @@ if [[ ! -d "$isaaclab_source" ]]; then
   exit 2
 fi
 
+repo_mount="${repo_root}:/workspace/microduck_rl:ro"
+if [[ "${ISAACLAB_DOCKER_WRITE:-0}" == "1" ]]; then
+  repo_mount="${repo_root}:/workspace/microduck_rl"
+fi
+
 if [[ $# -eq 0 ]]; then
   set -- bash
 fi
@@ -20,7 +25,7 @@ exec docker run --rm --gpus all --network host \
   -e ACCEPT_EULA=Y \
   -e PRIVACY_CONSENT=Y \
   -e TERM=xterm \
-  -v "${repo_root}:/workspace/microduck_rl:ro" \
+  -v "${repo_mount}" \
   -v "${isaaclab_source}:/workspace/IsaacLab:ro" \
   -w /workspace/microduck_rl \
   --entrypoint /bin/bash \

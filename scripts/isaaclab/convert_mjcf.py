@@ -17,9 +17,11 @@ app = SimulationApp({"renderer": "RaytracedLighting", "headless": args.headless}
 
 
 def main() -> None:
+    from isaacsim.core.utils.extensions import enable_extension
     import omni.kit.app
     import omni.kit.commands
 
+    enable_extension("isaacsim.asset.importer.mjcf")
     status, import_config = omni.kit.commands.execute("MJCFCreateImportConfig")
     if not status or import_config is None:
         raise RuntimeError("MJCF importer did not return an import configuration")

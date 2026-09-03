@@ -26,6 +26,7 @@ def test_docker_runner_is_pinned_and_executable() -> None:
     assert DOCKER_RUNNER.stat().st_mode & 0o111
     assert "microduck-isaaclab:2.2.0-isaacsim5.0.0" in DOCKER_RUNNER.read_text()
     assert "/workspace/IsaacLab" in DOCKER_RUNNER.read_text()
+    assert "ISAACLAB_DOCKER_WRITE" in DOCKER_RUNNER.read_text()
 
 
 def test_source_pin_is_reproducible() -> None:
