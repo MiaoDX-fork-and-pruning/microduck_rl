@@ -251,6 +251,14 @@ also fail: `SITSTAND->VELSTAND` 2.843 rad, `VELOCITY->VELSTAND` 1.803 rad,
 fail-closed validator returns `DIAGNOSTIC_FAIL`; hybrid improves stand only and
 is not eligible as a next-skill seed.
 
+Amendment gap: `GeneralistG0HybridRunner` currently injects the dense BC actor
+but does not add the amended per-step teacher-action anchor loss or its
+per-behavior logging/decay. The corrected hybrid battery therefore remains an
+initialization-only diagnostic. Implementing the anchor requires a runner/PPO
+storage extension so frozen teacher actions are available in each rollout
+batch; this is the next bounded implementation slice before another hybrid
+comparison.
+
 Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
 continue as a next-skill seed. Both remain diagnostic failures, while the
 distilled BC/DAgger actor remains the strongest available artifact for schema,
