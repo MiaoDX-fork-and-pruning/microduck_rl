@@ -16,11 +16,14 @@ from mjlab_microduck.generalist_g0_evaluation import STATE_TO_BEHAVIOR, TraceMet
 from mjlab_microduck.generalist_model import build_actor
 from mjlab_microduck.generalist_schema import make_conditioned_observation
 from mjlab_microduck.generalist_transition_graph import LEGAL_EDGES
+from mjlab_microduck.tasks.microduck_sitstand_env_cfg import SIT_Z, STAND_Z
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from infer_policy import DEFAULT_POSE, PolicyInference
 
 CONTROL_HZ = 50
+STAND_HEIGHT_MIN_M = STAND_Z * 0.9
+SIT_HEIGHT_MAX_M = SIT_Z * 1.1
 
 
 @dataclass(frozen=True)
@@ -155,19 +158,22 @@ def _command(state: str, command_x: float | None = None) -> np.ndarray:
 
 
 BEHAVIOR_GATES = {
-    "stand": {"final_height_min_m": 0.18},
+    "stand": {"final_height_min_m": STAND_HEIGHT_MIN_M},
     "locomotion": {"displacement_gate_m": 1.0},
     "sit_stand": {
-        "height_min_m": 0.18,
-        "height_max_m": 0.13,
-        "final_height_min_m": 0.18,
+        "height_min_m": STAND_HEIGHT_MIN_M,
+        "height_max_m": SIT_HEIGHT_MAX_M,
+        "final_height_min_m": STAND_HEIGHT_MIN_M,
     },
 }
 EDGE_GATES = {
     ("VELSTAND", "VELOCITY"): {"displacement_gate_m": 1.0},
-    ("VELOCITY", "VELSTAND"): {"final_height_min_m": 0.18},
-    ("VELSTAND", "SITSTAND"): {"final_height_max_m": 0.13},
-    ("SITSTAND", "VELSTAND"): {"height_max_m": 0.13, "final_height_min_m": 0.18},
+    ("VELOCITY", "VELSTAND"): {"final_height_min_m": STAND_HEIGHT_MIN_M},
+    ("VELSTAND", "SITSTAND"): {"final_height_max_m": SIT_HEIGHT_MAX_M},
+    ("SITSTAND", "VELSTAND"): {
+        "height_max_m": SIT_HEIGHT_MAX_M,
+        "final_height_min_m": STAND_HEIGHT_MIN_M,
+    },
 }
 
 

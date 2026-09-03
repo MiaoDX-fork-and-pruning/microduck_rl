@@ -1,6 +1,7 @@
 import importlib.util
 from pathlib import Path
 import sys
+import pytest
 
 
 def _module():
@@ -37,21 +38,23 @@ def test_edge_preparation_is_not_scored():
 
 def test_behavior_and_edge_gates_enforce_destination_outcomes():
     module = _module()
+    assert module.STAND_HEIGHT_MIN_M == pytest.approx(0.1035)
+    assert module.SIT_HEIGHT_MAX_M == pytest.approx(0.066)
     assert module.BEHAVIOR_GATES == {
-        "stand": {"final_height_min_m": 0.18},
+        "stand": {"final_height_min_m": module.STAND_HEIGHT_MIN_M},
         "locomotion": {"displacement_gate_m": 1.0},
         "sit_stand": {
-            "height_min_m": 0.18,
-            "height_max_m": 0.13,
-            "final_height_min_m": 0.18,
+            "height_min_m": module.STAND_HEIGHT_MIN_M,
+            "height_max_m": module.SIT_HEIGHT_MAX_M,
+            "final_height_min_m": module.STAND_HEIGHT_MIN_M,
         },
     }
     assert module.EDGE_GATES == {
         ("VELSTAND", "VELOCITY"): {"displacement_gate_m": 1.0},
-        ("VELOCITY", "VELSTAND"): {"final_height_min_m": 0.18},
-        ("VELSTAND", "SITSTAND"): {"final_height_max_m": 0.13},
+        ("VELOCITY", "VELSTAND"): {"final_height_min_m": module.STAND_HEIGHT_MIN_M},
+        ("VELSTAND", "SITSTAND"): {"final_height_max_m": module.SIT_HEIGHT_MAX_M},
         ("SITSTAND", "VELSTAND"): {
-            "height_max_m": 0.13,
-            "final_height_min_m": 0.18,
+            "height_max_m": module.SIT_HEIGHT_MAX_M,
+            "final_height_min_m": module.STAND_HEIGHT_MIN_M,
         },
     }
