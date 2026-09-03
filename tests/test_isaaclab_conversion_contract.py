@@ -6,4 +6,5 @@ def test_converter_enables_mjcf_extension() -> None:
 
     assert "MJCFCreateAsset" in source
     assert "MJCFCreateImportConfig" in source
+    assert "dest_path=os.path.abspath(args.output)" in source
     assert "SimulationApp" in source

@@ -32,6 +32,7 @@ def main() -> None:
         "MJCFCreateAsset",
         mjcf_path=os.path.abspath(args.input),
         import_config=import_config,
+        dest_path=os.path.abspath(args.output),
         prim_path="/microduck",
     )
     if not status:
