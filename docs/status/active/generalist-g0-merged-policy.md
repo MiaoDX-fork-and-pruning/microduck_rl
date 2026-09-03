@@ -14,6 +14,10 @@ validated seated/standing physical buckets with stand/sit posture goals;
 conditioning and command buffers agree. The hybrid anchor weight is a declared
 dataclass field and therefore survives `dataclasses.asdict()` runner setup.
 
+The G0 termination contract now allows arbitrary tilt from step zero; inherited
+VelStand's 70-degree bootstrap termination is removed so sit/rise and recovery
+traces are not truncated. The fallen-time backstop remains enabled.
+
 Last proven evidence:
 
 - Focused G0 suite: `49 passed`.
@@ -24,6 +28,9 @@ Last proven evidence:
   samples/update, per-behavior anchor weights `0.1`, and nonzero anchor loss.
 - Reset bucket labels (`upright`, `seated`, `recovery`) and transition phase
   progress are exposed on the environment; focused config/graph tests: `18 passed`.
+- Long-horizon termination smoke completed at
+  `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-02-46_g0_long_horizon_smoke`:
+  `fell_over=0`, finite rewards, and no NaN terminations.
 
 Completed batch: P0-P4 tooling, frozen manifests/graph, 71D ABI correction,
 hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
@@ -45,9 +52,9 @@ Next hypothesis: the remaining failure is policy/task learning rather than
 schema, reset, or anchor plumbing. Any next experiment must change the reward
 curriculum or transition-phase coverage and be compared with this baseline.
 
-Next proof: run the fail-closed gate on `/tmp/g0-reset-anchor-300-eval.json`
-with the existing parity/latency/fallback artifacts, then choose the next
-bounded learning intervention.
+Next proof: run a bounded fresh hybrid diagnostic under the long-horizon
+termination contract, evaluate its final checkpoint with corrected Track A, and
+run the fail-closed gate with existing parity/latency/fallback artifacts.
 
 Stop condition: P4 passes behavior, all legal transition, parity, latency, and
 fallback gates, or a repeated experiment falsifies the current hypothesis and
