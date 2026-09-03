@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
 current_slice: Task H Velocity-Flat battery and forward-only mjlab comparison complete; long-run decision pending
 blocker_kind: evaluation_battery
-  blocker_fingerprint: mjlab comparison and external-load friction parity are not implemented
+  blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
   The formal `microduck-isaaclab:3.0.0-isaacsim6.0.1` image runs the pinned
   IsaacLab `release/3.0.0` source at commit
@@ -83,6 +83,9 @@ completed: >-
   0.0208; mean XY errors are 0.0911, 0.1421, 0.2493, and 0.0938 m/s. The
   lateral case is the weakest tracker and maximum tilt is about 0.85 rad in
   every case. See `docs/isaaclab_velocity_flat_command_battery_report.md`.
+  A dedicated PhysX force timing probe confirms that the force getters exist and
+  return finite tensors, but refresh only after `sim.step()`, after
+  `BamActuator.compute()` has run; no same-step friction bridge is accepted.
 next_action: >-
   Decide whether the measured smoke-checkpoint behavior justifies another
   IsaacLab training run. The forward-only comparison is recorded in
@@ -90,7 +93,8 @@ next_action: >-
   mjlab rollout staying upright while the IsaacLab checkpoint resets about
   2.1% of environments per step and reaches about 0.85 rad tilt. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control, not
-  implicit PhysX PD.
+  implicit PhysX PD. PhysX force getters are available, but only as post-step
+  data; a one-step delayed controller would require a new design decision.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
@@ -106,6 +110,7 @@ stop_condition: >-
   documented. Do not start another long PPO run without a new Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  External-load friction parity remains unresolved; a longer IsaacLab run is
-  pending an explicit Task H resource/experiment decision; DCMotorCfg is not
-  accepted as BAM parity.
+  External-load friction parity remains unresolved because same-step solved
+  torque is unavailable to the explicit actuator callback; a longer IsaacLab
+  run is pending an explicit Task H resource/experiment decision; DCMotorCfg is
+  not accepted as BAM parity.
