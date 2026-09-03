@@ -1,0 +1,16 @@
+# Fill these values only after the selected runtime passes the headless probe.
+# IsaacLab remains outside the root uv lock so mjlab dependency resolution is
+# unchanged.
+runtime = "unselected"
+isaaclab_version = "unselected"
+isaacsim_version = "unselected"
+python_version = "3.11"
+torch_version = "unselected"
+cuda_version = "unselected"
+installation = "external"
+launcher_env = "ISAACLAB_LAUNCHER or ISAACSIM_PYTHON"
+
+[validation]
+status = "blocked_runtime_unavailable"
+headless_probe = "scripts/isaaclab/run.sh -p scripts/isaaclab/probe.py"
+

@@ -1,0 +1,39 @@
+from __future__ import annotations
+
+import os
+import subprocess
+import tomllib
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+RUNNER = ROOT / "scripts" / "isaaclab" / "run.sh"
+MANIFEST = ROOT / "scripts" / "isaaclab" / "runtime.toml"
+
+
+def test_runtime_manifest_keeps_isaaclab_external() -> None:
+    manifest = tomllib.loads(MANIFEST.read_text())
+
+    assert manifest["installation"] == "external"
+    assert "ISAACLAB_LAUNCHER" in manifest["launcher_env"]
+    assert manifest["validation"]["headless_probe"].startswith(
+        "scripts/isaaclab/run.sh"
+    )
+
+
+def test_runner_fails_clearly_without_selected_runtime() -> None:
+    env = os.environ.copy()
+    env.pop("ISAACLAB_LAUNCHER", None)
+    env.pop("ISAACSIM_PYTHON", None)
+
+    result = subprocess.run(
+        [str(RUNNER), "--help"],
+        cwd=ROOT,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+
+    assert result.returncode == 2
+    assert "no IsaacLab runtime selected" in result.stderr
