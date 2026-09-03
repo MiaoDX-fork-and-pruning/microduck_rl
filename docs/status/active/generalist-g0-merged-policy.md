@@ -8,7 +8,7 @@ Control plane: root Codex session
 
 Latest user intent: implement the full plan through `intuitive-flow`.
 
-Current slice: P2 baseline/evaluation scaffold executes the required
+Current slice: corrected G0 actor observation ABI and reran the required
 five-iteration smoke;
 behavior state, legal interval transitions, and compatible masked reward terms
 are wired in the training-only task.
@@ -223,6 +223,16 @@ Next proof: improve the merged-policy behavior and transition gates. The current
 implementation is test-clean and operationally measurable, but it is not an
 accepted candidate because the canonical P4 behavior/edge success criteria
 remain unmet.
+
+ABI diagnosis/fix: PPO's inherited velocity observation terms previously placed
+the six behavior-conditioning values after the 61D specialist block, while the
+frozen schema and BC/export actors require behavior at offset 48. The G0 cfg now
+reorders actor/critic terms to place `g0_behavior` immediately after the 48D
+actor proprioception, followed by command terms and phase/posture/side. A new
+order regression covers this boundary. Focused config tests pass (8 tests), and
+the corrected direct-PPO 64-env/5-iteration smoke completes finite with a 71D
+actor and no NaN termination. This is a contract fix, not behavior acceptance;
+the full P3/P4 battery must be rerun from a fresh checkpoint.
 
 Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
 continue as a next-skill seed. Both remain diagnostic failures, while the
