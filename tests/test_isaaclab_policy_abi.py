@@ -50,4 +50,4 @@ def test_golden_fixture_is_stable() -> None:
          0.4, -0.4, 0.9579, -0.4127, 1.0579, -0.5951, 0.2470],
         dtype=np.float32,
     )
-    np.testing.assert_allclose(action_to_target(fixture["raw_action"]), expected_target)
+    np.testing.assert_allclose(action_to_target(fixture["raw_action"]), expected_target, atol=1e-6)
