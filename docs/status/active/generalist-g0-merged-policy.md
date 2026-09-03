@@ -1,6 +1,6 @@
 # Generalist G0 Merged Policy
 
-Status: ACTIVE
+Status: BLOCKED
 
 Source plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 
@@ -128,9 +128,11 @@ Corrected Track A still failed all behavior and edge gates (stand tilt
 `2.144 rad`, locomotion `1.768 rad`, sit/stand `2.134 rad`). The fixed-router,
 transition-reset, and measured-stage hypotheses have now each been tested.
 
-Next proof: a future experiment must change the learned-policy intervention
-itself (reward/initialization architecture or actor objective), then rerun
-corrected Track A and the fail-closed gate.
+Blocker: repeated independent PPO interventions (reset routing, termination
+horizon, delayed taxes, transition reverse curriculum, measured stage unlock,
+and anchor strengths `0.1`/`1.0`) all leave VELSTAND below the P4 success gate.
+Further work requires a materially different reward/initialization/actor
+objective decision before another expensive run is justified.
 
 Stop condition: P4 passes behavior, all legal transition, parity, latency, and
 fallback gates, or a repeated experiment falsifies the current hypothesis and
