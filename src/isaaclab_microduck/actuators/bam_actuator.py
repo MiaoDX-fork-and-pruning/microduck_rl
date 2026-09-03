@@ -75,13 +75,12 @@ class BamActuator(ActuatorBase):
     ) -> ArticulationActions:
         if control_action.joint_positions is None:
             raise ValueError("BamActuator requires joint position targets")
-        target_vel = control_action.joint_velocities
-        if target_vel is None:
-            target_vel = torch.zeros_like(joint_vel)
         voltage, motor_effort = voltage_torque(
             control_action.joint_positions,
             joint_pos,
-            joint_vel - target_vel,
+            # BAM's position controller consumes measured dq for back-EMF;
+            # velocity targets are not part of its firmware command.
+            joint_vel,
             params=self._params,
             vin=self._supply_voltage,
         )

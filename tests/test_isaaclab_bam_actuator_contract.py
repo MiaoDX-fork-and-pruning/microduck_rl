@@ -29,3 +29,10 @@ def test_actuator_package_keeps_math_importable_without_isaaclab() -> None:
     package = (SCRIPT.parent / "__init__.py").read_text()
     assert "def __getattr__" in package
     assert "from .bam_actuator import" in package
+
+
+def test_bam_wrapper_uses_measured_velocity_for_back_emf() -> None:
+    source = SCRIPT.read_text()
+    assert "# BAM's position controller" in source
+    assert "            joint_vel,\n            params=self._params" in source
+    assert "joint_vel - target_vel" not in source
