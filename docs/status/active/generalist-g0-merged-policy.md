@@ -28,13 +28,21 @@ hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
 fail-closed acceptance gate exist. Prior 300/600-iteration candidates remain
 diagnostic failures; no G0 candidate is accepted.
 
-Next hypothesis: the repaired reset distribution plus live teacher anchor can
-restore SITSTAND learning without regressing stand/locomotion. Run one bounded
-fresh hybrid diagnostic, then evaluate it with the corrected Track A battery.
+Latest diagnostic: the fresh 300-iteration anchored hybrid run completed
+finite at `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_11-52-52_g0_reset_anchor_300`.
+The corrected Track A battery is still a diagnostic failure: stand final height
+`0.043 m`/tilt `1.268 rad`, locomotion displacement `0.123 m`, and all four
+legal edges fail destination-specific gates. Reset coverage and anchor wiring
+are therefore proven, but behavior learning remains unresolved.
 
-Next proof: train 300 iterations at 64 envs, evaluate the final checkpoint, and
-run the fail-closed gate. Add destination-specific evaluator height/displacement
-gates before interpreting P4.
+Next hypothesis: the remaining failure is policy/task learning rather than
+reset or anchor plumbing. Do not claim P4 acceptance; any next experiment must
+change reward/curriculum or transition-phase coverage and be compared with this
+baseline.
+
+Next proof: run the fail-closed gate on `/tmp/g0-reset-anchor-300-eval.json`
+with the existing parity/latency/fallback artifacts, then choose the next
+bounded learning intervention.
 
 Stop condition: P4 passes behavior, all legal transition, parity, latency, and
 fallback gates, or a repeated experiment falsifies the current hypothesis and
