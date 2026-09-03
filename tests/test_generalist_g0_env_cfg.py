@@ -33,6 +33,8 @@ def test_g0_cfg_composes_all_collision_recipe_and_conditioning():
     reset_events = list(cfg.events)
     assert reset_events.index("g0_sitstand_state") > reset_events.index("g0_state")
     assert reset_events.index("g0_sitstand_state") > reset_events.index("random_prone_init")
+    assert cfg.terminations["fell_over"].params["limit_angle"] == torch.pi
+    assert "fell_over_disable" not in cfg.curriculum
 
 
 def test_g0_observation_terms_follow_frozen_abi_order():

@@ -269,6 +269,13 @@ def sample_g0_transition(env, env_ids):
 
 def make_microduck_generalist_g0_env_cfg(play: bool = False, rough: bool = False) -> ManagerBasedRlEnvCfg:
     cfg = make_microduck_velstand_env_cfg(play=play, rough=rough)
+    # The merged policy must learn sit/rise and recovery from long-horizon
+    # traces.  VelStand's 70-degree bootstrap termination truncates those
+    # traces; G0 keeps the physical fallen-time backstop but allows arbitrary
+    # tilt from the first curriculum step.
+    if "fell_over" in cfg.terminations:
+        cfg.terminations["fell_over"].params["limit_angle"] = math.pi
+    cfg.curriculum.pop("fell_over_disable", None)
     # Reuse the validated commanded posture stack from SITSTAND. The
     # velstand template has no height/pose target for this behavior, so merely
     # masking its generic `pose` term leaves the sit task under-specified.
