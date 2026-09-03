@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
 current_slice: Task C ArticulationCfg contract added; MJCF conversion artifact remains blocked
 blocker_kind: mjcf_importer_no_artifact
-  blocker_fingerprint: Isaac Sim 5.0 MJCFCreateAsset reaches app-ready but does not complete or emit USD in bounded headless runs
+  blocker_fingerprint: Isaac Sim 5.0 MJCFCreateAsset reaches app-ready but does not complete or emit USD in bounded headless runs, including with dest_path
 last_proven_evidence: >-
   Revalidated this continuation: `python` cannot import isaaclab, isaacsim, or
   omni.isaac.lab; `command -v` finds no isaaclab/isaacsim; host Python is
@@ -16,6 +16,8 @@ last_proven_evidence: >-
   USD file or success marker; the latter reaches `[app ready]` then exceeds a
   90-second bound. A 4 KB cached `.usd` is only the default empty stage and
   has not passed robot prim/joint inspection, so it is not conversion proof.
+  Passing the documented `dest_path` argument did not change this behavior;
+  the output remains 4,150 bytes.
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
   lazy package/task registry, 61D/14D policy ABI with golden fixture, and MJCF
