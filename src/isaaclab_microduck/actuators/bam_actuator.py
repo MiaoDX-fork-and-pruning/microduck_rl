@@ -105,3 +105,15 @@ class BamActuator(ActuatorBase):
             params=self._params,
             friction_scale=self._friction_scale,
         )
+
+    def set_supply_voltage(self, voltage: float | torch.Tensor) -> None:
+        """Set the episode voltage used by the dynamic bench or a controlled run."""
+
+        value = torch.as_tensor(voltage, dtype=self._supply_voltage.dtype, device=self._device)
+        self._supply_voltage.fill_(float(value))
+
+    def set_friction_scale(self, scale: float | torch.Tensor) -> None:
+        """Set the per-environment friction multiplier for an explicit bench."""
+
+        value = torch.as_tensor(scale, dtype=self._friction_scale.dtype, device=self._device)
+        self._friction_scale.fill_(float(value))

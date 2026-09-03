@@ -2,12 +2,12 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: staged IsaacLab articulation reset/cooking diagnosis; PhysX
-  friction integration remains the simulator gate
-blocker_kind: articulation_reset_hang
-  blocker_fingerprint: with the complete runtime PYTHONPATH, the Microduck
-  InteractiveScene reaches scene_ready but native sim.reset() does not return;
-  the same boundary persists after removing all 75 USD collision APIs
+current_slice: IsaacLab BAM dynamic bench; PhysX friction integration remains
+  the simulator gate
+blocker_kind: physx_friction_bridge_unresolved
+  blocker_fingerprint: explicit BAM voltage effort is running on the real
+  articulation, but its load-dependent friction budget is not yet applied to
+  PhysX joint dynamics
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -33,22 +33,25 @@ completed: >-
   `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH. PhysX
   articulation loading additionally probes `isaaclab_newton`, so the runtime
   command now includes the IsaacLab `newton`, `ov`, and `ovphysx` source paths.
-  A staged articulation probe reaches App, imports, SimulationContext, and
-  `scene_ready` with the project `/src` path included. Both canonical and
-  `--no-collisions` probes then block inside native `sim.reset()` before
-  `sim_reset`, `articulation_ready`, or `step_ok`; this is an explicit
-  articulation-reset/cooking blocker, not a successful articulation test.
+  The standard IsaacLab `AppLauncher` path reaches `sim_reset`,
+  `articulation_ready`, and `step_ok` for both bundled Cartpole and the
+  Microduck USD. The real Microduck articulation resolves 14 joints with
+  `BamActuator` and produces finite efforts. The dynamic BAM bench report
+  `.cache/isaaclab-assets/bam_dynamic_bench.json` covers 20-step 7.5V and
+  6.5V target steps plus a 7.5V sinusoid; all samples are finite. The report
+  explicitly records `friction_bridge=not_applied_to_physx`.
 next_action: >-
-  Diagnose the native reset hang with a minimal/reduced-collision diagnostic
-  asset or direct PhysX articulation setup; do not replace the canonical USD.
-  Once reset completes, verify the wrapper on an instantiated articulation and
-  define how its friction budget is applied to PhysX. Keep the USD
-  `drive_configured=false` finding visible until that bench passes.
+  Implement and validate the PhysX-side friction bridge. Use the existing
+  actuator friction budget and measured joint state, then run a constrained
+  one-joint friction sweep against the mjlab reference. Keep the USD
+  `drive_configured=false` finding visible: BAM is explicit effort control,
+  not implicit PhysX PD.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
   --headless --output .cache/isaaclab-assets/microduck_walk.usd.report.json'`,
-  followed by the staged `scripts/isaaclab/articulation_probe.py`, actuator
+  followed by `scripts/isaaclab/articulation_probe.py --headless`,
+  `scripts/isaaclab/bam_dynamic_bench.py --headless --steps 20`, actuator
   numerical tests, and existing mjlab regression checks.
 stop_condition: >-
   Do not claim simulator parity or start PPO until PhysX drive/BAM behavior is

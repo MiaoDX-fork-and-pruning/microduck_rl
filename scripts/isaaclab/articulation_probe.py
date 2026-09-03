@@ -9,9 +9,6 @@ from __future__ import annotations
 import argparse
 import signal
 
-from isaacsim import SimulationApp
-
-
 def _timeout_handler(signum, frame):
     del signum, frame
     raise TimeoutError("simulation reset exceeded probe timeout")
@@ -20,11 +17,15 @@ def _timeout_handler(signum, frame):
 def main() -> None:
     print("ISAACLAB_ARTICULATION_PROBE:app_imported", flush=True)
     parser = argparse.ArgumentParser()
-    parser.add_argument("--headless", action="store_true")
     parser.add_argument("--no-collisions", action="store_true")
+    parser.add_argument("--cartpole", action="store_true", help="use IsaacLab's bundled Cartpole asset")
     parser.add_argument("--reset-timeout", type=int, default=45)
+    from isaaclab.app import AppLauncher
+
+    AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
-    app = SimulationApp({"headless": True})
+    launcher = AppLauncher(args)
+    app = launcher.app
     print("ISAACLAB_ARTICULATION_PROBE:app_ready", flush=True)
     try:
         import torch
@@ -33,13 +34,19 @@ def main() -> None:
         from isaaclab.utils.configclass import configclass
         from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 
+        asset_cfg = MICRODUCK_CFG
+        if args.cartpole:
+            from isaaclab_assets import CARTPOLE_CFG
+
+            asset_cfg = CARTPOLE_CFG
+
         print("ISAACLAB_ARTICULATION_PROBE:imports_ready", flush=True)
         sim = SimulationContext(SimulationCfg(dt=0.005, device="cuda:0"))
         print("ISAACLAB_ARTICULATION_PROBE:sim_ready", flush=True)
 
         @configclass
         class SceneCfg(InteractiveSceneCfg):
-            robot = MICRODUCK_CFG.replace(prim_path="{ENV_REGEX_NS}/Robot")
+            robot = asset_cfg.replace(prim_path="{ENV_REGEX_NS}/Robot")
 
         scene = InteractiveScene(SceneCfg(num_envs=1, env_spacing=2.0))
         print("ISAACLAB_ARTICULATION_PROBE:scene_ready", flush=True)
@@ -71,7 +78,7 @@ def main() -> None:
             f"effort_limit={limits[0, :3].tolist()}",
             flush=True,
         )
-        robot.set_joint_position_target(torch.ones(1, 14, device="cuda:0") * 0.1)
+        robot.set_joint_position_target(torch.ones(1, robot.num_joints, device=robot.device) * 0.1)
         for _ in range(3):
             scene.write_data_to_sim()
             sim.step()
