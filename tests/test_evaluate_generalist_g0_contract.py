@@ -33,3 +33,25 @@ def test_edge_preparation_is_not_scored():
     for segments in module.EDGE_SEGMENTS.values():
         assert segments[0].score is False
         assert any(segment.score for segment in segments[1:])
+
+
+def test_behavior_and_edge_gates_enforce_destination_outcomes():
+    module = _module()
+    assert module.BEHAVIOR_GATES == {
+        "stand": {"final_height_min_m": 0.18},
+        "locomotion": {"displacement_gate_m": 1.0},
+        "sit_stand": {
+            "height_min_m": 0.18,
+            "height_max_m": 0.13,
+            "final_height_min_m": 0.18,
+        },
+    }
+    assert module.EDGE_GATES == {
+        ("VELSTAND", "VELOCITY"): {"displacement_gate_m": 1.0},
+        ("VELOCITY", "VELSTAND"): {"final_height_min_m": 0.18},
+        ("VELSTAND", "SITSTAND"): {"final_height_max_m": 0.13},
+        ("SITSTAND", "VELSTAND"): {
+            "height_max_m": 0.13,
+            "final_height_min_m": 0.18,
+        },
+    }

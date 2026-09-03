@@ -42,7 +42,9 @@ class TraceMetrics:
         self.actions.append(action_array)
 
     def report(self, *, displacement_gate_m: float | None = None,
-               height_min_m: float | None = None, height_max_m: float | None = None) -> dict:
+               height_min_m: float | None = None, height_max_m: float | None = None,
+               final_height_min_m: float | None = None,
+               final_height_max_m: float | None = None) -> dict:
         displacement = (
             self.positions[-1] - self.positions[0]
             if len(self.positions) >= 2
@@ -58,6 +60,10 @@ class TraceMetrics:
             passed = passed and max(self.heights, default=-np.inf) >= height_min_m
         if height_max_m is not None:
             passed = passed and min(self.heights, default=np.inf) <= height_max_m
+        if final_height_min_m is not None:
+            passed = passed and bool(self.heights) and self.heights[-1] >= final_height_min_m
+        if final_height_max_m is not None:
+            passed = passed and bool(self.heights) and self.heights[-1] <= final_height_max_m
         return {
             "steps": len(self.actions),
             "finite": self.finite,

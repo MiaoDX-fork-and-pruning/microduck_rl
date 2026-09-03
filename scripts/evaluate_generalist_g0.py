@@ -154,6 +154,23 @@ def _command(state: str, command_x: float | None = None) -> np.ndarray:
     return command
 
 
+BEHAVIOR_GATES = {
+    "stand": {"final_height_min_m": 0.18},
+    "locomotion": {"displacement_gate_m": 1.0},
+    "sit_stand": {
+        "height_min_m": 0.18,
+        "height_max_m": 0.13,
+        "final_height_min_m": 0.18,
+    },
+}
+EDGE_GATES = {
+    ("VELSTAND", "VELOCITY"): {"displacement_gate_m": 1.0},
+    ("VELOCITY", "VELSTAND"): {"final_height_min_m": 0.18},
+    ("VELSTAND", "SITSTAND"): {"final_height_max_m": 0.13},
+    ("SITSTAND", "VELSTAND"): {"height_max_m": 0.13, "final_height_min_m": 0.18},
+}
+
+
 def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Segment, ...]) -> TraceMetrics:
     data = mujoco.MjData(model)
     helper = PolicyInference(model, data, walking_onnx_path=str(reference_onnx), new_cmd_obs=True,
@@ -212,14 +229,14 @@ def main() -> None:
     behaviors = []
     for state, behavior in STATE_TO_BEHAVIOR.items():
         metrics = run_sequence(model, policy, args.observation_reference_onnx, BEHAVIOR_SEGMENTS[state])
-        gates = {"locomotion": {"displacement_gate_m": 1.0}, "sit_stand": {"height_min_m": 0.18, "height_max_m": 0.13}}
-        behaviors.append({"state": state, "behavior": behavior, "metrics": metrics.report(**gates.get(behavior, {}))})
+        behaviors.append({"state": state, "behavior": behavior,
+                          "metrics": metrics.report(**BEHAVIOR_GATES[behavior])})
     edges = []
     for source_state, destination in sorted(LEGAL_EDGES):
         metrics = run_sequence(model, policy, args.observation_reference_onnx,
                                EDGE_SEGMENTS[(source_state, destination)])
         edges.append({"from": source_state, "to": destination, "reset_count": 0,
-                      "metrics": metrics.report()})
+                      "metrics": metrics.report(**EDGE_GATES[(source_state, destination)])})
     report = make_report(backend=policy.backend, seed=args.seed, behaviors=behaviors, edges=edges)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")

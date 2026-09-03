@@ -34,6 +34,8 @@ def test_trace_metrics_applies_behavior_outcome_gates():
     trace.append(height=0.11, tilt=0.1, position=[0.1, 0, 0], action=np.zeros(14))
     assert trace.report(displacement_gate_m=1.0)["success"] is False
     assert trace.report(height_min_m=0.18)["success"] is False
+    assert trace.report(final_height_min_m=0.18)["success"] is False
+    assert trace.report(final_height_max_m=0.10)["success"] is False
 
 
 def test_nonfinite_trace_is_sticky():
