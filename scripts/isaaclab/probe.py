@@ -3,13 +3,17 @@
 from __future__ import annotations
 
 import json
+import argparse
 import platform
 
 from isaaclab.app import AppLauncher
 
 
 def main() -> None:
-    app_launcher = AppLauncher(headless=True)
+    parser = argparse.ArgumentParser(description="Probe the IsaacLab runtime.")
+    AppLauncher.add_app_launcher_args(parser)
+    args = parser.parse_args()
+    app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
     try:
         import isaaclab
