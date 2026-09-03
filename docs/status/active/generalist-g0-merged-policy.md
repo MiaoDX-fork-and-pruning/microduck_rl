@@ -102,8 +102,16 @@ still fail the corrected Track A battery.
 Latest gate: `/tmp/g0-final-gate.json` is `DIAGNOSTIC_FAIL` for all three
 behaviors and four legal edges; parity/latency/fallback infrastructure passes.
 
-Next proof: a future experiment must change the learned-policy intervention,
-then rerun corrected Track A and the fail-closed gate.
+Stage-aware diagnostic: the 300-iteration run at
+`logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-45-47_g0_stage_aware_300`
+completed finitely, but measured stage progression did not improve behavior.
+Corrected Track A still failed all behavior and edge gates (stand tilt
+`2.144 rad`, locomotion `1.768 rad`, sit/stand `2.134 rad`). The fixed-router,
+transition-reset, and measured-stage hypotheses have now each been tested.
+
+Next proof: a future experiment must change the learned-policy intervention
+itself (reward/initialization architecture or actor objective), then rerun
+corrected Track A and the fail-closed gate.
 
 Stop condition: P4 passes behavior, all legal transition, parity, latency, and
 fallback gates, or a repeated experiment falsifies the current hypothesis and
