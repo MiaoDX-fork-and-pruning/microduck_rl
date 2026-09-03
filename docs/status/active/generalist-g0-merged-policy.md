@@ -364,6 +364,14 @@ teacher/G0-config verification passes (`19 passed`). Threshold-driven weight
 mutation still needs a behavior-success signal from the training/evaluation
 loop; no arbitrary decay was enabled without that evidence.
 
+Schedule wiring slice: `GeneralistHybridPPO` now accepts an optional
+`AnchorSchedule` and exposes `update_anchor_schedule(measured_returns)`, which
+synchronizes threshold-gated per-behavior decay into the live PPO loss tensor.
+No-schedule mode is a validated no-op, and direct PPO remains untouched.
+Focused schedule/hybrid tests pass (`9 passed` in the worker slice). Automatic
+decay is intentionally not enabled until the training/evaluation loop supplies
+measured per-behavior returns at explicit curriculum boundaries.
+
 Current integration contract: the hybrid algorithm must override
 `construct_algorithm` to instantiate `GeneralistAnchorStorage`, override
 `act` to populate teacher actions plus hold/behavior metadata before each
