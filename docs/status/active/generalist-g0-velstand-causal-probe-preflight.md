@@ -150,6 +150,14 @@ finite but fails closed-loop stability (`max_tilt=1.8503 rad` versus the
 profiles. This is diagnosis-only because it is not the manifest's 32-episode
 seed-42 battery or main-task metric gate.
 
+Canonical evaluator evidence: `scripts/evaluate_generalist_g0.py` confirms the
+same failure over the 8-second VELSTAND segment: finite 400-step rollout,
+`max_tilt=1.7143 rad`, final height `0.0460 m`, and `passed=false`. The bounded
+candidate therefore does not justify Phase C or merged PPO. Machine-readable
+diagnosis is `/tmp/g0-velstand-causal-diagnosis.json` and classifies the current
+branch as `state_distribution_coverage_or_model_capacity`; the remaining
+ambiguity requires the full frozen 32-episode recovery-bucket battery.
+
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
 
