@@ -43,6 +43,10 @@ The initial objective is not feature parity with every existing task. The first 
 
 Only after those gates pass should sit/stand, recovery, ground pick, kick, roulade, backlash, and rollers be added.
 
+For v0, "equivalent training" means the same hardware-facing policy contract,
+task semantics, and deployable behavior quality. It does not mean identical
+MuJoCo/PhysX trajectories or reward curves.
+
 ## 2. Why keep both backends in one repository
 
 The simulator wrappers are different, but the pieces that change most often during Microduck development are shared concepts:
@@ -131,6 +135,19 @@ The commands should eventually be simple and explicit, for example:
 
 The wrapper names are illustrative; local implementation may use `uv run --project ...` or workspace equivalents.
 
+The canonical IsaacLab developer/runtime environment should be the official
+Isaac Sim/IsaacLab container or bundled Python distribution, selected during
+the environment spike and pinned by version. The repository should provide
+source code, manifests, and launch wrappers around that environment rather
+than forcing IsaacLab into the mjlab uv lock.
+
+The v0 training location is the local workstation with an Isaac Sim-capable
+GPU. Local execution is canonical for environment bring-up, smoke tests,
+physics benches, and the first full `Velocity-Flat`/`VelStand` runs. Executor or
+CloudML training is an optional later extension, only after a validated
+IsaacLab image, driver/runtime contract, storage layout, and job submission
+path exist; it is not part of the current v0 plan.
+
 ## 5. Backend ownership and source of truth
 
 During the first phases:
@@ -161,6 +178,10 @@ Required before training:
 - same deployed ONNX input/output shapes and metadata requirements.
 
 L1 is a hard requirement.
+
+Production policy ABI v1 is **61D -> 14D**. The 51D path still present in
+`scripts/infer_policy.py` is legacy inference compatibility for old policies,
+not a current training target and not an IsaacLab v0 requirement.
 
 ### L2 — Task compatibility
 
@@ -259,6 +280,11 @@ At minimum verify:
 
 Generated USD may be committed for reproducibility/startup speed, but its source revision and generation procedure must be recorded.
 
+For v0, `robot_walk.xml` is the only asset-generation input. USD must be
+generated from that MJCF source and accompanied by a machine-readable asset
+report. A hand-maintained USD with no source revision is not an accepted
+backend asset.
+
 ## 10. BAM / XL330 actuator strategy
 
 This is the highest-priority physics component of the port.
@@ -281,6 +307,22 @@ Prefer to extract **pure actuator math** into `microduck_common` only if both ba
 Otherwise keep two wrappers/implementations and validate them against common numerical fixtures.
 
 The key requirement is mathematical parity, not DRY code.
+
+### Training versus MuJoCo rehearsal
+
+The regular `scripts/infer_policy.py` viewer path loads the raw MuJoCo scene
+XML, whose position actuators are not the BAM voltage model. It applies the
+policy target directly and can optionally clip actuator force to the XL330
+current-derived torque limit; this is a useful deployment/viewer rehearsal but
+is not BAM-equivalent simulation.
+
+The training path uses the mjlab BAM actuator configured by
+`mjlab_microduck.robot.microduck_constants`. The dedicated
+`scripts/testbench_sim2real.py` testbench has separate BAM and mjlab-backed
+simulation modes for actuator bench work. IsaacLab actuator parity must be
+compared to the **training BAM path**, not inferred from the ordinary viewer
+path. Any PhysX-trained policy must still pass the existing 61D ONNX and
+MuJoCo/runtime rehearsal gates before hardware testing.
 
 ## 11. Backlash
 
@@ -377,6 +419,19 @@ For each task that is ported, maintain a backend-neutral evaluation report with 
 - inference/export shape checks.
 
 When both simulators train a candidate, compare per-skill metrics and qualitative video before interpreting aggregate reward.
+
+Hardware validation is a separate release gate, in this order:
+
+```text
+actuator bench
+    -> MuJoCo/runtime rehearsal
+    -> human-approved controlled robot test
+```
+
+A PhysX-trained policy must pass the 61D/14D ONNX parity checks, fixed command
+battery, finite-duration MuJoCo/runtime rehearsal, and safety metrics before it
+can enter the final gate. IsaacLab success alone does not authorize hardware
+testing, and production runtime changes are out of scope for v0.
 
 ## 16. CI tiers
 

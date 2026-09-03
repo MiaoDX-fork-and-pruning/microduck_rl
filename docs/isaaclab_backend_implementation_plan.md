@@ -13,6 +13,11 @@ The goal is to add an IsaacLab/PhysX backend to this repository while preserving
 
 A successful program produces a second backend that implements the same Microduck hardware-facing policy semantics and can independently train deployable policies. It is not necessary to port every task before the work is useful.
 
+For this plan, equivalent training means matching the production 61D -> 14D
+policy contract and task semantics closely enough to produce deployable
+behavior. It does not require identical MuJoCo/PhysX trajectories or reward
+curves.
+
 ## 2. Working rules
 
 1. Read `AGENTS.md` before changing existing task code.
@@ -54,6 +59,17 @@ Recommended artifact tree:
 ```
 
 Do not commit long-run artifacts to Git.
+
+The canonical IsaacLab environment is the official Isaac Sim/IsaacLab
+container or bundled Python distribution selected in Phase 0. Keep it separate
+from the mjlab uv environment, and provide a checked-in launch wrapper plus
+version manifest rather than attempting to merge both simulator stacks into a
+single lockfile. The v0 implementation and training plan is local-first:
+bring-up, smoke tests, physics benches, and the first full `Velocity-Flat` and
+`VelStand` runs execute on an Isaac Sim-capable local workstation. Executor or
+CloudML is not a current training target; it can be added later only after an
+IsaacLab image, driver/runtime contract, storage mounts, and submission path
+have been validated separately.
 
 ## 4. Phase 0 — dependency/environment spike
 
@@ -122,7 +138,10 @@ Does PhysX contain the same robot, not merely a visually similar USD?
 
 ### Tasks
 
-Build or generate the Microduck USD from the current mechanical/model source. Add scripts or metadata documenting the generation path.
+Build or generate the Microduck USD from `robot_walk.xml` as the v0 mechanical
+source. Add scripts or metadata documenting the generation path and emit a
+machine-readable asset report. Do not accept a hand-maintained USD with no
+source revision.
 
 Extract a machine-readable comparison table from mjlab and IsaacLab for:
 
@@ -504,6 +523,10 @@ Only then port roller tasks and curricula.
 
 Do not change production runtime during early simulator work.
 
+The production ABI target is 61D -> 14D. The legacy 51D inference mode in
+`scripts/infer_policy.py` is compatibility-only and is out of scope for the
+IsaacLab backend.
+
 When a PhysX-trained specialist reaches deployment quality:
 
 - export with the same actor observation normalization semantics;
@@ -512,6 +535,10 @@ When a PhysX-trained specialist reaches deployment quality:
 - run deterministic PyTorch-vs-ONNX parity vectors;
 - rehearse in a CPU/simulator path if available;
 - use existing runtime safeguards and specialist fallback for first robot tests.
+
+Passing IsaacLab evaluation is not sufficient for hardware testing. The
+candidate must first pass the existing 61D ONNX parity checks, fixed command
+battery, and MuJoCo/runtime rehearsal path.
 
 A backend tag is useful metadata but must not alter the runtime control contract.
 
@@ -682,6 +709,24 @@ Proceed to VelStand only if:
 - task metrics are competitive enough to justify further porting.
 
 Otherwise fix the foundation first.
+
+The first IsaacLab judgment slice is intentionally limited to `Velocity-Flat`
+followed by `VelStand` as the contact-rich task. The remaining specialist tasks
+are subsequent milestones, not prerequisites for deciding whether the backend
+is viable.
+
+Hardware validation remains a separate three-stage release gate:
+
+```text
+actuator bench
+    -> MuJoCo/runtime rehearsal
+    -> human-approved controlled robot test
+```
+
+Before the final stage, a PhysX-trained policy must pass 61D/14D ONNX parity,
+the fixed command battery, finite-duration MuJoCo/runtime rehearsal, and the
+defined safety metrics. IsaacLab evaluation alone is not authorization for
+hardware testing.
 
 ## 21. What not to do during local development
 
