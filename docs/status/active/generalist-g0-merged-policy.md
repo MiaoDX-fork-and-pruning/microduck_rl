@@ -315,6 +315,13 @@ pass. The primitives are intentionally independent of rsl_rl; rollout teacher
 action capture, storage fields, PPO loss wiring, and efficient frozen-teacher
 inference remain unimplemented and are the next required integration slice.
 
+Teacher inference prerequisite: `FrozenG0Teachers` reconstructs the three
+frozen specialist actors from their checkpoint artifacts, applies each saved
+61D observation normalizer, selects by the G0 behavior slice, and returns
+bounded 14D actions in a batched Torch call. Five focused anchor/teacher tests
+pass. This removes the per-step CPU ONNX dependency; PPO rollout/storage and
+anchor-loss wiring remain pending.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
