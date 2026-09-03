@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from scripts.isaaclab.asset_report import ACTUATED_ORDER, build_report
+from isaaclab_microduck.assets import ACTUATED_ORDER, build_report
 
 
 def test_mjcf_asset_report_has_expected_actuated_order() -> None:
