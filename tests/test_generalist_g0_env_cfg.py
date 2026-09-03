@@ -97,7 +97,7 @@ def test_g0_baseline_runner_identities_are_comparable_but_distinct():
     assert GeneralistG0DirectPpoRlCfg.num_steps_per_env == GeneralistG0HybridPpoRlCfg.num_steps_per_env
     assert GeneralistG0DirectPpoRlCfg.max_iterations == GeneralistG0HybridPpoRlCfg.max_iterations
     assert "anchor_weights" not in asdict(GeneralistG0DirectPpoRlCfg)["algorithm"]
-    assert asdict(GeneralistG0HybridPpoRlCfg)["algorithm"]["anchor_weights"] == 0.1
+    assert asdict(GeneralistG0HybridPpoRlCfg)["algorithm"]["anchor_weights"] == 1.0
 
 
 def test_g0_transition_contract_is_exactly_four_track_a_edges():

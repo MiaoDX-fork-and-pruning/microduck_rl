@@ -31,7 +31,10 @@ G0_STAGE_MIN_EPISODES = 64
 
 @dataclass
 class GeneralistG0HybridPpoAlgorithmCfg(PpoWithSymmetryCfg):
-    anchor_weights: float = 0.1
+    # Strong bootstrap anchor: PPO task rewards are much larger than the raw
+    # action MSE, so 0.1 let the freshly injected specialist leave its stable
+    # basin before any measured stage could unlock.
+    anchor_weights: float = 1.0
 
 
 @dataclass(frozen=True)

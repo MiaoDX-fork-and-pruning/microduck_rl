@@ -102,6 +102,12 @@ still fail the corrected Track A battery.
 Latest gate: `/tmp/g0-final-gate.json` is `DIAGNOSTIC_FAIL` for all three
 behaviors and four legal edges; parity/latency/fallback infrastructure passes.
 
+Anchor-strength experiment: the hybrid bootstrap coefficient is now `1.0`
+(previously `0.1`) because the PPO task stack overwhelmed the weak imitation
+signal before VELSTAND could pass its measured unlock. Required smoke reports
+nonzero anchor loss, weights `1.0`, episode length rising `64 -> 82`, and zero
+bootstrap fall terminations. This is a training candidate, not P4 evidence.
+
 Stage scalar audit: the stage-aware run recorded `success_0=0.0` through all
 299 updates, so it correctly remained at stage 0. The upright classifier uses
 the repository convention (`projected_gravity_b.z < -cos(65°)`), and the zero
