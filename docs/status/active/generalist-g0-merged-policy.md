@@ -406,3 +406,12 @@ skills (`ground_pick`, `ball_kick`, `roulade`).
 Parked work: P1 balanced collection, P2 comparable BC/direct/hybrid baselines,
 P3 rollout and ONNX batteries, and P4 decision. These artifacts are retained as
 diagnostic evidence and must not be treated as final acceptance.
+
+Implementation checkpoint: the amended hybrid path is now complete through
+real PPO updates. `GeneralistHybridPPO` constructs custom storage, captures
+batched frozen teachers, applies same-step masked anchor loss, exposes
+per-behavior weights/errors, and supports explicit threshold-gated schedule
+updates. The complete generalist-focused regression suite passes (`46 passed`).
+The latest anchored 100-iteration battery remains `DIAGNOSTIC_FAIL`: isolated
+locomotion and sit/stand pass, but stand and all four legal transitions fail.
+No G0 acceptance or next-skill seed claim is made.

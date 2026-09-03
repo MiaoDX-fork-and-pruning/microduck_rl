@@ -2,12 +2,13 @@
 
 Status: active
 
-Current checkpoint: P4 diagnostic evaluation complete. The versioned teacher
+Current checkpoint: P4 diagnostic evaluation complete; hybrid anchor
+implementation is now wired and smoke-verified. The versioned teacher
 manifest (`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition
 graph (`docs/generalist_g0_transition_graph.json`) are hash-verified; data
 collection, BC/DAgger, direct PPO, hybrid PPO, ONNX parity, latency, and
 fallback tooling are implemented and covered by focused tests. The current
-candidate is not accepted: behavior and legal-edge success gates remain below
+candidate is not accepted: stand and legal-edge success gates remain below
 the required thresholds, so work must continue on the merged-policy behavior
 before adding any new skill.
 
@@ -232,6 +233,12 @@ If both fail, stop and diagnose schema, reward masking, transition sampling,
 or state coverage before adding any behavior. If BC/DAgger passes but PPO
 regresses, retain the distilled model as the G0 candidate and treat PPO as a
 failed optional refinement.
+
+The hybrid implementation now includes a measured per-step action anchor:
+frozen Torch teachers, metadata-aware rollout storage, same-step PPO anchor
+loss, per-behavior anchor weights/errors, and an explicit threshold-gated
+schedule hook. These changes are implementation-complete but do not alter the
+acceptance thresholds below.
 
 ## Unified PPO reward contract
 
