@@ -56,21 +56,21 @@ Treat the existing `/tmp` reports and checkpoints as ephemeral diagnostics.
 Their paths and hashes are recorded in the probe manifest, but they are not the
 immutable external evidence package required for acceptance.
 
-## Next discussion
+## Next execution handoff
 
-The next context should decide and approve a bounded debugging plan before any
-training. The recommended first step is to complete evaluator fidelity and
-state coverage, then rerun the causal probe:
+The next context should execute the frozen `execution-ready-v2` causal probe
+before any training. The required order is:
 
 1. reproduce the frozen teacher's exact reset buckets, episode horizon,
    termination classes, reward terms, and seed semantics for both teacher and
-   student;
-2. collect balanced nominal/recovery traces and cumulative frontier DAgger
-   windows with explicit bucket labels;
-3. compare teacher-initialized, BC, DAgger, scripted-teacher, and random arms on
-   that same battery;
-4. only after a student passes, export ONNX, run parity/video review, and propose
-   incremental `VELOCITY` merging with a VELSTAND non-regression gate.
+   student, publishing native per-bucket baselines first;
+2. collect trajectory-split nominal/recovery data and cumulative frontier
+   DAgger windows with explicit bucket labels;
+3. compare native teacher, random/no-op, teacher-initialized, BC, and DAgger
+   arms on that same battery;
+4. only after a student passes all aggregate and per-bucket gates, export ONNX,
+   run parity/video review, and propose incremental `VELOCITY` merging with a
+   VELSTAND non-regression gate.
 
 Any materially different reward, initialization, actor objective, capacity, or
 PPO experiment requires a new approved plan.

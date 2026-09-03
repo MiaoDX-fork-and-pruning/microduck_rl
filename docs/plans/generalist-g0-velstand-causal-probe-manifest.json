@@ -1,8 +1,8 @@
 {
   "schema": "generalist-g0-velstand-causal-probe-manifest",
-  "version": 1,
+  "version": 2,
   "probe_id": "g0-velstand-causal-probe",
-  "status": "diagnostic-run-incomplete-contract",
+  "status": "execution-ready-v2",
   "source_commit": "56cfcc95465bc6cd7d523c4a5d5bbe8ed4d8cf7d",
   "dirty_tree_at_freeze": true,
   "plan": "docs/plans/generalist-g0-velstand-causal-probe.md",
@@ -55,7 +55,10 @@
     ],
     "command_buckets": ["zero", "nominal_hold"],
     "episode_horizon_seconds": 20,
-    "evaluator": "corrected_50hz_mujoco_rollout"
+    "evaluator": "corrected_50hz_mujoco_rollout",
+    "per_bucket_required": true,
+    "same_initial_state_for_native_and_student": true,
+    "native_baseline_required_before_student": true
   },
   "thresholds": {
     "teacher_action_parity": {
@@ -67,7 +70,12 @@
       "episodes": 32,
       "seed": 42,
       "minimum_main_task_metric": 18.0,
-      "teacher_per_episode_success_threshold": 15.0
+      "teacher_per_episode_success_threshold": 15.0,
+      "aggregate_must_not_hide_bucket_failure": true,
+      "teacher_rate_tolerance_must_be_frozen_before_training": true,
+      "teacher_rate_tolerance_absolute": 0.10,
+      "minimum_bucket_success_floor": 0.50,
+      "case_list_must_be_hashed_before_student": true
     },
     "invariants": {
       "finite_actions_required": true,
@@ -90,6 +98,20 @@
       "on_gate_pass": true,
       "after_consecutive_no_primary_success_improvement": 2
     }
+  },
+  "control_arms": [
+    "native_teacher_closed_loop",
+    "random_or_noop_lower_bound",
+    "teacher_initialized_student",
+    "trajectory_split_bc",
+    "cumulative_dagger"
+  ],
+  "student_contract": {
+    "architecture_frozen_across_arms": true,
+    "teacher_initialization_mapping_required": true,
+    "trajectory_split_before_oversampling": true,
+    "dagger_cumulative_dataset": true,
+    "same_state_command_previous_action_timer_for_relabel": true
   },
   "required_reports": {
     "compatibility": "external/g0-velstand-probe/teacher-compatibility.json",
@@ -115,7 +137,7 @@
     "full frozen recovery-bucket battery and termination/outcome parity",
     "specialist main-task reward metric in the student harness",
     "balanced nominal/recovery traces and cumulative frontier DAgger",
-    "teacher-initialized, scripted-teacher, and random control arms",
+    "teacher-initialized and random/no-op control arms",
     "best-student ONNX export/parity and representative video review"
   ]
 }

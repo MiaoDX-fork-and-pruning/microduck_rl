@@ -22,15 +22,20 @@ metric, frontier-window coverage, control arms, ONNX parity, and video review
 remain incomplete. The current provisional diagnosis is
 `state_distribution_coverage_or_model_capacity`.
 
-The next context must approve a bounded debugging plan or complete the missing
-probe evidence before any PPO run. No merged PPO, new behavior, or G0
-acceptance claim is authorized from this checkpoint.
+The next context should execute the frozen `execution-ready-v2` VELSTAND probe
+(`docs/plans/generalist-g0-velstand-causal-probe.md`) before any PPO run. No
+merged PPO, new behavior, or G0 acceptance claim is authorized until that probe
+passes its evaluator, per-bucket, control-arm, and closed-loop gates.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the
 full generalist-v0 program: the goal is to prove that one conditioned model
 can represent a small, already-validated transition graph before adding
 dynamic skills.
+
+Execution ordering is now strict: the direct/hybrid PPO work described in P2
+is suspended until the `execution-ready-v2` VELSTAND probe passes. The probe is
+the prerequisite learnability and evaluator gate; it is not another PPO arm.
 
 ## Decision
 
