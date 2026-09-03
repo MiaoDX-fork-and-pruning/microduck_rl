@@ -329,6 +329,13 @@ teacher actions. A correct adapter must add a hybrid RL storage/batch field and
 carry it through feed-forward (and any future recurrent) minibatches before
 adding the anchor loss; no unsafe monkey patch was introduced.
 
+Storage adapter slice: `GeneralistAnchorStorage` now carries
+`teacher_actions`, `hold_mask`, and `behavior_ids` through hybrid RL
+transitions and shuffled feed-forward minibatches. It rejects non-RL storage
+and missing metadata. Focused storage tests pass (`3 passed`). The hybrid PPO
+algorithm still needs to populate these fields during rollout and add the
+anchor loss/metrics during updates.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
