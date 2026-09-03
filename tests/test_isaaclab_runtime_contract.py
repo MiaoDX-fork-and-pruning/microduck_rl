@@ -24,7 +24,7 @@ def test_runtime_manifest_keeps_isaaclab_external() -> None:
 
 def test_docker_runner_is_pinned_and_executable() -> None:
     assert DOCKER_RUNNER.stat().st_mode & 0o111
-    assert "microduck-isaaclab:2.2.0-isaacsim5.0.0" in DOCKER_RUNNER.read_text()
+    assert "microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1" in DOCKER_RUNNER.read_text()
     assert "/workspace/IsaacLab" in DOCKER_RUNNER.read_text()
     assert "ISAACLAB_DOCKER_WRITE" in DOCKER_RUNNER.read_text()
 
@@ -32,7 +32,7 @@ def test_docker_runner_is_pinned_and_executable() -> None:
 def test_source_pin_is_reproducible() -> None:
     manifest = tomllib.loads(MANIFEST.read_text())
 
-    assert manifest["isaaclab_source_tag"] == "v2.2.0"
+    assert manifest["isaaclab_source_tag"] == "v3.0.0-beta2.patch1"
     assert len(manifest["isaaclab_source_revision"]) == 40
 
 

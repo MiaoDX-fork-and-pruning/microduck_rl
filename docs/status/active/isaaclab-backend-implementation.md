@@ -1,10 +1,10 @@
-status: BLOCKED
+status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task C ArticulationCfg contract added; MJCF conversion artifact remains blocked
+current_slice: switching to the officially paired IsaacLab 3.0 beta / Isaac Sim 6.0.1 runtime
 blocker_kind: mjcf_importer_no_artifact
-  blocker_fingerprint: Isaac Sim 5.0 MJCFCreateAsset reaches app-ready but does not complete or emit USD in bounded headless runs, including with dest_path
+  blocker_fingerprint: prior Isaac Sim 5.0 MJCFCreateAsset hang; superseded by runtime switch
 last_proven_evidence: >-
   Revalidated this continuation: `python` cannot import isaaclab, isaacsim, or
   omni.isaac.lab; `command -v` finds no isaaclab/isaacsim; host Python is
@@ -29,10 +29,9 @@ completed: >-
   asset parity report. Focused deterministic suite currently passes 14 tests;
   conversion and diagnostic contract tests pass as well.
 next_action: >-
-  Change to an Isaac Sim/IsaacLab image combination whose bundled MJCF importer
-  passes its own `nv_ant.xml` conversion, then retry Microduck before running
-  the ArticulationCfg in PhysX. Do not hand-maintain a USD without a
-  reproducible source conversion.
+  Finish pulling/building the official Isaac Sim 6.0.1 image, run the headless
+  probe and bundled `nv_ant.xml` conversion, then retry Microduck. Do not
+  hand-maintain a USD without a reproducible source conversion.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh ./python.sh -u scripts/isaaclab/probe.py`
   against a completed official Isaac Sim image, plus existing mjlab regression

@@ -1,4 +1,4 @@
-FROM nvcr.io/nvidia/isaac-sim:5.0.0
+FROM nvcr.io/nvidia/isaac-sim:6.0.1
 
 RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
     cloudpickle==3.1.2 \
