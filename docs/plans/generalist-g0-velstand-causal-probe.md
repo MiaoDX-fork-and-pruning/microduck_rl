@@ -1,8 +1,23 @@
 # G0 VELSTAND Causal Probe
 
-Status: ready-for-execution
+Status: executed-phase-a-and-b-failed
 Parent plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 Parent status: `docs/status/active/generalist-g0-merged-policy.md`
+
+## Execution Outcome
+
+Phase A passed after repairing the frozen-teacher reconstruction to match the
+exported ONNX normalizer (`_std + 0.01`): the canonical 300-tick trace measured
+`max_abs=3.84e-7` and `mean_abs=4.78e-8`. Nominal VELSTAND-only BC and two
+bounded DAgger rounds were then evaluated on the fixed 32-episode seed-42
+battery. All rollouts were finite, but success remained `0.0` (maximum tilt
+`1.6762 rad` against the `1.1345 rad` gate). The main-task reward metric was
+unavailable in the CPU student harness and therefore remained fail-closed.
+
+Per the fixed early-stop rule, Phase B is classified as failed with diagnosis
+`state_distribution_coverage_or_model_capacity`. No merged PPO run or G0
+acceptance claim is authorized. Final machine-readable diagnosis:
+`/tmp/g0-velstand-causal-diagnosis-final.json`.
 
 ## Purpose
 
