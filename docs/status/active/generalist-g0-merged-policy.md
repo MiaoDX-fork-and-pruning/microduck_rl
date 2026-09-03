@@ -48,9 +48,18 @@ Schema audit: evaluator conditioning, PPO actor ordering, and frozen-teacher
 reconstruction agree on behavior offset 48, command offset 54, and the frozen
 71D layout. The remaining failure is not an ABI or normalization-slot mismatch.
 
-Next hypothesis: the remaining failure is policy/task learning rather than
-schema, reset, or anchor plumbing. Any next experiment must change the reward
-curriculum or transition-phase coverage and be compared with this baseline.
+Termination experiment: removing the 70-degree bootstrap termination produced
+longer finite episodes, but the 300-iteration checkpoint still failed all
+behavior and edge gates. The hypothesis that truncation alone caused failure is
+falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
+this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
+tolerance; the rerun remains a diagnostic failure.
+
+Next hypothesis: the remaining failure is policy/task learning, likely reward
+economics or missing transition-phase reset coverage, rather than schema,
+reset, anchor, or termination plumbing. Any next experiment must change the
+reward curriculum or transition-phase coverage and be compared with this
+baseline.
 
 Next proof: run a bounded fresh hybrid diagnostic under the long-horizon
 termination contract, evaluate its final checkpoint with corrected Track A, and
