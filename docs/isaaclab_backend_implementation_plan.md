@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime, PPO smoke, and playback evidence complete; Task H evaluation remains**
+Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime and fixed command battery complete; Task H comparison remains**
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -714,8 +714,13 @@ checkpoint and exits successfully after a 32-frame Kit playback. The video is
 recorded at
 `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_13-02-22/videos/play/clip_0000.mp4`;
 see `docs/isaaclab_velocity_flat_playback_report.md`. This proves the runtime
-and recorder path, not gait quality. A fixed-seed command battery and the
-baseline comparison are still required before Task H can be accepted.
+and recorder path, not gait quality. The fixed-seed command battery now
+completes with 16 environments and 250 steps each for zero, forward, lateral,
+and yaw commands; all tensors are finite. Reset fractions remain about 0.021
+per environment step and maximum tilt reaches about 0.85 rad, so this smoke
+checkpoint is not a reliable gait. See
+`docs/isaaclab_velocity_flat_command_battery_report.md`. A same-format current
+mjlab baseline comparison is still required before Task H can be accepted.
 
 ### Task I — decide whether to continue
 

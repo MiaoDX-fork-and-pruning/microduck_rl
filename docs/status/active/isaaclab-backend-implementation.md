@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H Velocity-Flat fixed-seed evaluation and mjlab comparison
+current_slice: Task H Velocity-Flat fixed-seed evaluation complete; mjlab comparison pending
 blocker_kind: evaluation_battery
-  blocker_fingerprint: fixed command battery and external-load friction parity are not implemented
+  blocker_fingerprint: mjlab comparison and external-load friction parity are not implemented
 last_proven_evidence: >-
   The formal `microduck-isaaclab:3.0.0-isaacsim6.0.1` image runs the pinned
   IsaacLab `release/3.0.0` source at commit
@@ -76,12 +76,18 @@ completed: >-
   The run remained finite and reached about 841-step mean episodes with 0.183
   fallen fraction, but XY/yaw tracking errors remained about 0.399 m/s and
   1.11 rad/s and the task success rate stayed zero. These are training-chain
-  signals, not evidence of a reliable gait or simulator parity.
+  signals, not evidence of a reliable gait or simulator parity. The fixed-seed
+  command battery now completes on the same smoke checkpoint with 16
+  environments and 250 steps for zero, forward, lateral, and yaw commands.
+  All tensors are finite. Reset fractions are 0.0205, 0.0213, 0.0208, and
+  0.0208; mean XY errors are 0.0911, 0.1421, 0.2493, and 0.0938 m/s. The
+  lateral case is the weakest tracker and maximum tilt is about 0.85 rad in
+  every case. See `docs/isaaclab_velocity_flat_command_battery_report.md`.
 next_action: >-
-  Implement the fixed-seed command battery and baseline manifest/report for
-  zero, forward, lateral, and yaw commands; compare against the current mjlab
-  baseline. Keep the USD `drive_configured=false` finding visible: BAM is
-  explicit effort control, not implicit PhysX PD.
+  Produce a same-format current mjlab baseline comparison and decide whether
+  the measured smoke-checkpoint behavior justifies another IsaacLab training
+  run. Keep the USD `drive_configured=false` finding visible: BAM is explicit
+  effort control, not implicit PhysX PD.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
@@ -97,6 +103,5 @@ stop_condition: >-
   documented. Do not start another long PPO run without a new Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  External-load friction parity remains unresolved; Task H's fixed-seed battery
-  and comparison report remain pending; DCMotorCfg is not accepted as BAM
-  parity.
+  External-load friction parity remains unresolved; the current mjlab
+  comparison is pending; DCMotorCfg is not accepted as BAM parity.

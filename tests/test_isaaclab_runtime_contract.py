@@ -111,6 +111,18 @@ def test_playback_video_command_selects_a_recording_visualizer() -> None:
     assert "--viz kit" in command
 
 
+def test_command_battery_has_fixed_required_scenarios() -> None:
+    source = (ROOT / "scripts/isaaclab/velocity_flat_command_battery.py").read_text()
+
+    for name in ("zero", "forward", "lateral", "yaw"):
+        assert f'"{name}"' in source
+    assert "checkpoint_sha256" in source
+    assert "friction_bridge" in source
+    assert "RslRlVecEnvWrapper(env, clip_actions=1.0)" in source
+    assert "clip_actions=True" not in source
+    assert "handle_deprecated_rsl_rl_cfg(agent_cfg, \"5.4.1\")" in source
+
+
 def test_asset_declares_imported_articulation_root_path() -> None:
     source = (ROOT / "src/isaaclab_microduck/assets/microduck.py").read_text()
     assert 'articulation_root_prim_path="/Geometry/trunk_base"' in source
