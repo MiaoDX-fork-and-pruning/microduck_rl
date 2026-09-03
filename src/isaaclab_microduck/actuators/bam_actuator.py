@@ -106,6 +106,18 @@ class BamActuator(ActuatorBase):
             friction_scale=self._friction_scale,
         )
 
+    def physx_friction_coefficients(
+        self,
+        motor_effort: torch.Tensor,
+        external_effort: torch.Tensor,
+        joint_vel: torch.Tensor,
+    ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Map the BAM budget to IsaacLab's static/dynamic/viscous fields."""
+
+        budget = self.friction_budget(motor_effort, external_effort, joint_vel)
+        viscous = torch.full_like(budget, self._params.friction_viscous)
+        return budget, budget, viscous
+
     def set_supply_voltage(self, voltage: float | torch.Tensor) -> None:
         """Set the episode voltage used by the dynamic bench or a controlled run."""
 

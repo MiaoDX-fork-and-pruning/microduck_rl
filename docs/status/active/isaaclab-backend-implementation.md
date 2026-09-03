@@ -2,12 +2,13 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: IsaacLab BAM dynamic bench; PhysX friction integration remains
-  the simulator gate
+current_slice: deterministic IsaacLab physics battery with motor-only PhysX
+  friction bridge; external-load parity remains the simulator gate
 blocker_kind: physx_friction_bridge_unresolved
   blocker_fingerprint: explicit BAM voltage effort is running on the real
-  articulation, but its load-dependent friction budget is not yet applied to
-  PhysX joint dynamics
+  articulation, and the available motor-only friction budget is now written
+  through IsaacLab's static/dynamic/viscous joint fields; the load-dependent
+  external effort is not exposed by the explicit actuator callback
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -40,10 +41,14 @@ completed: >-
   `.cache/isaaclab-assets/bam_dynamic_bench.json` covers 20-step 7.5V and
   6.5V target steps plus a 7.5V sinusoid; all samples are finite. The report
   explicitly records `friction_bridge=not_applied_to_physx`.
+  The deterministic battery now runs on the real USD with a post-clone ground
+  plane workaround required by Isaac Sim 6.0.1. Its 200-step subset covers
+  home settle, free fall, target step, and NaN soak; all samples are finite.
+  It applies the motor-only friction bridge and records the limitation as
+  `motor_only_external_effort_unavailable`.
 next_action: >-
-  Implement and validate the PhysX-side friction bridge. Use the existing
-  actuator friction budget and measured joint state, then run a constrained
-  one-joint friction sweep against the mjlab reference. Keep the USD
+  Add the constrained one-joint friction sweep and determine how to expose or
+  estimate solved external joint load for full BAM parity. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control,
   not implicit PhysX PD.
 next_proof: >-
@@ -51,7 +56,8 @@ next_proof: >-
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
   --headless --output .cache/isaaclab-assets/microduck_walk.usd.report.json'`,
   followed by `scripts/isaaclab/articulation_probe.py --headless`,
-  `scripts/isaaclab/bam_dynamic_bench.py --headless --steps 20`, actuator
+  `scripts/isaaclab/bam_dynamic_bench.py --headless --steps 20`,
+  `scripts/isaaclab/physics_battery.py --headless --steps 200`, actuator
   numerical tests, and existing mjlab regression checks.
 stop_condition: >-
   Do not claim simulator parity or start PPO until PhysX drive/BAM behavior is
