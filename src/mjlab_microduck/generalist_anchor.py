@@ -34,6 +34,45 @@ def action_anchor_loss(
     return error, count
 
 
+def weighted_action_anchor_loss(
+    student_actions: torch.Tensor,
+    teacher_actions: torch.Tensor,
+    behavior_ids: torch.Tensor,
+    hold_mask: torch.Tensor,
+    behavior_weights: torch.Tensor,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return behavior-weighted action MSE over held samples.
+
+    Each held row is multiplied by the weight for its active behavior.  The
+    result is divided by the number of held rows, rather than the sum of
+    weights, so weights remain loss coefficients (and an all-``w`` vector is
+    exactly ``w * action_anchor_loss(...)``).
+    """
+    if student_actions.shape != teacher_actions.shape or student_actions.ndim != 2:
+        raise ValueError("student and teacher actions must have matching shape [N,A]")
+    if behavior_ids.ndim != 1 or behavior_ids.shape[0] != student_actions.shape[0]:
+        raise ValueError("behavior_ids must have shape [N]")
+    if hold_mask.ndim != 1 or hold_mask.shape[0] != student_actions.shape[0]:
+        raise ValueError("hold_mask must have shape [N]")
+    if behavior_weights.ndim != 1 or behavior_weights.numel() == 0:
+        raise ValueError("behavior_weights must be a non-empty vector")
+    if not torch.isfinite(student_actions).all() or not torch.isfinite(teacher_actions).all():
+        raise ValueError("teacher and student actions must be finite")
+    if not torch.isfinite(behavior_weights).all() or (behavior_weights < 0).any():
+        raise ValueError("behavior weights must be finite and non-negative")
+
+    selected = hold_mask.to(dtype=torch.bool)
+    count = selected.sum()
+    if count.item() == 0:
+        return student_actions.sum() * 0.0, count
+    selected_ids = behavior_ids[selected].long()
+    if (selected_ids < 0).any() or (selected_ids >= behavior_weights.numel()).any():
+        raise ValueError("held behavior id has no configured anchor weight")
+    row_error = (student_actions[selected] - teacher_actions[selected]).pow(2).mean(dim=1)
+    loss = (row_error * behavior_weights[selected_ids]).sum() / count
+    return loss, count
+
+
 def per_behavior_anchor_error(
     student_actions: torch.Tensor,
     teacher_actions: torch.Tensor,

@@ -13,7 +13,7 @@ from torch import nn
 from rsl_rl.algorithms.ppo import PPO
 from rsl_rl.storage import RolloutStorage
 
-from .generalist_anchor import action_anchor_loss
+from .generalist_anchor import per_behavior_anchor_error, weighted_action_anchor_loss
 from .generalist_anchor_storage import GeneralistAnchorStorage
 from .generalist_teachers import FrozenG0Teachers
 
@@ -21,9 +21,26 @@ from .generalist_teachers import FrozenG0Teachers
 class GeneralistHybridPPO(PPO):
     """PPO whose minibatch objective includes masked teacher-action MSE."""
 
-    def __init__(self, *args, anchor_weights: float | list[float] = 0.0, **kwargs):
+    def __init__(
+        self,
+        *args,
+        anchor_weights: float | list[float] = 0.0,
+        anchor_behavior_count: int = 3,
+        **kwargs,
+    ):
         super().__init__(*args, **kwargs)
-        self.anchor_weight = float(anchor_weights if isinstance(anchor_weights, (int, float)) else max(anchor_weights, default=0.0))
+        if anchor_behavior_count <= 0:
+            raise ValueError("anchor_behavior_count must be positive")
+        weights = (
+            [float(anchor_weights)] * anchor_behavior_count
+            if isinstance(anchor_weights, (int, float))
+            else list(anchor_weights)
+        )
+        if len(weights) != anchor_behavior_count:
+            raise ValueError("anchor_weights length must match anchor_behavior_count")
+        if not weights or any(weight < 0.0 for weight in weights):
+            raise ValueError("anchor_weights must contain non-negative values")
+        self.anchor_weights = torch.tensor(weights, dtype=torch.float32, device=self.device)
         if not isinstance(self.storage, GeneralistAnchorStorage):
             raise TypeError("GeneralistHybridPPO requires GeneralistAnchorStorage")
         self.teacher_provider = None
@@ -71,6 +88,8 @@ class GeneralistHybridPPO(PPO):
         if self.actor.is_recurrent or self.critic.is_recurrent:
             raise NotImplementedError("hybrid anchor currently supports feed-forward policies only")
         totals = {"value": 0.0, "surrogate": 0.0, "entropy": 0.0, "anchor": 0.0, "anchor_count": 0.0}
+        behavior_error_sums = torch.zeros_like(self.anchor_weights)
+        behavior_error_counts = torch.zeros_like(self.anchor_weights)
         generator = self.storage.mini_batch_generator(self.num_mini_batches, self.num_learning_epochs)
         for batch in generator:
             if self.normalize_advantage_per_mini_batch:
@@ -89,8 +108,20 @@ class GeneralistHybridPPO(PPO):
             else:
                 value_loss = (batch.returns-values).pow(2).mean()
             mean_actions = self.actor(batch.observations.detach().clone())
-            anchor, count = action_anchor_loss(mean_actions, batch.teacher_actions, batch.hold_mask.squeeze(-1))
-            loss = surrogate + self.value_loss_coef * value_loss - self.entropy_coef * entropy.mean() + self.anchor_weight * anchor
+            behavior_ids = batch.behavior_ids.squeeze(-1)
+            hold_mask = batch.hold_mask.squeeze(-1)
+            anchor, count = weighted_action_anchor_loss(
+                mean_actions, batch.teacher_actions, behavior_ids, hold_mask, self.anchor_weights
+            )
+            behavior_errors = per_behavior_anchor_error(
+                mean_actions, batch.teacher_actions, behavior_ids, hold_mask, self.anchor_weights.numel()
+            )
+            present = torch.isfinite(behavior_errors)
+            for behavior in present.nonzero(as_tuple=False).flatten():
+                sample_count = (hold_mask & (behavior_ids == behavior)).sum()
+                behavior_error_sums[behavior] += behavior_errors[behavior] * sample_count
+                behavior_error_counts[behavior] += sample_count
+            loss = surrogate + self.value_loss_coef * value_loss - self.entropy_coef * entropy.mean() + anchor
             self.optimizer.zero_grad(); loss.backward()
             nn.utils.clip_grad_norm_(self.actor.parameters(), self.max_grad_norm)
             nn.utils.clip_grad_norm_(self.critic.parameters(), self.max_grad_norm)
@@ -99,8 +130,15 @@ class GeneralistHybridPPO(PPO):
             totals["anchor"] += anchor.item(); totals["anchor_count"] += count.item()
         n = self.num_learning_epochs * self.num_mini_batches
         self.storage.clear()
-        return {"value": totals["value"]/n, "surrogate": totals["surrogate"]/n, "entropy": totals["entropy"]/n,
-                "anchor": totals["anchor"]/n, "anchor_count": totals["anchor_count"]/n}
+        metrics = {"value": totals["value"]/n, "surrogate": totals["surrogate"]/n, "entropy": totals["entropy"]/n,
+                   "anchor": totals["anchor"]/n, "anchor_count": totals["anchor_count"]/n}
+        for behavior in range(behavior_error_sums.numel()):
+            count = behavior_error_counts[behavior].item()
+            metrics[f"anchor_error_behavior_{behavior}"] = (
+                behavior_error_sums[behavior].item() / count if count else float("nan")
+            )
+            metrics[f"anchor_weight_behavior_{behavior}"] = self.anchor_weights[behavior].item()
+        return metrics
 
 
 def construct_algorithm(actor: Any, critic: Any, *, num_envs: int, num_transitions_per_env: int,
