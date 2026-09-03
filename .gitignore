@@ -34,6 +34,9 @@ claude_experiments/
 
 backup_onnx/
 
+# External simulator source/cache fetched by scripts/isaaclab/fetch_source.sh
+.cache/IsaacLab-*/
+
 
 logdir/.claude/
 logdir/
