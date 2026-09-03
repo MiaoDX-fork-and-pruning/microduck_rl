@@ -19,3 +19,5 @@ def test_physics_battery_exposes_required_bringup_cases_and_boundaries() -> None
     assert "torch.isfinite" in source
     assert "root_pos_w" in source
     assert "root_quat_w" in source
+    assert "root_link_pos_w" in source
+    assert "root_link_quat_w" in source

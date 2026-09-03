@@ -44,12 +44,14 @@ def _apply_friction_bridge(robot, actuator) -> str:
     return "motor_only_external_effort_unavailable"
 
 
-def _tilt_rad(quat_wxyz: torch.Tensor) -> torch.Tensor:
-    scalar = torch.clamp(torch.abs(quat_wxyz[..., 0]), max=1.0)
+def _tilt_rad(quat_xyzw: torch.Tensor) -> torch.Tensor:
+    """Return angle from upright for IsaacLab's xyzw quaternion layout."""
+
+    scalar = torch.clamp(torch.abs(quat_xyzw[..., 3]), max=1.0)
     return 2.0 * torch.acos(scalar)
 
 
-def _restore_home(robot) -> None:
+def _restore_home(robot, home_target: torch.Tensor) -> None:
     print("ISAACLAB_PHYSICS_BATTERY:restore_home:start", flush=True)
     root_pose = robot.data.default_root_pose.torch.clone()
     root_vel = robot.data.default_root_vel.torch.clone()
@@ -58,7 +60,7 @@ def _restore_home(robot) -> None:
     print("ISAACLAB_PHYSICS_BATTERY:restore_home:pose_written", flush=True)
     robot.write_root_velocity_to_sim_index(root_velocity=root_vel)
     print("ISAACLAB_PHYSICS_BATTERY:restore_home:velocity_written", flush=True)
-    robot.write_joint_position_to_sim_index(position=robot.data.default_joint_pos.torch.clone())
+    robot.write_joint_position_to_sim_index(position=home_target.clone())
     robot.write_joint_velocity_to_sim_index(velocity=robot.data.default_joint_vel.torch.clone())
     robot.reset()
 
@@ -79,8 +81,10 @@ def _run_case(scene, sim, robot, name: str, prepare: Callable[[], None], target:
         friction_bridge = _apply_friction_bridge(robot, next(iter(robot.actuators.values())))
         sim.step()
         scene.update(dt)
-        root_pos = robot.data.root_pos_w.torch
-        root_quat = robot.data.root_quat_w.torch
+        # Isaac Sim 6.0.1 has a broken shorthand root_pos_w/root_quat_w view for this imported
+        # asset; the explicit link accessors remain valid.
+        root_pos = robot.data.root_link_pos_w.torch
+        root_quat = robot.data.root_link_quat_w.torch
         joint_vel = robot.data.joint_vel.torch
         applied = robot.data.applied_torque.torch
         finite = finite and _finite(root_pos, root_quat, joint_vel, applied)
@@ -137,13 +141,16 @@ def main() -> None:
         print("ISAACLAB_PHYSICS_BATTERY:sim_reset", flush=True)
         robot = scene.articulations["robot"]
         print("ISAACLAB_PHYSICS_BATTERY:robot_ready", flush=True)
-        home_target = robot.data.default_joint_pos.torch.clone()
+        from isaaclab_microduck.policy_abi import HOME_POSITION
+
+        home_target = torch.as_tensor(HOME_POSITION, device=robot.device).reshape(1, -1)
+        print(f"ISAACLAB_PHYSICS_BATTERY:defaults joint={home_target[0].tolist()}", flush=True)
 
         def home() -> None:
-            _restore_home(robot)
+            _restore_home(robot, home_target)
 
         def free_fall() -> None:
-            _restore_home(robot)
+            _restore_home(robot, home_target)
             pose = robot.data.default_root_pose.torch.clone()
             pose[:, 2] = 0.45
             robot.write_root_pose_to_sim_index(root_pose=pose)
@@ -153,7 +160,7 @@ def main() -> None:
             robot.reset()
 
         def step() -> None:
-            _restore_home(robot)
+            _restore_home(robot, home_target)
 
         step_target = home_target.clone()
         step_target[:, 0] += 0.2
