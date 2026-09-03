@@ -54,6 +54,8 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
 
     errors_xy: list[torch.Tensor] = []
     errors_yaw: list[torch.Tensor] = []
+    actual_xy_values: list[torch.Tensor] = []
+    actual_yaw_values: list[torch.Tensor] = []
     heights: list[torch.Tensor] = []
     tilts: list[torch.Tensor] = []
     actions: list[torch.Tensor] = []
@@ -74,6 +76,8 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         finite = finite and all(bool(torch.isfinite(t).all().item()) for t in tensors)
         errors_xy.append(torch.linalg.norm(desired[:, :2] - actual_xy, dim=-1).detach().cpu())
         errors_yaw.append(torch.abs(desired[:, 2] - actual_yaw).detach().cpu())
+        actual_xy_values.append(actual_xy.detach().cpu())
+        actual_yaw_values.append(actual_yaw.detach().cpu())
         heights.append(root_pos[:, 2].detach().cpu())
         tilts.append(tilt.detach().cpu())
         actions.append(action.detach().cpu())
@@ -81,6 +85,8 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
 
     xy = torch.cat(errors_xy)
     yaw = torch.cat(errors_yaw)
+    actual_xy_all = torch.cat(actual_xy_values)
+    actual_yaw_all = torch.cat(actual_yaw_values)
     height = torch.cat(heights)
     tilt = torch.cat(tilts)
     action_values = torch.cat(actions)
@@ -94,6 +100,8 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         "p95_error_vel_xy_m_s": float(torch.quantile(xy, 0.95)),
         "mean_error_vel_yaw_rad_s": float(yaw.mean()),
         "p95_error_vel_yaw_rad_s": float(torch.quantile(yaw, 0.95)),
+        "mean_actual_vel_xy_m_s": [float(value) for value in actual_xy_all.mean(dim=0)],
+        "mean_actual_vel_yaw_rad_s": float(actual_yaw_all.mean()),
         "episode_resets": resets,
         "reset_fraction_per_env_step": resets / (steps * base_env.scene.num_envs),
         "mean_root_height_m": float(height.mean()),

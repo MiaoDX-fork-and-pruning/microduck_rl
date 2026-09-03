@@ -118,6 +118,8 @@ def test_command_battery_has_fixed_required_scenarios() -> None:
         assert f'"{name}"' in source
     assert "checkpoint_sha256" in source
     assert "friction_bridge" in source
+    assert "mean_actual_vel_xy_m_s" in source
+    assert "mean_actual_vel_yaw_rad_s" in source
     assert "RslRlVecEnvWrapper(env, clip_actions=1.0)" in source
     assert "clip_actions=True" not in source
     assert "handle_deprecated_rsl_rl_cfg(agent_cfg, \"5.4.1\")" in source

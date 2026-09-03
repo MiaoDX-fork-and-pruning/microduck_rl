@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime and fixed command battery complete; Task H comparison remains**
+Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime, fixed command battery, and forward-only comparison complete; long-run decision remains**
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -720,7 +720,15 @@ and yaw commands; all tensors are finite. Reset fractions remain about 0.021
 per environment step and maximum tilt reaches about 0.85 rad, so this smoke
 checkpoint is not a reliable gait. See
 `docs/isaaclab_velocity_flat_command_battery_report.md`. A same-format current
-mjlab baseline comparison is still required before Task H can be accepted.
+  mjlab baseline comparison is now recorded in
+  `docs/isaaclab_velocity_flat_backend_comparison.md`. The comparison is a
+  forward-only directional slice because the available battery horizons and
+  command sets differ; it shows the accepted mjlab rollout staying upright
+  while the five-iteration IsaacLab checkpoint resets about 2.1% of
+  environments per step and reaches about 0.85 rad tilt. Task H is therefore
+  not accepted as a walking result. A longer IsaacLab run requires a new
+  resource/experiment decision, and external-load BAM friction parity remains
+  unresolved.
 
 ### Task I — decide whether to continue
 

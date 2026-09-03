@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H Velocity-Flat fixed-seed evaluation complete; mjlab comparison pending
+current_slice: Task H Velocity-Flat battery and forward-only mjlab comparison complete; long-run decision pending
 blocker_kind: evaluation_battery
   blocker_fingerprint: mjlab comparison and external-load friction parity are not implemented
 last_proven_evidence: >-
@@ -84,10 +84,13 @@ completed: >-
   lateral case is the weakest tracker and maximum tilt is about 0.85 rad in
   every case. See `docs/isaaclab_velocity_flat_command_battery_report.md`.
 next_action: >-
-  Produce a same-format current mjlab baseline comparison and decide whether
-  the measured smoke-checkpoint behavior justifies another IsaacLab training
-  run. Keep the USD `drive_configured=false` finding visible: BAM is explicit
-  effort control, not implicit PhysX PD.
+  Decide whether the measured smoke-checkpoint behavior justifies another
+  IsaacLab training run. The forward-only comparison is recorded in
+  `docs/isaaclab_velocity_flat_backend_comparison.md`; it shows the accepted
+  mjlab rollout staying upright while the IsaacLab checkpoint resets about
+  2.1% of environments per step and reaches about 0.85 rad tilt. Keep the USD
+  `drive_configured=false` finding visible: BAM is explicit effort control, not
+  implicit PhysX PD.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
@@ -103,5 +106,6 @@ stop_condition: >-
   documented. Do not start another long PPO run without a new Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  External-load friction parity remains unresolved; the current mjlab
-  comparison is pending; DCMotorCfg is not accepted as BAM parity.
+  External-load friction parity remains unresolved; a longer IsaacLab run is
+  pending an explicit Task H resource/experiment decision; DCMotorCfg is not
+  accepted as BAM parity.
