@@ -14,10 +14,12 @@ from mjlab_microduck.generalist_schema import SCHEMA, SCHEMA_VERSION, make_condi
 from mjlab_microduck.generalist_model import G0MultiHeadActor
 
 
-def collect(trace_root: Path) -> tuple[np.ndarray, np.ndarray, dict]:
+def collect(trace_root: Path, behaviors: tuple[str, ...] = ("stand", "locomotion", "sit_stand")) -> tuple[np.ndarray, np.ndarray, dict]:
     sources = (("stand", "velstand_flat"), ("locomotion", "velocity_flat"), ("sit_stand", "sitstand_flat"))
     xs, ys, manifest_sources = [], [], []
     for behavior, name in sources:
+        if behavior not in behaviors:
+            continue
         paths = sorted((trace_root / name).glob("*.npz"))
         if not paths:
             raise FileNotFoundError(f"no traces for {name} under {trace_root}")
@@ -126,9 +128,10 @@ def main() -> None:
     ap.add_argument("--small-model", action="store_true")
     ap.add_argument("--bounded-actions", action="store_true")
     ap.add_argument("--multihead", action="store_true")
+    ap.add_argument("--behavior", choices=("stand", "locomotion", "sit_stand"), default=None)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
-    x, y, manifest = collect(args.trace_root)
+    x, y, manifest = collect(args.trace_root, (args.behavior,) if args.behavior else ("stand", "locomotion", "sit_stand"))
     if args.extra_data:
         with np.load(args.extra_data, allow_pickle=False) as extra:
             validate_batch(extra["inputs"], extra["actions"])

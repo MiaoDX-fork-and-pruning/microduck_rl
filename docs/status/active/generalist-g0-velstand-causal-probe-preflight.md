@@ -164,6 +164,14 @@ fails the 65-degree stability gate. `main_task_metric` is intentionally `null`
 because this CPU student harness does not expose specialist reward terms, so
 the acceptance report is fail-closed rather than inferred from tilt.
 
+Nominal BC evidence: the trainer's new explicit `--behavior stand` filter was
+used for the fixed 100-epoch fit at `/tmp/g0-velstand-bc-100` (300 VELSTAND
+samples, validation MSE `1.38e-5`, model SHA-256
+`d7c39458dfcecb73d08bf5c82bf0deba97a479332aeed38fd73cdee24bf28d18`). Its
+32-episode battery remains finite but has `success_rate=0.0` and maximum tilt
+`1.6816 rad`. This is a closed-loop failure despite low supervised error; the
+remaining fixed budget is at most three DAgger rounds of 10,000 samples.
+
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
 
