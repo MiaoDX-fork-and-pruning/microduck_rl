@@ -59,7 +59,8 @@ class GeneralistHybridPPO(PPO):
         actions = super().act(obs)
         if self.teacher_provider is None or self.metadata_provider is None:
             raise RuntimeError("hybrid PPO requires teacher and metadata providers")
-        self.transition.teacher_actions = self.teacher_provider(obs).detach()
+        teacher_obs = obs["actor"] if hasattr(obs, "keys") and "actor" in obs.keys() else obs
+        self.transition.teacher_actions = self.teacher_provider(teacher_obs).detach()
         hold, behaviors = self.metadata_provider(obs)
         self.transition.hold_mask = hold.detach()
         self.transition.behavior_ids = behaviors.detach()
