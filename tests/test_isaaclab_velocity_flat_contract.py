@@ -62,3 +62,15 @@ def test_ppo_runner_is_smoke_sized_and_keeps_policy_shape() -> None:
     assert "max_iterations = 5" in source
     assert "num_steps_per_env = 24" in source
     assert "hidden_dims=[128, 128, 128]" in source
+
+
+def test_ppo_runner_keeps_observation_normalization_enabled() -> None:
+    source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    assert source.count("obs_normalization=True") == 2
+    assert "obs_normalization=False" not in source
+
+
+def test_ppo_runner_uses_bounded_locomotion_optimization_defaults() -> None:
+    source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    assert "entropy_coef=0.0" in source
+    assert "learning_rate=5.0e-4" in source
