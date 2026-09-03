@@ -259,6 +259,15 @@ storage extension so frozen teacher actions are available in each rollout
 batch; this is the next bounded implementation slice before another hybrid
 comparison.
 
+Anchor implementation boundary: rsl_rl's rollout `Transition`/`Batch` and
+`RolloutStorage` currently carry no teacher-action field. A valid anchor must
+therefore use a hybrid-only PPO subclass/storage path that computes frozen
+specialist actions from the pre-step 71D-conditioned state, stores those actions
+and the hold-window mask, and adds deterministic actor-mean MSE during minibatch
+updates with per-behavior metrics. Direct PPO must remain on the stock PPO path.
+The installed rsl_rl API was inspected and this boundary is confirmed; no
+reward proxy or post-hoc actor penalty has been substituted.
+
 Current baseline decision: neither direct PPO nor hybrid PPO is eligible to
 continue as a next-skill seed. Both remain diagnostic failures, while the
 distilled BC/DAgger actor remains the strongest available artifact for schema,
