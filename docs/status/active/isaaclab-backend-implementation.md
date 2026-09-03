@@ -45,12 +45,11 @@ completed: >-
   plane workaround required by Isaac Sim 6.0.1. Its 200-step subset covers
   home settle, free fall, target step, and NaN soak; all samples are finite.
   It applies the motor-only friction bridge and records the limitation as
-  `motor_only_external_effort_unavailable`. All four cases are finite, but the
-  explicit canonical HOME target still falls in the current PhysX setup:
-  `home_settle` and `nan_soak` reach max tilt about 2.31 rad and final root z
-  about -0.011 m. Free fall reaches about 3.05 rad. The quaternion check uses
-  IsaacLab's xyzw layout, so this is a physical stability failure rather than
-  a measurement-layout artifact.
+  `motor_only_external_effort_unavailable`. All four cases are finite. With
+  the canonical HOME target, `home_settle` and `nan_soak` settle at root z
+  about 0.113 m with max tilt about 0.222 rad; free fall reaches z about
+  0.106 m and max tilt about 0.669 rad. The quaternion check uses IsaacLab's
+  xyzw layout.
   The imported USD root discovery issue is fixed by explicitly configuring
   `articulation_root_prim_path="/Geometry/trunk_base"`; the probe reaches
   `sim_reset`, `articulation_ready`, and `step_ok` with 14 joints. Policy-to-
