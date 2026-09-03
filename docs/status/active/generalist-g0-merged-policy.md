@@ -433,3 +433,13 @@ snapshots physics values, excludes preparation from edge scoring, and enforces
 velocity displacement plus sit/rise height outcomes. Previous battery numbers
 are diagnostic history only; a fresh checkpoint battery is required under this
 corrected contract.
+
+Corrected-contract battery: the strongest anchored checkpoint
+(`seed=42`, 300 iterations) was rerun with the fixed evaluator. Stand remains
+stable by the generic tilt/action gate (0.517 rad), but locomotion fails the
+required 1 m displacement outcome (0.044 m), and sit/stand fails its height and
+stability outcomes (max tilt 3.128 rad; height never reaches the required
+stand target). `VELOCITY->VELSTAND` and `VELSTAND->VELOCITY` pass; both
+sit-related legal edges fail. The fail-closed validator remains
+`DIAGNOSTIC_FAIL` with four reasons. This is the authoritative P4 diagnostic;
+the candidate is not accepted.
