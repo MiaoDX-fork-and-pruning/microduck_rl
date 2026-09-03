@@ -179,6 +179,20 @@ validation MSE `1.37e-5`, model SHA-256
 fixed 32-episode battery remains finite with `success_rate=0.0` and max tilt
 `1.6642 rad`; this is the first consecutive no-improvement evaluation.
 
+DAgger round 2 evidence: a second stand-only aggregation (`beta=0.25`) added
+another 120 student-state samples and was evaluated on the same 32 seed-42
+episodes. It remains finite with `success_rate=0.0` and max tilt `1.6762 rad`.
+The primary success metric therefore showed no improvement for two consecutive
+evaluations, triggering the plan's early-stop rule. Best retained student is
+`/tmp/g0-velstand-bc-dagger1`; no third round or PPO is authorized.
+
+Phase B outcome: FAILED. Phase A passed, but nominal BC and two bounded DAgger
+rounds failed closed-loop reproduction. Diagnosis is
+`state_distribution_coverage_or_model_capacity`; rejected adapter/ABI/NaN
+hypotheses are recorded by `scripts/summarize_velstand_causal_probe.py`.
+Return to parent requires approval of the bounded state-coverage/initialization
+amendment before any new PPO arm.
+
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
 

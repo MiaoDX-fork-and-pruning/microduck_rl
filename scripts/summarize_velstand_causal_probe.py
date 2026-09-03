@@ -34,6 +34,9 @@ def main() -> None:
             "merged_transition_router_failure (VELSTAND-only battery was used)",
         ],
         "bounded_parent_amendment": "Add a VELSTAND-only state-coverage/initialization experiment with the same scene, termination, action scaling, and evaluator; require the 32-episode gate before any merge.",
+        "dagger_budget": {"rounds_completed": 2, "rounds_max": 3,
+                          "early_stop": "two consecutive evaluations with no primary success improvement",
+                          "best_student": "/tmp/g0-velstand-bc-dagger1"},
         "recommendation": "Do not start merged PPO; repair coverage, initialization, action representation, or capacity and rerun the fixed battery." if phase_a and not phase_b else "Repair teacher semantics before interpreting student results." if not phase_a else "Freeze the student and request a parent-plan increment.",
     }
     args.output.parent.mkdir(parents=True, exist_ok=True)
