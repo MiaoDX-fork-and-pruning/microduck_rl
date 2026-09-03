@@ -14,7 +14,8 @@ last_proven_evidence: >-
   after 3 SimulationContext steps. Both IsaacLab MjcfConverter and the
   supported standalone `MJCFCreateImportConfig`/`MJCFCreateAsset` API leave no
   USD file or success marker; the latter reaches `[app ready]` then exceeds a
-  90-second bound.
+  90-second bound. A 4 KB cached `.usd` is only the default empty stage and
+  has not passed robot prim/joint inspection, so it is not conversion proof.
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
   lazy package/task registry, 61D/14D policy ABI with golden fixture, and MJCF
