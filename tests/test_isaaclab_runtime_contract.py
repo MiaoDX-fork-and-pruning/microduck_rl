@@ -41,6 +41,20 @@ def test_source_pin_is_reproducible() -> None:
     assert len(manifest["isaaclab_source_revision"]) == 40
 
 
+def test_runtime_commands_include_backend_probe_dependencies() -> None:
+    manifest = tomllib.loads(MANIFEST.read_text())
+    for key, command in manifest["validation"].items():
+        if key == "status":
+            continue
+        assert "/workspace/IsaacLab/source/isaaclab_newton" in command
+        assert "/workspace/IsaacLab/source/isaaclab_ovphysx" in command
+
+
+def test_asset_declares_imported_articulation_root_path() -> None:
+    source = (ROOT / "src/isaaclab_microduck/assets/microduck.py").read_text()
+    assert 'articulation_root_prim_path="/Geometry/trunk_base"' in source
+
+
 def test_runner_fails_clearly_without_selected_runtime() -> None:
     env = os.environ.copy()
     env.pop("ISAACLAB_LAUNCHER", None)

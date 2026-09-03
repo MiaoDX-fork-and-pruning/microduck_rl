@@ -2,8 +2,8 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: deterministic IsaacLab physics battery with motor-only PhysX
-  friction bridge; external-load parity remains the simulator gate
+current_slice: deterministic IsaacLab physics battery and one-joint friction
+  sweep; external-load parity remains the simulator gate
 blocker_kind: physx_friction_bridge_unresolved
   blocker_fingerprint: explicit BAM voltage effort is running on the real
   articulation, and the available motor-only friction budget is now written
@@ -51,10 +51,17 @@ completed: >-
   about -0.011 m. Free fall reaches about 3.05 rad. The quaternion check uses
   IsaacLab's xyzw layout, so this is a physical stability failure rather than
   a measurement-layout artifact.
+  The imported USD root discovery issue is fixed by explicitly configuring
+  `articulation_root_prim_path="/Geometry/trunk_base"`; the probe reaches
+  `sim_reset`, `articulation_ready`, and `step_ok` with 14 joints. Policy-to-
+  PhysX joint ordering is explicitly mapped and covered by a CPU golden test.
+  The fixed-root sweep shows monotonic response across friction scales
+  0.5/1.0/1.5: static friction 0.0181/0.0362/0.0543 N-m and peak speed
+  1.217/1.071/0.884 rad/s.
 next_action: >-
-  First establish a stable IsaacLab HOME/contact equilibrium and add the
-  constrained one-joint friction sweep; then determine how to expose or
-  estimate solved external joint load for full BAM parity. Keep the USD
+  Extend the constrained one-joint friction sweep against the mjlab reference
+  and determine how to expose or estimate solved external joint load for full
+  BAM parity. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control,
   not implicit PhysX PD.
 next_proof: >-

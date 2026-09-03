@@ -9,6 +9,7 @@ from __future__ import annotations
 import argparse
 import signal
 
+
 def _timeout_handler(signum, frame):
     del signum, frame
     raise TimeoutError("simulation reset exceeded probe timeout")
@@ -75,7 +76,7 @@ def main() -> None:
         print(
             "ISAACLAB_ARTICULATION_PROBE:articulation_ready "
             f"joints={robot.num_joints} actuator={type(actuator).__name__} "
-            f"effort_limit={limits[0, :3].tolist()}",
+            f"effort_limit={limits[0, :3].tolist()} names={robot.joint_names}",
             flush=True,
         )
         robot.set_joint_position_target(torch.ones(1, robot.num_joints, device=robot.device) * 0.1)

@@ -122,7 +122,7 @@ def main() -> None:
         from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
         from isaaclab.sim import SimulationCfg, SimulationContext
         from isaaclab.utils.configclass import configclass
-        from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
+        from isaaclab_microduck.assets.microduck import MICRODUCK_CFG, policy_target_to_sim
 
         sim = SimulationContext(SimulationCfg(dt=0.005, device=args.device))
         print("ISAACLAB_PHYSICS_BATTERY:sim_ready", flush=True)
@@ -143,7 +143,8 @@ def main() -> None:
         print("ISAACLAB_PHYSICS_BATTERY:robot_ready", flush=True)
         from isaaclab_microduck.policy_abi import HOME_POSITION
 
-        home_target = torch.as_tensor(HOME_POSITION, device=robot.device).reshape(1, -1)
+        policy_home_target = torch.as_tensor(HOME_POSITION, device=robot.device).reshape(1, -1)
+        home_target = policy_target_to_sim(policy_home_target, robot.joint_names)
         print(f"ISAACLAB_PHYSICS_BATTERY:defaults joint={home_target[0].tolist()}", flush=True)
 
         def home() -> None:
@@ -162,8 +163,9 @@ def main() -> None:
         def step() -> None:
             _restore_home(robot, home_target)
 
-        step_target = home_target.clone()
-        step_target[:, 0] += 0.2
+        step_policy_target = policy_home_target.clone()
+        step_policy_target[:, 0] += 0.2
+        step_target = policy_target_to_sim(step_policy_target, robot.joint_names)
         cases = [
             _run_case(scene, sim, robot, "home_settle", home, home_target, args.steps),
             _run_case(scene, sim, robot, "free_fall", free_fall, home_target, args.steps),
