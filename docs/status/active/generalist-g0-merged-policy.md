@@ -336,6 +336,14 @@ and missing metadata. Focused storage tests pass (`3 passed`). The hybrid PPO
 algorithm still needs to populate these fields during rollout and add the
 anchor loss/metrics during updates.
 
+Current integration contract: the hybrid algorithm must override
+`construct_algorithm` to instantiate `GeneralistAnchorStorage`, override
+`act` to populate teacher actions plus hold/behavior metadata before each
+environment step, and extend PPO minibatch updates with
+`action_anchor_loss`. The current G0 actor is feed-forward, so recurrent
+storage is outside this bounded slice. No algorithm wiring has been claimed
+until a hybrid smoke proves these fields survive a real rollout/update.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
