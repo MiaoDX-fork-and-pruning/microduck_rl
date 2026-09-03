@@ -22,6 +22,8 @@ def main() -> None:
     import omni.kit.commands
 
     enable_extension("isaacsim.asset.importer.mjcf")
+    for _ in range(20):
+        app.update()
     status, import_config = omni.kit.commands.execute("MJCFCreateImportConfig")
     if not status or import_config is None:
         raise RuntimeError("MJCF importer did not return an import configuration")
