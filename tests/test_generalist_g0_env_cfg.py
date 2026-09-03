@@ -9,6 +9,7 @@ from mjlab_microduck.tasks.microduck_generalist_g0_env_cfg import (
     GeneralistG0DirectPpoRlCfg,
     GeneralistG0HybridPpoRlCfg,
     behavior_mask,
+    _masked,
     make_microduck_generalist_g0_env_cfg,
     G0_TRANSITION_CONTRACTS,
     initialize_g0_state,
@@ -64,6 +65,25 @@ def test_g0_condition_masks_are_exclusive_and_finite():
     assert torch.isfinite(masks).all()
 
 
+def test_g0_masks_stateful_reward_classes_and_delegates_reset():
+    class Stateful:
+        def __init__(self, cfg, env):
+            self.reset_ids = None
+        def __call__(self, env, **params):
+            return torch.ones(env.num_envs)
+        def reset(self, env_ids=None):
+            self.reset_ids = env_ids
+    class Env:
+        num_envs = 3
+        device = "cpu"
+        g0_behavior_id = torch.tensor([0, 1, 2])
+    wrapped = _masked(Stateful, "SITSTAND")(cfg=object(), env=Env())
+    assert torch.equal(wrapped(Env()), torch.tensor([0.0, 0.0, 1.0]))
+    ids = torch.tensor([2])
+    wrapped.reset(ids)
+    assert torch.equal(wrapped._term.reset_ids, ids)
+
+
 def test_g0_runner_has_distinct_identity():
     assert GeneralistG0RlCfg.experiment_name == "generalist_g0"
     assert GeneralistG0RlCfg.actor.distribution_cfg["class_name"] == "GaussianDistribution"
@@ -97,9 +117,9 @@ def test_g0_stage_unlock_requires_measured_success_in_order():
         device = "cpu"
     env = Env()
     assert g0_stage_curriculum(env) == 0  # no metric means no promotion
-    assert g0_stage_curriculum(env, success_rates=[0.91, 0.1, 0.1]) == 1
-    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.1]) == 2
-    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.91]) == 3
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.1, 0.1])["stage"] == 1
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.1])["stage"] == 2
+    assert g0_stage_curriculum(env, success_rates=[0.91, 0.91, 0.91])["stage"] == 3
 
 
 def test_g0_stage_controls_behavior_and_transition_reset_sampling():

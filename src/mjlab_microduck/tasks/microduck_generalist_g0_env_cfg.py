@@ -26,6 +26,7 @@ G0_ACTION_DIM = 14
 G0_DISCOVERY_STEPS = 1200 * 24
 G0_INITIAL_TRANSITION_PROB = 0.20
 G0_STAGE_THRESHOLDS = (0.90, 0.90, 0.90)
+G0_STAGE_MIN_EPISODES = 64
 
 
 @dataclass
@@ -103,31 +104,73 @@ def g0_stage_curriculum(env, env_ids=None, success_rates=None):
     """
     if not hasattr(env, "g0_stage"):
         env.g0_stage = torch.tensor(0, device=env.device, dtype=torch.long)
-    rates = success_rates if success_rates is not None else getattr(env, "g0_success_rates", None)
+        env.g0_stage_successes = torch.zeros(3, device=env.device)
+        env.g0_stage_trials = torch.zeros(3, device=env.device)
+    if success_rates is None and hasattr(env, "g0_behavior_id"):
+        ids = torch.arange(env.num_envs, device=env.device) if isinstance(env_ids, slice) else env_ids
+        completed = ids[env.episode_length_buf[ids] > 0]
+        if len(completed):
+            robot = env.scene["robot"]
+            height = robot.data.root_link_pos_w[:, 2] - env.scene.terrain.env_origins[:, 2]
+            upright = robot.data.projected_gravity_b[:, 2] < -math.cos(math.radians(65.0))
+            behavior = env.g0_behavior_id[completed]
+            command_x = env.command_manager.get_term("twist").vel_command_b[:, 0]
+            velocity_ok = (robot.data.root_link_lin_vel_b[:, 0] - command_x).abs() <= 0.10
+            posture = env.g0_posture
+            posture_ok = torch.where(posture > 0.5, height <= 0.066, height >= 0.1035)
+            success = upright[completed] & torch.where(
+                behavior == 1, velocity_ok[completed],
+                torch.where(behavior == 2, posture_ok[completed], height[completed] >= 0.1035),
+            )
+            for index in range(3):
+                selected = behavior == index
+                env.g0_stage_trials[index] += selected.sum()
+                env.g0_stage_successes[index] += success[selected].sum()
+        rates = torch.where(
+            env.g0_stage_trials > 0,
+            env.g0_stage_successes / env.g0_stage_trials.clamp_min(1),
+            torch.zeros_like(env.g0_stage_trials),
+        ).tolist()
+    else:
+        rates = success_rates if success_rates is not None else getattr(env, "g0_success_rates", None)
     if rates is None:
         return int(env.g0_stage)
     values = [float(value) for value in rates]
     if len(values) != 3 or not all(math.isfinite(value) for value in values):
         raise ValueError("g0_success_rates must contain three finite values")
     stage = 0
-    if values[0] >= G0_STAGE_THRESHOLDS[0]:
+    enough = [True] * 3 if success_rates is not None else [
+        env.g0_stage_trials[index] >= G0_STAGE_MIN_EPISODES for index in range(3)
+    ]
+    if enough[0] and values[0] >= G0_STAGE_THRESHOLDS[0]:
         stage = 1
-    if stage and values[1] >= G0_STAGE_THRESHOLDS[1]:
+    if stage and enough[1] and values[1] >= G0_STAGE_THRESHOLDS[1]:
         stage = 2
-    if stage == 2 and values[2] >= G0_STAGE_THRESHOLDS[2]:
+    if stage == 2 and enough[2] and values[2] >= G0_STAGE_THRESHOLDS[2]:
         stage = 3
     stage = max(stage, int(env.g0_stage))
     env.g0_stage = torch.tensor(stage, device=env.device, dtype=torch.long)
     env.g0_success_rates = tuple(values)
-    return stage
+    return {"stage": stage, "success_0": values[0], "success_1": values[1], "success_2": values[2]}
 
 
 def _masked(func, behavior):
-    # Manager reward terms may be callable classes with constructor state;
-    # wrapping those changes their invocation contract. Leave such terms in
-    # their proven form and mask only ordinary per-step functions.
     if isinstance(func, type):
-        return func
+        class MaskedClassTerm:
+            def __init__(self, cfg, env):
+                self._term = func(cfg=cfg, env=env)
+
+            def __call__(self, env, **params):
+                return self._term(env, **params) * behavior_mask(env, behavior)
+
+            def reset(self, env_ids=None):
+                reset = getattr(self._term, "reset", None)
+                if reset is not None:
+                    return reset(env_ids=env_ids)
+                return None
+
+        MaskedClassTerm.__name__ = f"G0{behavior.title()}Masked{func.__name__}"
+        return MaskedClassTerm
     def wrapped(env, **params):
         return func(env, **params) * behavior_mask(env, behavior)
     wrapped.__name__ = f"g0_{behavior.lower()}_{func.__name__}"
