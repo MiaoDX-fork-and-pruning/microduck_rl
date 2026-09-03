@@ -346,6 +346,15 @@ loss (`0.498` to `0.587`) and `384` held samples per update. This proves the
 training path is wired, but not behavior acceptance; a longer hybrid battery
 and P4 evaluation are still required.
 
+Anchored hybrid diagnostic: a fresh `seed=42`, 64-env, 100-iteration run with
+anchor weight `0.1` completed finite with non-zero anchor loss. The canonical
+120-tick battery now passes isolated locomotion (max tilt 0.902 rad) and
+sit/stand (1.096 rad), but stand fails (1.552 rad) and all four legal edges
+fail (1.333, 1.341, 2.561, and 2.447 rad). The fail-closed validator returns
+`DIAGNOSTIC_FAIL`. The anchor changes the interference tradeoff but does not
+produce an accepted G0 candidate; transition curriculum/state coverage and
+adaptive per-behavior anchoring remain the next diagnostic focus.
+
 Current integration contract: the hybrid algorithm must override
 `construct_algorithm` to instantiate `GeneralistAnchorStorage`, override
 `act` to populate teacher actions plus hold/behavior metadata before each
