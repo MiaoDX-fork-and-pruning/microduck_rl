@@ -2,7 +2,8 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: USD asset parity and explicit BAM actuator mapping
+current_slice: BAM actuator numerical parity; PhysX friction integration remains
+  the simulator gate
 blocker_kind: physx_drive_mapping_unresolved
   blocker_fingerprint: converted Microduck USD has 14 joints and limits but zero authored PhysX drive stiffness/damping
 last_proven_evidence: >-
@@ -18,14 +19,16 @@ last_proven_evidence: >-
 completed: >-
   Added isolated runtime and Docker launchers, pinned IsaacLab source checkout,
   lazy package/task registry, 61D/14D policy ABI with golden fixture, MJCF
-  mechanical report, current Isaac Sim MJCF conversion/diagnostic path, and a
-  machine-readable USD inspection script. Focused IsaacLab contract suite:
-  18 passed; USD inspection contracts: 2 passed.
+  mechanical report, current Isaac Sim MJCF conversion/diagnostic path, a
+  machine-readable USD inspection script, and a Torch BAM XL330/M6 numerical
+  core. The 225-point voltage/torque/friction grid matches the reference BAM
+  implementation to floating-point precision (max error 1.4e-16). Focused
+  IsaacLab/BAM contract suite: 25 passed.
 next_action: >-
-  Resolve actuator parity from the authored MJCF/converted USD before creating
-  an IsaacLab training environment: determine how BAM voltage/friction behavior
-  maps to IsaacLab/PhysX drives, then add a numerical fixture and asset parity
-  acceptance report. Keep DCMotorCfg marked as temporary skeleton only.
+  Implement the IsaacLab explicit actuator wrapper around the proven math and
+  define how its friction budget is applied to PhysX. Verify drive stiffness,
+  effort limits, armature, and friction behavior in a one-joint dynamic bench.
+  Keep DCMotorCfg marked as temporary skeleton only.
 next_proof: >-
   `scripts/isaaclab/docker-run.sh -lc 'PYTHONPATH=... /isaac-sim/python.sh
   scripts/isaaclab/inspect_usd.py .cache/isaaclab-assets/microduck_walk.usd
