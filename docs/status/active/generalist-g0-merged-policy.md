@@ -322,6 +322,13 @@ bounded 14D actions in a batched Torch call. Five focused anchor/teacher tests
 pass. This removes the per-step CPU ONNX dependency; PPO rollout/storage and
 anchor-loss wiring remain pending.
 
+Storage integration audit: rsl_rl allocates `privileged_actions` only for
+`training_type="distillation"`, while the RL `mini_batch_generator` omits that
+field entirely. Reusing it in the hybrid PPO path would silently discard
+teacher actions. A correct adapter must add a hybrid RL storage/batch field and
+carry it through feed-forward (and any future recurrent) minibatches before
+adding the anchor loss; no unsafe monkey patch was introduced.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
