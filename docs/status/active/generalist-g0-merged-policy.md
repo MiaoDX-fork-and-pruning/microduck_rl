@@ -308,6 +308,13 @@ sit/stand). Direct PPO and hybrid PPO therefore agree on the current decision:
 neither meets the G0 stability contract, despite valid initialization, active
 rewards, finite actions, and successful smoke tests.
 
+Anchor primitive slice: `src/mjlab_microduck/generalist_anchor.py` now provides
+masked action-MSE anchoring (excluding transition windows), detached per-
+behavior errors, and threshold-gated one-time weight decay. Four focused tests
+pass. The primitives are intentionally independent of rsl_rl; rollout teacher
+action capture, storage fields, PPO loss wiring, and efficient frozen-teacher
+inference remain unimplemented and are the next required integration slice.
+
 Stop condition: stop before P1 collection if a teacher or legal graph edge
 cannot be reproduced. Final completion requires a candidate passing every P4
 gate or conclusive evidence that the bounded merge is impossible under the
