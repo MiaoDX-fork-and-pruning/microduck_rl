@@ -8,8 +8,8 @@ Control plane: root Codex session
 
 Latest user intent: implement the full plan through `intuitive-flow`.
 
-Current slice: behavior-conditioned reset coverage and anchored hybrid PPO
-configuration are repaired. SITSTAND resets now independently cross the
+Current slice: behavior-conditioned reset coverage, durable bucket labels, and
+anchored hybrid PPO configuration are repaired. SITSTAND resets now independently cross the
 validated seated/standing physical buckets with stand/sit posture goals;
 conditioning and command buffers agree. The hybrid anchor weight is a declared
 dataclass field and therefore survives `dataclasses.asdict()` runner setup.
@@ -22,6 +22,8 @@ Last proven evidence:
   `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_11-48-19_g0_reset_anchor_smoke`.
 - Smoke emitted 71D actor observations, no NaN termination, 384 held teacher
   samples/update, per-behavior anchor weights `0.1`, and nonzero anchor loss.
+- Reset bucket labels (`upright`, `seated`, `recovery`) and transition phase
+  progress are exposed on the environment; focused config/graph tests: `18 passed`.
 
 Completed batch: P0-P4 tooling, frozen manifests/graph, 71D ABI correction,
 hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
@@ -51,5 +53,5 @@ identifies the next bounded root-cause class.
 No-touch scope: specialist 61D ABI/runtime/roller/hardware behavior; `uv.lock`;
 generated checkpoints, datasets, reports, and videos remain outside Git.
 
-Parked work: transition-phase reset snapshots and explicit reset-bucket metrics
-remain a plan P2 coverage gap after the hold-state reset repair.
+Parked work: transition-phase reset snapshots and trainer-level bucket metrics
+remain a plan P2 coverage gap; labels now exist for the next curriculum slice.
