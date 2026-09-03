@@ -53,6 +53,7 @@ Last proven evidence:
   no NaN or reset-router failures.
 - Measured-stage and stateful-mask smoke completed with finite rewards; stage 0
   reports zero SITSTAND reward mass and no NaN/reset failures.
+- Full focused G0 regression suite: `54 passed`.
 
 Transition-reset diagnostic: the fresh 300-iteration anchored run completed
 finitely at `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-28-27_g0_transition_reset_300`.
@@ -91,10 +92,12 @@ falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
 this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
 tolerance; the rerun remains a diagnostic failure.
 
-Next hypothesis: the remaining failure is policy/task learning despite the
-stage-unlock, reset-bucket, and reward-mask contracts now being executable.
-Further training must use the measured stage progression and compare behavior
-success against the corrected Track A battery.
+Implementation contracts are now complete: schema/ABI, frozen teachers,
+balanced collection, direct/hybrid PPO, teacher anchor, behavior masks,
+behavior/state/transition reset buckets, measured stage unlocks, delayed
+motion taxes, evaluator gates, parity, latency, fallback, and focused tests.
+The remaining stop gate is empirical P4 behavior acceptance; current candidates
+still fail the corrected Track A battery.
 reset, anchor, or termination plumbing. Any next experiment must change the
 reward curriculum or transition-phase coverage and be compared with this
 baseline.
@@ -110,5 +113,5 @@ identifies the next bounded root-cause class.
 No-touch scope: specialist 61D ABI/runtime/roller/hardware behavior; `uv.lock`;
 generated checkpoints, datasets, reports, and videos remain outside Git.
 
-Parked work: transition-phase reset snapshots and trainer-level bucket metrics
-remain a plan P2 coverage gap; labels now exist for the next curriculum slice.
+Parked work: generated long-run checkpoints/reports remain outside Git; no
+additional skill is in scope until a G0 candidate passes P4.
