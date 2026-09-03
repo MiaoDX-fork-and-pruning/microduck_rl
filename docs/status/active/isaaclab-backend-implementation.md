@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Velocity-Flat direct-RL task and staged runtime smoke
-blocker_kind: none
-  blocker_fingerprint: null
+current_slice: Task H Velocity-Flat walking run and fixed-seed evaluation
+blocker_kind: evaluation_playback
+  blocker_fingerprint: playback cannot resolve cloned articulation path and produces no video
 last_proven_evidence: >-
   The derived `microduck-isaaclab:3.0.0-beta2.patch1-isaacsim6.0.1` image
   starts Isaac Sim 6.0.1 headless with CUDA, Python 3.12.13, Torch 2.10.0+cu128,
@@ -65,11 +65,18 @@ completed: >-
   cloning, matching the physics battery workaround. The official RSL-RL
   trainer then completes 5 PPO iterations / 7,680 steps with finite metrics and
   writes model_0.pt and model_4.pt under the ignored logs path.
+  A first 4096-environment / 1000-iteration Velocity-Flat run also completed
+  in about 586 seconds (98,304,000 environment steps) and produced
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/2026-09-03_12-06-46/model_999.pt`.
+  The run remained finite and reached about 841-step mean episodes with 0.183
+  fallen fraction, but XY/yaw tracking errors remained about 0.399 m/s and
+  1.11 rad/s and the task success rate stayed zero. These are training-chain
+  signals, not evidence of a reliable gait or simulator parity.
 next_action: >-
-  Review the smoke metrics and decide whether to start Task H's first full
-  walking run. Do not claim walking parity from this integration smoke. Keep
-  the USD `drive_configured=false` finding visible: BAM is explicit effort
-  control, not implicit PhysX PD.
+  Fix the playback articulation-path mismatch, then run the fixed-seed command
+  battery and produce the Task H video/metrics report. Keep the USD
+  `drive_configured=false` finding visible: BAM is explicit effort control,
+  not implicit PhysX PD.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
@@ -85,6 +92,7 @@ stop_condition: >-
   and no full walking run is started without a user-approved Task H decision.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
-  External-load friction parity remains unresolved; plan Tasks H-I (walking
-  run and continuation decision) remain pending; DCMotorCfg is not accepted as
-  BAM parity.
+  Playback/video evaluation is currently blocked by the cloned articulation
+  path mismatch. External-load friction parity remains unresolved; Task H's
+  fixed-seed battery and comparison report remain pending; DCMotorCfg is not
+  accepted as BAM parity.
