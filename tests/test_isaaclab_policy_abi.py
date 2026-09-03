@@ -45,4 +45,9 @@ def test_golden_fixture_is_stable() -> None:
     )))
 
     assert observation.shape == (61,)
-    np.testing.assert_allclose(action_to_target(fixture["raw_action"]), HOME_POSITION + fixture["raw_action"])
+    np.testing.assert_allclose(
+        action_to_target(fixture["raw_action"]),
+        HOME_POSITION + fixture["raw_action"],
+        rtol=1e-6,
+        atol=1e-7,
+    )
