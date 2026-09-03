@@ -26,7 +26,7 @@ completed: >-
   implementation to floating-point precision (max error 1.4e-16). The wrapper
   imports and the Microduck asset config resolves in the actual 6.0.1 runtime;
   a 2-environment `BamActuator.compute()` smoke also returns finite efforts.
-  CPU/runtime contracts: 28 passed. InteractiveScene probing identified that
+  CPU/runtime contracts: 30 passed. InteractiveScene probing identified that
   IsaacLab 3.0 beta also requires the bundled
   `/workspace/IsaacLab/source/isaaclab_contrib` path on PYTHONPATH.
   A staged articulation probe reaches App, imports, and SimulationContext, but
