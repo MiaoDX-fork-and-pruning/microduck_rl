@@ -47,7 +47,9 @@ class FrozenG0Teachers(nn.Module):
                 parameter.requires_grad_(False)
             self.models[name] = actor
             self.means[name] = state["obs_normalizer._mean"].reshape(-1).to(device)
-            self.stds[name] = state["obs_normalizer._std"].reshape(-1).to(device)
+            # EmpiricalNormalization exports ``_std + epsilon``. The raw
+            # checkpoint std alone diverges from the deployable ONNX graph.
+            self.stds[name] = (state["obs_normalizer._std"].reshape(-1) + 0.01).to(device)
 
     @torch.no_grad()
     def forward(self, observations: torch.Tensor) -> torch.Tensor:

@@ -124,19 +124,24 @@ ownership is explicit; no worker may change the parent G0 acceptance contract.
 Worker goal: implement the smallest compatibility/BC/DAgger surfaces required
 by the fork, with focused tests and external generated artifacts.
 
-Current slice: Phase A compatibility tooling and tracked probe manifest are
-implemented and committed (`8051dda`, `029937f`). No native frozen-battery NPZ
-or closed-loop student report has been generated yet.
+Current slice: Phase A compatibility tooling, adapter semantics, and tracked
+probe manifest are implemented and committed (`8051dda`, `029937f`, plus the
+normalizer repair below). Phase A passes against the frozen canonical trace.
 
 Last proven evidence: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest
 pytest -q tests/test_generalist_teacher_compat.py tests/test_generalist_teachers.py
 tests/test_generalist_bc_eval.py tests/test_collect_generalist_dagger.py
-tests/test_rollout_generalist_bc.py` -> 12 passed; probe manifest JSON parses and
-`git diff --check` passes.
+tests/test_rollout_generalist_bc.py` -> 12 passed initially and 4 compatibility
+tests pass after the repair. Phase A report from
+`/tmp/g0-p0-repro/velstand_flat/canonical-compatibility.json` is finite with
+`max_abs=3.84e-7`, `mean_abs=4.78e-8`, and `passed=true`. The prior mismatch was
+caused by reconstructing with raw `_std` instead of the ONNX denominator
+`_std + 0.01`.
 
-Next action: capture the manifest-frozen VELSTAND native rollout battery as an
-NPZ, run `scripts/probe_generalist_teacher_compat.py`, then execute the bounded
-BC/DAgger closed-loop battery and record diagnosis. Do not start PPO.
+Next action: execute the bounded VELSTAND-only BC/DAgger closed-loop battery
+using the existing `/tmp/g0-bc-dagger` candidate as a diagnostic starting point,
+then record the primary gate result and root-cause classification. Do not start
+PPO.
 
 Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
 passes/fails at its fixed budget with an external report and root-cause class.
