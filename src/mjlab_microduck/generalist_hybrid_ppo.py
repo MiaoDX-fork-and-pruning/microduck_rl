@@ -13,7 +13,7 @@ from torch import nn
 from rsl_rl.algorithms.ppo import PPO
 from rsl_rl.storage import RolloutStorage
 
-from .generalist_anchor import per_behavior_anchor_error, weighted_action_anchor_loss
+from .generalist_anchor import AnchorSchedule, per_behavior_anchor_error, weighted_action_anchor_loss
 from .generalist_anchor_storage import GeneralistAnchorStorage
 from .generalist_teachers import FrozenG0Teachers
 
@@ -26,25 +26,49 @@ class GeneralistHybridPPO(PPO):
         *args,
         anchor_weights: float | list[float] = 0.0,
         anchor_behavior_count: int = 3,
+        anchor_schedule: AnchorSchedule | None = None,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         if anchor_behavior_count <= 0:
             raise ValueError("anchor_behavior_count must be positive")
-        weights = (
+        if anchor_schedule is not None:
+            if not isinstance(anchor_schedule, AnchorSchedule):
+                raise TypeError("anchor_schedule must be an AnchorSchedule")
+            if len(anchor_schedule.weights) != anchor_behavior_count:
+                raise ValueError("anchor_schedule length must match anchor_behavior_count")
+            weights = list(anchor_schedule.weights)
+        else:
+            weights = (
             [float(anchor_weights)] * anchor_behavior_count
             if isinstance(anchor_weights, (int, float))
             else list(anchor_weights)
-        )
+            )
         if len(weights) != anchor_behavior_count:
             raise ValueError("anchor_weights length must match anchor_behavior_count")
         if not weights or any(weight < 0.0 for weight in weights):
             raise ValueError("anchor_weights must contain non-negative values")
         self.anchor_weights = torch.tensor(weights, dtype=torch.float32, device=self.device)
+        self.anchor_schedule = anchor_schedule
         if not isinstance(self.storage, GeneralistAnchorStorage):
             raise TypeError("GeneralistHybridPPO requires GeneralistAnchorStorage")
         self.teacher_provider = None
         self.metadata_provider = None
+
+    def update_anchor_schedule(self, measured_returns: list[float | None]) -> list[float]:
+        """Update scheduled per-behavior weights and synchronize the PPO loss.
+
+        This hook is intentionally explicit: callers provide the latest
+        behavior returns at an evaluation/curriculum boundary.  With no
+        schedule configured it is a no-op that returns the current weights.
+        """
+        if self.anchor_schedule is None:
+            if len(measured_returns) != self.anchor_weights.numel():
+                raise ValueError("measured_returns length mismatch")
+            return self.anchor_weights.detach().cpu().tolist()
+        weights = self.anchor_schedule.update(measured_returns)
+        self.anchor_weights.copy_(torch.as_tensor(weights, device=self.device))
+        return list(weights)
 
     @staticmethod
     def construct_algorithm(obs, env, cfg, device):
