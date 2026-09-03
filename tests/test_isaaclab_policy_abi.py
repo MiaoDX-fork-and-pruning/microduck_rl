@@ -1,5 +1,8 @@
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 import numpy as np
 import pytest
 
@@ -30,3 +33,16 @@ def test_abi_rejects_wrong_field_or_action_sizes() -> None:
         build_observation([0] * 2, [0] * 3, [0] * 14, [0] * 14, [0] * 14, [0] * 13)
     with pytest.raises(ValueError):
         action_to_target([0] * (ACTION_SIZE - 1))
+
+
+def test_golden_fixture_is_stable() -> None:
+    fixture = json.loads(
+        (Path(__file__).parent / "fixtures/microduck_policy_abi_v1.json").read_text()
+    )
+    observation = build_observation(*(fixture[name] for name in (
+        "gyro", "projected_gravity", "joint_position_relative_home",
+        "joint_velocity", "previous_raw_action", "command",
+    )))
+
+    assert observation.shape == (61,)
+    np.testing.assert_allclose(action_to_target(fixture["raw_action"]), HOME_POSITION + fixture["raw_action"])
