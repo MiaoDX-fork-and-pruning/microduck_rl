@@ -46,6 +46,7 @@ def test_runtime_commands_include_backend_probe_dependencies() -> None:
     for key, command in manifest["validation"].items():
         if key == "status":
             continue
+        assert "/workspace/IsaacLab/source/isaaclab_rl" in command
         assert "/workspace/IsaacLab/source/isaaclab_newton" in command
         assert "/workspace/IsaacLab/source/isaaclab_ovphysx" in command
 

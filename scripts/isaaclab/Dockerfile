@@ -8,13 +8,20 @@ RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
     h5py==3.16.0 \
     lazy-loader==0.4 \
     prettytable==3.3.0 \
-    rsl-rl-lib==5.0.1 \
     warp-lang==1.13.0 \
     wcwidth==0.2.13
 
 RUN /isaac-sim/python.sh -m pip install --no-cache-dir \
     --extra-index-url https://download.pytorch.org/whl/cu128 \
     torch==2.10.0
+
+# Keep Isaac Sim's validated Torch/CUDA 12.8 stack.  RSL-RL declares a broad
+# torch>=2.6 dependency and pip would otherwise replace it with Torch 2.14 and
+# CUDA 13. Install the trainer without dependency resolution; its runtime
+# dependencies that are not already supplied by Isaac Sim are listed above or
+# can be diagnosed explicitly by the PPO smoke.
+RUN /isaac-sim/python.sh -m pip install --no-cache-dir --no-deps \
+    rsl-rl-lib==5.0.1
 
 # Isaac Sim keeps a deprecated ML archive with its own older Torch/NCCL tree.
 # Remove that archive so Kit cannot load a conflicting libtorch_cuda.so after
