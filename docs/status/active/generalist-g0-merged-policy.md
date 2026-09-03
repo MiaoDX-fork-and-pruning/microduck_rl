@@ -98,13 +98,12 @@ behavior/state/transition reset buckets, measured stage unlocks, delayed
 motion taxes, evaluator gates, parity, latency, fallback, and focused tests.
 The remaining stop gate is empirical P4 behavior acceptance; current candidates
 still fail the corrected Track A battery.
-reset, anchor, or termination plumbing. Any next experiment must change the
-reward curriculum or transition-phase coverage and be compared with this
-baseline.
 
-Next proof: run a bounded fresh hybrid diagnostic under the long-horizon
-termination contract, evaluate its final checkpoint with corrected Track A, and
-run the fail-closed gate with existing parity/latency/fallback artifacts.
+Latest gate: `/tmp/g0-final-gate.json` is `DIAGNOSTIC_FAIL` for all three
+behaviors and four legal edges; parity/latency/fallback infrastructure passes.
+
+Next proof: a future experiment must change the learned-policy intervention,
+then rerun corrected Track A and the fail-closed gate.
 
 Stop condition: P4 passes behavior, all legal transition, parity, latency, and
 fallback gates, or a repeated experiment falsifies the current hypothesis and
