@@ -21,6 +21,8 @@ def test_runtime_manifest_keeps_isaaclab_external() -> None:
     assert manifest["validation"]["headless_probe"].startswith(
         "scripts/isaaclab/docker-run.sh"
     )
+    assert manifest["validation"]["status"] == "passed"
+    assert "velocity_flat_ppo_smoke" in manifest["validation"]
 
 
 def test_docker_runner_is_pinned_and_executable() -> None:
