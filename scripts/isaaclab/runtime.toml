@@ -2,8 +2,8 @@
 # IsaacLab remains outside the root uv lock so mjlab dependency resolution is
 # unchanged.
 runtime = "nvcr.io/nvidia/isaac-sim:5.0.0"
-isaaclab_version = "unselected"
-isaacsim_version = "unselected"
+isaaclab_version = "2.2.0"
+isaacsim_version = "5.0.0-rc.45"
 python_version = "3.11"
 torch_version = "unselected"
 cuda_version = "unselected"
@@ -15,4 +15,4 @@ isaaclab_source_revision = "46dff135f44683f031edf346e544fcfd8456b2bb"
 
 [validation]
 status = "blocked_runtime_unavailable"
-headless_probe = "scripts/isaaclab/docker-run.sh ./python.sh -u scripts/isaaclab/probe.py"
+headless_probe = "scripts/isaaclab/docker-run.sh /workspace/IsaacLab/isaaclab.sh -p /workspace/microduck_rl/scripts/isaaclab/probe.py"
