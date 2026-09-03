@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H Velocity-Flat battery and forward-only mjlab comparison complete; long-run decision pending
+current_slice: Task H reward-local-optimum probe; short smoke passes, long diagnostic did not initialize in time
 blocker_kind: evaluation_battery
   blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
@@ -86,19 +86,26 @@ completed: >-
   A dedicated PhysX force timing probe confirms that the force getters exist and
   return finite tensors, but refresh only after `sim.step()`, after
   `BamActuator.compute()` has run; no same-step friction bridge is accepted.
+  Reward-local-optimum probe changed IsaacLab Velocity-Flat to alive 0.20,
+  linear tracking weight/std 3.5/0.25, and yaw tracking weight/std 1.5/0.50;
+  focused reward-contract tests pass. A 64-env, 5-iteration official RSL-RL
+  smoke also passes with finite 61D/14D tensors, but early iterations still
+  fall nearly universally. A follow-up 4096-env/1000-iteration diagnostic was
+  started and stopped after about four minutes during scene initialization
+  without producing a checkpoint, so it is not training evidence.
 next_action: >-
-  Decide whether the measured smoke-checkpoint behavior justifies another
-  IsaacLab training run. The forward-only comparison is recorded in
-  `docs/isaaclab_velocity_flat_backend_comparison.md`; it shows the accepted
-  mjlab rollout staying upright while the IsaacLab checkpoint resets about
-  2.1% of environments per step and reaches about 0.85 rad tilt. Keep the USD
+  Human decision required before spending another long IsaacLab run: either
+  accept a slower 4096-env diagnostic with a larger initialization budget, or
+  redesign the early-balance curriculum/reward before retrying. The current
+  reward change has no long-run evidence yet. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control, not
   implicit PhysX PD. PhysX force getters are available, but only as post-step
   data; a one-step delayed controller would require a new design decision.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
-  tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_policy_joint_mapping.py
-  tests/test_isaaclab_asset_cfg.py tests/test_isaaclab_friction_sweep_contract.py`,
+  tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_velocity_flat_rewards.py
+  tests/test_isaaclab_policy_joint_mapping.py tests/test_isaaclab_asset_cfg.py
+  tests/test_isaaclab_friction_sweep_contract.py`,
   plus `.cache/isaaclab-assets/velocity_flat_smoke_1.json`,
   `.cache/isaaclab-assets/velocity_flat_smoke_64_prestartup.json`, and the
   smoke run under `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/`.
@@ -113,4 +120,5 @@ parked_todos: >-
   External-load friction parity remains unresolved because same-step solved
   torque is unavailable to the explicit actuator callback; a longer IsaacLab
   run is pending an explicit Task H resource/experiment decision; DCMotorCfg is
-  not accepted as BAM parity.
+  not accepted as BAM parity. The 4096-env retry produced no checkpoint and was
+  stopped during initialization.
