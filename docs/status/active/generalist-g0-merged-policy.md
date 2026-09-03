@@ -46,6 +46,13 @@ Last proven evidence:
 - Transition-reset smoke completed with 71D observations, finite rewards, and
   no NaN or reset-router failures.
 
+Transition-reset diagnostic: the fresh 300-iteration anchored run completed
+finitely at `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-28-27_g0_transition_reset_300`.
+Corrected Track A still failed all behaviors and legal edges (stand tilt
+`1.823 rad`, locomotion `1.718 rad`, sit/stand `1.843 rad`; several edge
+tilts reached `pi`). Reverse-curriculum transition exposure alone did not
+improve the merged policy.
+
 Completed batch: P0-P4 tooling, frozen manifests/graph, 71D ABI correction,
 hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
 fail-closed acceptance gate exist. Prior 300/600-iteration candidates remain
@@ -76,9 +83,10 @@ falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
 this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
 tolerance; the rerun remains a diagnostic failure.
 
-Next hypothesis: the remaining failure is policy/task learning; transition
-phase coverage is now implemented and must be tested against the failed
-baseline before further reward changes.
+Next hypothesis: the remaining failure is policy/task learning and the plan's
+stage-unlock/measurement contract is still absent. Further training must add
+measured behavior-success unlocks and bucket metrics, or stop after proving
+that the current fixed router cannot learn the contract.
 reset, anchor, or termination plumbing. Any next experiment must change the
 reward curriculum or transition-phase coverage and be compared with this
 baseline.
