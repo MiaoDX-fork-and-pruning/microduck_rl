@@ -2,7 +2,7 @@
   "schema": "generalist-g0-velstand-causal-probe-manifest",
   "version": 1,
   "probe_id": "g0-velstand-causal-probe",
-  "status": "ready-for-execution",
+  "status": "diagnostic-run-incomplete-contract",
   "source_commit": "56cfcc95465bc6cd7d523c4a5d5bbe8ed4d8cf7d",
   "dirty_tree_at_freeze": true,
   "plan": "docs/plans/generalist-g0-velstand-causal-probe.md",
@@ -98,9 +98,24 @@
     "best_student_onnx": "external/g0-velstand-probe/best-student.onnx"
   },
   "output_hashes": {
-    "compatibility_report_sha256": "",
-    "closed_loop_report_sha256": "",
-    "diagnosis_report_sha256": "",
+    "compatibility_report_sha256": "f78d833fd17ca3e0921593cbd0ed1d1c25512e76cdc5f530d6c28f73e189d947",
+    "closed_loop_report_sha256": "f27f431a5ab826c8b97f176abbc43d0a8c2267347e9c5b8ee455b0dbdeef451c",
+    "diagnosis_report_sha256": "3724e8783b184d6d9800bb75a2b3db79b3fc260d6239cfd827685ce367e9f54e",
     "best_student_onnx_sha256": ""
-  }
+  },
+  "current_evidence": {
+    "compatibility_report": "/tmp/g0-p0-repro/velstand_flat/canonical-compatibility.json",
+    "closed_loop_report": "/tmp/g0-velstand-dagger2-battery.json",
+    "diagnosis_report": "/tmp/g0-velstand-causal-diagnosis-final.json",
+    "best_student_checkpoint": "/tmp/g0-velstand-bc-dagger1/model.pt",
+    "best_student_checkpoint_sha256": "283766b9749372a281b3fad39b70cc2af6681b3b0c2ef3c0c700c3a2bd658765",
+    "ephemeral": true
+  },
+  "evidence_gaps": [
+    "full frozen recovery-bucket battery and termination/outcome parity",
+    "specialist main-task reward metric in the student harness",
+    "balanced nominal/recovery traces and cumulative frontier DAgger",
+    "teacher-initialized, scripted-teacher, and random control arms",
+    "best-student ONNX export/parity and representative video review"
+  ]
 }

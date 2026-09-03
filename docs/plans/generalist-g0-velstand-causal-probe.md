@@ -1,23 +1,28 @@
 # G0 VELSTAND Causal Probe
 
-Status: executed-phase-a-and-b-failed
+Status: diagnostic-run-incomplete-contract
 Parent plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 Parent status: `docs/status/active/generalist-g0-merged-policy.md`
 
-## Execution Outcome
+## Current Execution Outcome
 
-Phase A passed after repairing the frozen-teacher reconstruction to match the
-exported ONNX normalizer (`_std + 0.01`): the canonical 300-tick trace measured
-`max_abs=3.84e-7` and `mean_abs=4.78e-8`. Nominal VELSTAND-only BC and two
-bounded DAgger rounds were then evaluated on the fixed 32-episode seed-42
-battery. All rollouts were finite, but success remained `0.0` (maximum tilt
-`1.6762 rad` against the `1.1345 rad` gate). The main-task reward metric was
-unavailable in the CPU student harness and therefore remained fail-closed.
+The implemented probe has produced a preliminary, fail-closed diagnostic but
+has not satisfied every evidence requirement in this contract. Teacher action
+reconstruction matches the exported ONNX normalizer (`_std + 0.01`) on the
+available 300-tick canonical trace (`max_abs=3.84e-7`, `mean_abs=4.78e-8`).
+VELSTAND-only nominal BC and two bounded DAgger rounds remain finite but fail
+closed loop with success `0.0` and maximum tilt `1.6762 rad` versus the
+`1.1345 rad` gate. The provisional diagnosis is
+`state_distribution_coverage_or_model_capacity`.
 
-Per the fixed early-stop rule, Phase B is classified as failed with diagnosis
-`state_distribution_coverage_or_model_capacity`. No merged PPO run or G0
-acceptance claim is authorized. Final machine-readable diagnosis:
-`/tmp/g0-velstand-causal-diagnosis-final.json`.
+This is not a complete Phase A/B acceptance result: the available student
+harness repeats the canonical reset instead of exercising all frozen recovery
+buckets, does not expose the specialist main-task reward metric, and did not
+run the declared frontier-window, teacher-initialized, random-lower-bound,
+scripted-upper-bound, ONNX-parity, or video-review comparisons. No merged PPO
+run or G0 acceptance claim is authorized. Existing reports and checkpoints are
+ephemeral diagnostics under `/tmp`; the next context must choose whether to
+complete this evidence contract or approve a separate bounded experiment.
 
 ## Purpose
 

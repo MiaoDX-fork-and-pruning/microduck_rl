@@ -1,6 +1,6 @@
 # Generalist G0 Merged Policy Plan
 
-Status: active
+Status: blocked-pending-velstand-debug-plan
 
 Current checkpoint: P4 diagnostic evaluation complete; hybrid anchor
 implementation is now wired and smoke-verified. The versioned teacher
@@ -11,6 +11,20 @@ fallback tooling are implemented and covered by focused tests. The current
 candidate is not accepted: stand and legal-edge success gates remain below
 the required thresholds, so work must continue on the merged-policy behavior
 before adding any new skill.
+
+## Latest Checkpoint: VELSTAND Causal Probe
+
+The approved VELSTAND causal probe has run its available preliminary slices.
+Teacher reconstruction parity passes on the canonical trace, but VELSTAND-only
+BC and two bounded DAgger rounds fail closed loop. This evidence is useful but
+does not close the probe contract: recovery reset buckets, specialist reward
+metric, frontier-window coverage, control arms, ONNX parity, and video review
+remain incomplete. The current provisional diagnosis is
+`state_distribution_coverage_or_model_capacity`.
+
+The next context must approve a bounded debugging plan or complete the missing
+probe evidence before any PPO run. No merged PPO, new behavior, or G0
+acceptance claim is authorized from this checkpoint.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the
