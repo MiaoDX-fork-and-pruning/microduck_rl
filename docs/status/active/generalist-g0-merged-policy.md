@@ -22,6 +22,10 @@ Discovery economics now delay action-rate, body-angular-velocity, and
 torque-rate penalties until `1200 * 24` environment steps, then restore their
 validated baseline weights.
 
+Reset curriculum now seeds 20% of fresh episodes into uniformly sampled legal
+transition edges at a phase in the first 80% of dwell, with source/destination
+and phase labels preserved. Hold-state buckets remain behavior-conditioned.
+
 Last proven evidence:
 
 - Focused G0 suite: `49 passed`.
@@ -39,6 +43,8 @@ Last proven evidence:
   `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-12-15_g0_discovery_tax_smoke`;
   all three staged tax terms reported zero at step zero and training remained
   finite.
+- Transition-reset smoke completed with 71D observations, finite rewards, and
+  no NaN or reset-router failures.
 
 Completed batch: P0-P4 tooling, frozen manifests/graph, 71D ABI correction,
 hybrid teacher-action storage/loss, corrected 50 Hz Track A evaluator, and
@@ -70,9 +76,9 @@ falsified. The evaluator's prior 0.18 m stand threshold was also invalid for
 this model and is now derived from `STAND_Z=0.115` and `SIT_Z=0.060` with 10%
 tolerance; the rerun remains a diagnostic failure.
 
-Next hypothesis: the remaining failure is policy/task learning, specifically
-the still-unimplemented transition-phase reset/state curriculum, rather than
-schema,
+Next hypothesis: the remaining failure is policy/task learning; transition
+phase coverage is now implemented and must be tested against the failed
+baseline before further reward changes.
 reset, anchor, or termination plumbing. Any next experiment must change the
 reward curriculum or transition-phase coverage and be compared with this
 baseline.
