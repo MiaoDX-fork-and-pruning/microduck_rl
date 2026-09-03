@@ -102,6 +102,13 @@ still fail the corrected Track A battery.
 Latest gate: `/tmp/g0-final-gate.json` is `DIAGNOSTIC_FAIL` for all three
 behaviors and four legal edges; parity/latency/fallback infrastructure passes.
 
+Stage scalar audit: the stage-aware run recorded `success_0=0.0` through all
+299 updates, so it correctly remained at stage 0. The upright classifier uses
+the repository convention (`projected_gravity_b.z < -cos(65°)`), and the zero
+rate reflects genuine failed stand holds rather than an orientation-sign bug.
+Locked-behavior exposure was therefore intentional, not a silent curriculum
+deadlock.
+
 Stage-aware diagnostic: the 300-iteration run at
 `logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_12-45-47_g0_stage_aware_300`
 completed finitely, but measured stage progression did not improve behavior.
