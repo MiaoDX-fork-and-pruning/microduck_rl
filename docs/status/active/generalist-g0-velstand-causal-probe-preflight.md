@@ -1,6 +1,6 @@
 # Preflight: G0 VELSTAND Causal Probe
 
-Preflight status: DRAFT
+Preflight status: ACTIVE
 Task source: `docs/plans/generalist-g0-velstand-causal-probe.md`
 Canonical source: `docs/plans/generalist-g0-velstand-causal-probe.md`
 Route: durable `$intuitive-flow`
@@ -123,6 +123,23 @@ ownership is explicit; no worker may change the parent G0 acceptance contract.
 
 Worker goal: implement the smallest compatibility/BC/DAgger surfaces required
 by the fork, with focused tests and external generated artifacts.
+
+Current slice: Phase A compatibility tooling and tracked probe manifest are
+implemented and committed (`8051dda`, `029937f`). No native frozen-battery NPZ
+or closed-loop student report has been generated yet.
+
+Last proven evidence: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest
+pytest -q tests/test_generalist_teacher_compat.py tests/test_generalist_teachers.py
+tests/test_generalist_bc_eval.py tests/test_collect_generalist_dagger.py
+tests/test_rollout_generalist_bc.py` -> 12 passed; probe manifest JSON parses and
+`git diff --check` passes.
+
+Next action: capture the manifest-frozen VELSTAND native rollout battery as an
+NPZ, run `scripts/probe_generalist_teacher_compat.py`, then execute the bounded
+BC/DAgger closed-loop battery and record diagnosis. Do not start PPO.
+
+Stop condition: Phase A parity fails (repair semantics and stop), or Phase B
+passes/fails at its fixed budget with an external report and root-cause class.
 
 ## To execute
 
