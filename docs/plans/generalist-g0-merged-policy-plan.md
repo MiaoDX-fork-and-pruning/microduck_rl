@@ -291,6 +291,14 @@ The final report must include manifests, commands, hashes, seed lists, per-case
 metrics, transition support/unsupported edges, videos, and the direct-vs-
 hybrid decision. Generated datasets, checkpoints, and videos stay out of Git.
 
+Evaluator contract correction: the canonical G0 evaluator now runs at 50 Hz
+(four 5 ms physics steps per control action), follows the frozen Track A dwell
+and command schedule, supplies trained phase/posture conditioning, delays the
+SITSTAND-to-VELSTAND ownership handoff until the six-second rise window, and
+excludes source preparation from edge scoring. Metrics snapshot positions and
+enforce velocity displacement plus sit/rise height outcomes in addition to
+finite, tilt, and action-range gates.
+
 ## Risks and explicit stop conditions
 
 - **False transition assumption:** a demo sequence is not proof of arbitrary

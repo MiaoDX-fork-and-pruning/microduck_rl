@@ -424,3 +424,12 @@ still fails (1.606 rad), as do `SITSTAND->VELSTAND` (2.085 rad) and
 `VELSTAND->SITSTAND` (3.030 rad). The formal gate is `DIAGNOSTIC_FAIL` with
 three remaining sit-related reasons. This is the strongest current candidate,
 but the fixed G0 acceptance contract is not met.
+
+Evaluator correction: the prior 120-tick reports used a 40 Hz loop, omitted
+trained phase fields, switched SITSTAND ownership too early, and recorded live
+MuJoCo position views. The canonical evaluator now follows the frozen 50 Hz
+Track A segments, supplies phase/posture fields, delays the sit-to-stand handoff,
+snapshots physics values, excludes preparation from edge scoring, and enforces
+velocity displacement plus sit/rise height outcomes. Previous battery numbers
+are diagnostic history only; a fresh checkpoint battery is required under this
+corrected contract.

@@ -6,6 +6,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 
 import mujoco
@@ -18,6 +19,39 @@ from mjlab_microduck.generalist_transition_graph import LEGAL_EDGES
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from infer_policy import DEFAULT_POSE, PolicyInference
+
+CONTROL_HZ = 50
+
+
+@dataclass(frozen=True)
+class Segment:
+    state: str
+    command_x: float
+    duration_s: float
+    active_transition: bool = False
+    score: bool = True
+
+    @property
+    def ticks(self) -> int:
+        return round(self.duration_s * CONTROL_HZ)
+
+
+BEHAVIOR_SEGMENTS = {
+    "VELSTAND": (Segment("VELSTAND", 0.0, 8.0),),
+    "VELOCITY": (Segment("VELOCITY", 0.15, 14.0),),
+    "SITSTAND": (Segment("SITSTAND", 1.0, 6.0), Segment("SITSTAND", 0.0, 6.0)),
+}
+
+EDGE_SEGMENTS = {
+    ("VELSTAND", "VELOCITY"): (Segment("VELSTAND", 0.0, 8.0, score=False), Segment("VELOCITY", 0.15, 14.0, True)),
+    ("VELOCITY", "VELSTAND"): (Segment("VELOCITY", 0.15, 14.0, score=False), Segment("VELSTAND", 0.0, 8.0, True)),
+    ("VELSTAND", "SITSTAND"): (Segment("VELSTAND", 0.0, 8.0, score=False), Segment("SITSTAND", 1.0, 6.0, True)),
+    ("SITSTAND", "VELSTAND"): (
+        Segment("SITSTAND", 1.0, 6.0, score=False),
+        Segment("SITSTAND", 0.0, 6.0, True),
+        Segment("VELSTAND", 0.0, 8.0),
+    ),
+}
 
 
 class Policy:
@@ -114,16 +148,13 @@ class Policy:
             return np.clip(value, -1.0, 1.0)
 
 
-def _command(state: str) -> np.ndarray:
+def _command(state: str, command_x: float | None = None) -> np.ndarray:
     command = np.zeros(13, dtype=np.float32)
-    if state == "VELOCITY":
-        command[0] = 0.2
-    elif state == "SITSTAND":
-        command[0] = 1.0
+    command[0] = command_x if command_x is not None else (0.2 if state == "VELOCITY" else 1.0 if state == "SITSTAND" else 0.0)
     return command
 
 
-def run_sequence(model, policy: Policy, reference_onnx: Path, states: list[str], ticks: int) -> TraceMetrics:
+def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Segment, ...]) -> TraceMetrics:
     data = mujoco.MjData(model)
     helper = PolicyInference(model, data, walking_onnx_path=str(reference_onnx), new_cmd_obs=True,
                              use_projected_gravity=True)
@@ -135,22 +166,26 @@ def run_sequence(model, policy: Policy, reference_onnx: Path, states: list[str],
     mujoco.mj_forward(model, data)
     trunk = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
     metrics = TraceMetrics()
-    for state in states:
-        command = _command(state)
+    for segment in segments:
+        state = segment.state
+        command = _command(state, segment.command_x)
         helper.command = command
-        for _ in range(ticks):
+        for tick in range(segment.ticks):
             legacy = helper.get_observations()
             conditioned = make_conditioned_observation(
-                legacy[None, :], command[None, :], STATE_TO_BEHAVIOR[state]
+                legacy[None, :], command[None, :], STATE_TO_BEHAVIOR[state],
+                phase=np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
+                posture=np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
             )
             action = policy(conditioned)
             helper.last_action = action.copy()
             helper.apply_action(action)
-            for _ in range(5):
+            for _ in range(4):
                 mujoco.mj_step(model, data)
             quat = data.xquat[trunk]
             tilt = 2.0 * np.arccos(np.clip(abs(float(quat[0])), 0.0, 1.0))
-            metrics.append(height=data.xpos[trunk, 2], tilt=tilt, position=data.xpos[trunk], action=action)
+            if segment.score:
+                metrics.append(height=data.xpos[trunk, 2], tilt=tilt, position=data.xpos[trunk], action=action)
             if not metrics.finite:
                 return metrics
     return metrics
@@ -167,7 +202,6 @@ def main() -> None:
     parser.add_argument("--device", default=None)
     parser.add_argument("--observation-reference-onnx", type=Path, required=True,
                         help="61D specialist ONNX used by the established observation harness only")
-    parser.add_argument("--ticks", type=int, default=120)
     parser.add_argument("--seed", type=int, default=42)
     parser.add_argument("--output", type=Path, default=Path("artifacts/generalist-g0/evaluation.json"))
     args = parser.parse_args()
@@ -177,12 +211,13 @@ def main() -> None:
     model.opt.timestep = 0.005
     behaviors = []
     for state, behavior in STATE_TO_BEHAVIOR.items():
-        metrics = run_sequence(model, policy, args.observation_reference_onnx, [state], args.ticks)
-        behaviors.append({"state": state, "behavior": behavior, "metrics": metrics.report()})
+        metrics = run_sequence(model, policy, args.observation_reference_onnx, BEHAVIOR_SEGMENTS[state])
+        gates = {"locomotion": {"displacement_gate_m": 1.0}, "sit_stand": {"height_min_m": 0.18, "height_max_m": 0.13}}
+        behaviors.append({"state": state, "behavior": behavior, "metrics": metrics.report(**gates.get(behavior, {}))})
     edges = []
     for source_state, destination in sorted(LEGAL_EDGES):
         metrics = run_sequence(model, policy, args.observation_reference_onnx,
-                               [source_state, destination], args.ticks)
+                               EDGE_SEGMENTS[(source_state, destination)])
         edges.append({"from": source_state, "to": destination, "reset_count": 0,
                       "metrics": metrics.report()})
     report = make_report(backend=policy.backend, seed=args.seed, behaviors=behaviors, edges=edges)

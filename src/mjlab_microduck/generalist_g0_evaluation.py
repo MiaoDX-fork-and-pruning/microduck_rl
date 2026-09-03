@@ -27,8 +27,8 @@ class TraceMetrics:
     finite: bool = True
 
     def append(self, *, height: float, tilt: float, position: Iterable[float], action: Iterable[float]) -> None:
-        position_array = np.asarray(position, dtype=np.float64)
-        action_array = np.asarray(action, dtype=np.float64)
+        position_array = np.array(position, dtype=np.float64, copy=True)
+        action_array = np.array(action, dtype=np.float64, copy=True)
         values_finite = bool(
             np.isfinite(height)
             and np.isfinite(tilt)
@@ -41,7 +41,8 @@ class TraceMetrics:
         self.positions.append(position_array)
         self.actions.append(action_array)
 
-    def report(self) -> dict:
+    def report(self, *, displacement_gate_m: float | None = None,
+               height_min_m: float | None = None, height_max_m: float | None = None) -> dict:
         displacement = (
             self.positions[-1] - self.positions[0]
             if len(self.positions) >= 2
@@ -51,6 +52,12 @@ class TraceMetrics:
         jumps = np.abs(np.diff(actions, axis=0)) if len(actions) >= 2 else np.zeros((0, 14))
         passed = bool(self.finite and self.actions and max(self.tilts, default=np.inf) < np.deg2rad(65.0)
                       and np.max(np.abs(actions)) <= 1.0 + 1e-6)
+        if displacement_gate_m is not None:
+            passed = passed and float(np.linalg.norm(displacement[:2])) >= displacement_gate_m
+        if height_min_m is not None:
+            passed = passed and max(self.heights, default=-np.inf) >= height_min_m
+        if height_max_m is not None:
+            passed = passed and min(self.heights, default=np.inf) <= height_max_m
         return {
             "steps": len(self.actions),
             "finite": self.finite,
