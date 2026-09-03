@@ -108,6 +108,12 @@ signal before VELSTAND could pass its measured unlock. Required smoke reports
 nonzero anchor loss, weights `1.0`, episode length rising `64 -> 82`, and zero
 bootstrap fall terminations. This is a training candidate, not P4 evidence.
 
+Anchor-strength diagnostic: the fresh 300-iteration run at
+`logs/rsl_rl/generalist_g0_hybrid_ppo/2026-09-03_13-00-46_g0_anchor1_300`
+completed finitely, but corrected Track A still failed all three behavior
+gates (stand tilt `1.390 rad`, locomotion `1.875 rad`, sit/stand `1.741 rad`).
+Increasing the anchor alone did not recover the merged policy.
+
 Stage scalar audit: the stage-aware run recorded `success_0=0.0` through all
 299 updates, so it correctly remained at stage 0. The upright classifier uses
 the repository convention (`projected_gravity_b.z < -cos(65°)`), and the zero
