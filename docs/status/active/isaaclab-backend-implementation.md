@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
 current_slice: forced self-contact runtime proof and seeded reset/DR/command contracts complete; remaining P0 dynamics/source rows open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 asset damping/foot-material boundaries, contact numerical fixture and fixed command battery remain open
+blocker_fingerprint: P0 foot-material boundary, contact numerical fixture and fixed command battery remain open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -28,6 +28,9 @@ last_proven_evidence: >-
   The asset dynamics probe also observes finite reset-time armature/CoM
   changes, stable startup mass/inertia, and zero runtime joint friction across
   four environments (`asset_dynamics_runtime_probe_4.json`).
+  The same probe confirms BAM runtime joint damping and friction tensors are
+  exactly zero, separating the imported USD nominal fields from the actuator
+  model.
   The command runtime probe observes the configured 2..5 s pose-command and
   3..8 s velocity-command intervals over 64 environments, plus a 13.11%
   turn-in-place sample fraction with zero linear velocity and bounded yaw

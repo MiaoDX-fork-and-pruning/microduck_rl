@@ -67,6 +67,7 @@ def main() -> None:
             "inertia": _tensor(data.body_inertia).detach().clone(),
             "com": _tensor(data.body_com_pose_b).detach().clone(),
             "friction": _tensor(data.joint_friction_coeff).detach().clone(),
+            "damping": _tensor(data.joint_damping).detach().clone(),
         }
         # A second reset samples reset-time DR from the same compile-time
         # defaults.  This must vary, but must not drift by accumulating the
@@ -78,6 +79,7 @@ def main() -> None:
             "inertia": _tensor(data.body_inertia).detach().clone(),
             "com": _tensor(data.body_com_pose_b).detach().clone(),
             "friction": _tensor(data.joint_friction_coeff).detach().clone(),
+            "damping": _tensor(data.joint_damping).detach().clone(),
         }
         all_finite = all(
             bool(torch.isfinite(value).all().item())
@@ -95,11 +97,12 @@ def main() -> None:
             and reset_deltas["com"]["max_abs"] > 1.0e-8
         )
         friction_zero = bool(torch.allclose(second["friction"], torch.zeros_like(second["friction"])))
-        if not all_finite or not stable_startup or not reset_dr_effect or not friction_zero:
+        damping_zero = bool(torch.allclose(second["damping"], torch.zeros_like(second["damping"])))
+        if not all_finite or not stable_startup or not reset_dr_effect or not friction_zero or not damping_zero:
             raise AssertionError(
                 "asset dynamics contract failed: "
                 f"finite={all_finite}, stable_startup={stable_startup}, "
-                f"reset_dr_effect={reset_dr_effect}, friction_zero={friction_zero}"
+                f"reset_dr_effect={reset_dr_effect}, friction_zero={friction_zero}, damping_zero={damping_zero}"
             )
         report = {
             "num_envs": args.num_envs,
@@ -111,6 +114,7 @@ def main() -> None:
             "startup_mass_inertia_stable": stable_startup,
             "reset_dr_effect_observed": reset_dr_effect,
             "physx_joint_friction_zero": friction_zero,
+            "physx_joint_damping_zero": damping_zero,
             "friction_bridge": "motor_only_external_effort_unavailable",
             "finite": all_finite,
         }
