@@ -56,6 +56,16 @@ def test_bam_delay_is_bounded_and_resettable() -> None:
     assert float(delay.push(torch.tensor([[10.0]]))[0, 0]) == 9.0
 
 
+def test_bam_delay_reset_accepts_compact_nonzero_env_subset() -> None:
+    delay = ControlStepDelay(4, 1, min_lag=3, max_lag=6)
+    delay.set_delays(torch.tensor([3, 3, 3, 3]))
+    delay.reset(torch.tensor([3]), torch.tensor([[9.0]]))
+    target = torch.zeros(4, 1)
+    target[3] = 10.0
+    out = delay.push(target)
+    assert float(out[3, 0]) == 9.0
+
+
 def test_voltage_sag_has_floor_and_depends_on_previous_load() -> None:
     nominal = torch.tensor([[7.5], [7.5]])
     effort = torch.tensor([[1.0, 2.0], [20.0, 20.0]])
