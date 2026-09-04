@@ -904,8 +904,10 @@ After that point, additional tasks, backlash, rollers, generalist training, came
   tensors and records translation, tilt, yaw response, and resets. Motion
   quality gates are evaluated on a trained checkpoint, not the 5-iteration
   integration smoke.
-- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and only then launch the
-  replacement 4096-env/6000-iteration strict-parity baseline with a new manifest.
+- [x] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch the replacement
+  4096-env/6000-iteration strict-parity run with a new manifest. The run and
+  final ONNX export completed; its trained-policy battery remains rejected
+  pending root-cause investigation (`velocity_flat_command_battery_model5999.json`).
 
 ## 26. Failure modes and verification
 
