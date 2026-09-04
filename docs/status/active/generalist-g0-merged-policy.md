@@ -1,6 +1,6 @@
 # Generalist G0 Merged Policy
 
-Status: BLOCKED_PENDING_DIAGNOSTIC_PLAN
+Status: PAUSED_PENDING_DIRECTION_REVIEW
 
 Source plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 Causal probe: `docs/plans/generalist-g0-velstand-causal-probe.md`
@@ -16,11 +16,28 @@ gate are all wired. None of the direct or hybrid PPO candidates passed P4.
 Do not launch another merged PPO run from the current recipe. Independent
 changes to reset routing, termination horizon, discovery taxes, transition
 spawns, measured stage unlocks, and anchor strengths `0.1`/`1.0` all left
-VELSTAND below its gate.
+VELSTAND below its gate. The accumulated evidence now warrants a direction
+review before more implementation or hyperparameter work.
+
+The important distinction is between two claims:
+
+- The specialist policies and their 61D ONNX/Torch action semantics are
+  validated on their own frozen acceptance batteries.
+- The merged-policy problem has not been shown learnable. Shared BC,
+  DAgger, multi-head BC, teacher initialization, direct PPO, and hybrid PPO
+  experiments all produced finite but closed-loop failures or behavior
+  tradeoffs.
+
+The latest 32-case recovery probe also exposed a contract problem: its
+hand-authored recovery poses are useful stress probes, but they are not yet
+the manifest-frozen specialist reset states. Therefore its native recovery
+success rates must not be used to conclude that `velstand_flat` itself fails
+recovery. Action parity passed, while reset/termination equivalence remains
+unproven.
 
 ## VELSTAND causal probe
 
-The probe produced useful but incomplete diagnostic evidence:
+The earlier probe produced useful but incomplete diagnostic evidence:
 
 - Frozen teacher reconstruction now matches the exported ONNX normalizer
   (`_std + 0.01`). On the 300-tick canonical trace, action parity passes with
@@ -32,21 +49,22 @@ The probe produced useful but incomplete diagnostic evidence:
 - All observed student actions and states were finite. No student was promoted,
   no PPO arm was started, and no G0 acceptance claim was made.
 
-The provisional diagnosis is
-`state_distribution_coverage_or_model_capacity`, not a proven final root cause.
+The provisional diagnosis remains
+`reset_semantics_or_state_distribution_coverage`, not a proven model-capacity
+or reward conclusion.
 
 ## Evidence boundary
 
-The probe did not fully execute its acceptance contract:
+The original probe did not fully execute its acceptance contract:
 
-- the compatibility comparison covered one canonical trace, not the complete
-  32-episode hold/recovery battery with termination/outcome parity;
-- the reported 32 episodes repeated the same canonical reset, so they did not
+- the original compatibility comparison covered one canonical trace, not the
+  complete 32-episode hold/recovery battery;
+- the original student battery repeated the same canonical reset, so it did not
   exercise the declared recovery reset buckets;
 - the CPU student harness did not expose the specialist main-task reward metric;
 - BC used nominal data only, not balanced nominal/recovery traces;
-- DAgger did not implement the declared 8-tick frontier windows or a cumulative
-  multi-round aggregate;
+- the original DAgger did not implement the declared 8-tick frontier windows
+  or a cumulative multi-round aggregate;
 - teacher-initialized, scripted-teacher upper-bound, and random lower-bound
   comparisons were not completed;
 - no best-student ONNX export/parity or representative student video review was
@@ -56,28 +74,83 @@ Treat the existing `/tmp` reports and checkpoints as ephemeral diagnostics.
 Their paths and hashes are recorded in the probe manifest, but they are not the
 immutable external evidence package required for acceptance.
 
-## Next execution handoff
+## Direction-review handoff
 
-The next context should execute the frozen `execution-ready-v2` causal probe
-before any training. The required order is:
+The next context must choose a direction-review option before any new
+execution. The default recommendation is one bounded evidence repair:
 
-1. reproduce the frozen teacher's exact reset buckets, episode horizon,
-   termination classes, reward terms, and seed semantics for both teacher and
-   student, publishing native per-bucket baselines first;
-2. collect trajectory-split nominal/recovery data and cumulative frontier
-   DAgger windows with explicit bucket labels;
-3. compare native teacher, random/no-op, teacher-initialized, BC, and DAgger
-   arms on that same battery;
-4. only after a student passes all aggregate and per-bucket gates, export ONNX,
-   run parity/video review, and propose incremental `VELOCITY` merging with a
-   VELSTAND non-regression gate.
+1. recover the exact specialist reset qpos/qvel, command, horizon, and
+   termination contract;
+2. rerun native per-bucket parity once, with the manifest-frozen case list;
+3. only if that native baseline passes, run the already-frozen Phase-B control
+   arms on the same battery.
+
+If the exact reset contract cannot be recovered, or the native teacher still
+fails after exact replay, close this merge attempt as inconclusive and retain
+the validated specialist fallback. Any new architecture, reward, PPO, or
+additional behavior requires a separate approved plan.
+
+## Current execution update (2026-09-03)
+
+The evaluator and data-contract repairs are now implemented in:
+
+- `scripts/run_velstand_causal_probe.py` (fixed 32-case/9-bucket/20 s/50 Hz
+  native battery, current-state FrozenG0 parity, per-bucket metrics);
+- `src/mjlab_microduck/generalist_model.py` (exact teacher-to-71D
+  initialization by folding the exported normalizer into the first layer);
+- `scripts/train_generalist_bc.py` (trajectory split before balancing);
+- `scripts/collect_generalist_dagger.py` (cumulative shards and strict 8+1+8
+  recovery frontier window helpers).
+
+Focused contract tests pass (17 tests). The required 64-env/5-iteration
+VELSTAND smoke test passes offline through iteration 4; online WandB mode is
+unavailable on this machine because no API key is configured.
+
+Phase-A diagnostic report: `/tmp/g0-velstand-phase-a.json`, SHA-256
+`45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31`.
+Teacher action parity passes (`max_abs=1.31e-6`, `mean_abs=2.98e-8`, 32,000
+control ticks). The hand-authored recovery rollout reached aggregate success
+0.375, but this is not an acceptance baseline because the reset states have not
+been proven identical to the specialist report's states. Therefore Phase B is
+intentionally not interpreted or promoted: the probe is fail-closed on reset
+semantics and no merged PPO, VELOCITY addition, reward change, or architecture
+expansion is authorized.
+
+## Direction review
+
+The current question is no longer “which PPO recipe should we try next?” It is
+“is a single conditioned actor the right abstraction for this behavior set?”
+The strongest evidence against the current direction is repeated
+behavior-specific interference: stand can improve while locomotion regresses,
+or the reverse, even when offline action MSE is low and all outputs are finite.
+Teacher anchors and curriculum changes reduced symptoms but did not establish
+closed-loop learnability. More sweeps over anchor weights, taxes, or reset
+probabilities are therefore paused.
+
+The next decision should choose one of:
+
+1. **Repair evidence only:** recover the exact specialist recovery reset and
+   termination definitions, rerun native parity, then run the frozen Phase-B
+   controls once. This is the smallest reversible action.
+2. **Reshape the product hypothesis:** keep specialist policies as the runtime
+   solution and treat a merged policy as optional research, rather than a
+   required replacement. This avoids spending more training budget on an
+   unproven shared actor.
+3. **Approve a new architecture experiment:** only with an explicit hypothesis
+   for the observed interference (for example a gated/multi-policy runtime
+   composition), a new plan, and a fresh acceptance contract. This is outside
+   the current G0 plan.
+
+Until that decision is made, the current plan is paused, not accepted and not
+abandoned. The specialist fallback path remains the only validated product
+path.
 
 Any materially different reward, initialization, actor objective, capacity, or
 PPO experiment requires a new approved plan.
 
 ## Last proof
 
-- Probe-focused tests: 15 passed.
+- Probe-focused tests: 17 passed.
 - Canonical compatibility report SHA-256:
   `f78d833fd17ca3e0921593cbd0ed1d1c25512e76cdc5f530d6c28f73e189d947`.
 - Best diagnostic student checkpoint SHA-256:

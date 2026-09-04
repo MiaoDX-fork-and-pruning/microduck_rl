@@ -1,5 +1,9 @@
-Status: ACTIVE
+Status: HISTORICAL_DIAGNOSTIC_RECORD
 Phase: P2 walk conditioned BC baseline
+
+Superseded current status:
+`docs/status/active/generalist-g0-merged-policy.md`. This file preserves the
+early P2 evidence below; it is not an active execution queue.
 
 Completed slice:
 - Frozen `generalist-v0` schema v2 adapter with 71D input and 14D raw action.
@@ -37,14 +41,9 @@ Evidence:
   trainer now uses deterministic behavior-balanced sampling by default so the
   offline objective cannot hide the stand condition.
 
-Remaining P2 work:
-- Freeze a versioned teacher manifest outside Git with checkpoint/ONNX hashes.
-- Add Rust-readable golden vectors and export metadata for the 71D student contract.
-- Diagnose the rollout stability gap (teacher initialization, action scale, or
-  covariate shift) and rerun the MuJoCo G0 battery before any new behavior is
-  added.
-- Continue DAgger/initialization work for the stand condition; do not advance
-  to sit/kick/roulade until both G0 behavior gates pass.
+Subsequent diagnostic outcome:
+- The teacher manifest, 71D contract, teacher adapter, BC/DAgger tooling,
+  direct/hybrid PPO path, and focused tests were subsequently implemented.
 - A VelStand-expanded actor initialization experiment and a teacher-normalized
   input experiment were both run. Neither passed the G0 rollout gate; the
   normalized candidate also regressed locomotion. These are retained as failed
@@ -61,6 +60,15 @@ Remaining P2 work:
   (`1.308 rad`). The unbounded control also fails and exceeds action range.
   This validates the behavior-interference hypothesis but does not qualify the
   model for rollout.
-- Do not add sit/kick/roulade until the G0 baseline and transition gates are reviewed.
+- Later direct and hybrid PPO, reset-routing, termination, curriculum, anchor,
+  and transition-spawn experiments also failed to produce an accepted merged
+  candidate.
+
+Current handoff:
+- P2 is paused for the direction review in
+  `docs/status/active/generalist-g0-direction-review.md`.
+- Do not resume DAgger/PPO sweeps or add behaviors from this historical file.
+- The only recommended execution under the existing probe is one exact
+  specialist reset-contract repair, if explicitly selected.
 
 No-touch: specialist 61D ABI, production runtime defaults, official scheduler, and roller track.

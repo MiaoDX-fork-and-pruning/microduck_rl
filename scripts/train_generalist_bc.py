@@ -66,7 +66,7 @@ def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarra
     return selected[rng.permutation(len(selected))]
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False) -> dict:
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
     import torch
     from torch import nn
 
@@ -74,13 +74,31 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     torch.use_deterministic_algorithms(True)
     validate_dataset(x, y)
     labels = x[:, 48:54].argmax(axis=1)
+    # Split whole trajectories first. Balancing before this point leaks near-
+    # duplicate frames across train/validation and invalidates closed-loop
+    # generalization evidence.
+    if trajectory_ids is None:
+        trajectory_ids = np.arange(len(x), dtype=np.int64)
+    trajectory_ids = np.asarray(trajectory_ids)
+    if trajectory_ids.shape != (len(x),):
+        raise ValueError("trajectory_ids must align with samples")
+    unique = np.unique(trajectory_ids)
+    rng = np.random.default_rng(seed)
+    train_trajectories = set(rng.choice(unique, max(1, int(len(unique) * 0.9)), replace=False).tolist())
+    train_mask = np.isin(trajectory_ids, list(train_trajectories))
+    val_mask = ~train_mask
+    if not val_mask.any() and len(unique) > 1:
+        moved = next(iter(train_trajectories - {min(train_trajectories)}))
+        train_mask[trajectory_ids == moved] = False
+        val_mask = ~train_mask
+    train_base = np.flatnonzero(train_mask)
+    val_idx = torch.from_numpy(np.flatnonzero(val_mask).astype(np.int64))
     if balance:
-        rng = np.random.default_rng(seed)
-        order = torch.from_numpy(balanced_indices(labels, seed=seed).astype(np.int64))
+        train_bucket = None if bucket_labels is None else np.asarray(bucket_labels)[train_base]
+        local = balanced_indices(labels[train_base], seed=seed, bucket_labels=train_bucket)
+        train_idx = torch.from_numpy(train_base[local].astype(np.int64))
     else:
-        order = torch.randperm(len(x))
-    split = max(1, int(len(x) * 0.9))
-    train_idx, val_idx = order[:split], order[split:]
+        train_idx = torch.from_numpy(train_base[rng.permutation(len(train_base))].astype(np.int64))
     model = G0MultiHeadActor(bounded=bounded) if multihead else (nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh(), nn.Linear(256, 14)) if small else nn.Sequential(nn.Linear(71, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 128), nn.Tanh(), nn.Linear(128, 14)))
     if bounded and not multihead:
         model.add_module("output_tanh", nn.Tanh())
@@ -113,7 +131,8 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14] if small else [71, 512, 256, 128, 14], "model_kind": "g0_multihead" if multihead else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None}
+            "architecture": [71, 256, 256, 14] if small else [71, 512, 256, 128, 14], "model_kind": "g0_multihead" if multihead else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None,
+            "trajectory_split": True, "train_trajectories": len(train_trajectories), "validation_trajectories": len(unique) - len(train_trajectories)}
 
 
 def main() -> None:

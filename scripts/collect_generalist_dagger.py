@@ -13,6 +13,44 @@ from mjlab_microduck.generalist_transition_graph import validate_transition
 from mjlab_microduck.generalist_model import build_actor
 
 _G0_POLICY_STATE = {"velstand_flat": "VELSTAND", "velocity_flat": "VELOCITY", "sitstand_flat": "SITSTAND"}
+RECOVERY_BUCKETS = frozenset({
+    "recovery_face_up", "recovery_face_down", "recovery_left_side",
+    "recovery_right_side", "recovery_crouched", "recovery_natural_fall",
+    "post_recovery_upright",
+})
+
+
+def first_frontier_window(
+    frames: list[dict], *, before: int = 8, after: int = 8,
+) -> list[dict]:
+    """Return the frozen 8+1+8 window around the first safety crossing."""
+    if before != 8 or after != 8:
+        raise ValueError("VELSTAND execution-ready-v2 freezes an 8+1+8 window")
+    if not frames:
+        return []
+    bucket = str(frames[0].get("reset_bucket", ""))
+    if bucket not in RECOVERY_BUCKETS or any(f.get("physically_unrecoverable") for f in frames):
+        return []
+    crossed = [i for i, frame in enumerate(frames) if bool(frame.get("frontier_crossed"))]
+    if not crossed:
+        return []
+    center = crossed[0]
+    if center < before or center + after >= len(frames):
+        return []
+    result=[]
+    for offset in range(-before, after + 1):
+        item=dict(frames[center+offset]); item["frontier_offset"] = offset
+        result.append(item)
+    return result
+
+
+def cumulative_rounds(base: dict[str, np.ndarray], rounds: list[dict[str, np.ndarray]]) -> dict[str, np.ndarray]:
+    """Concatenate BC and all earlier student-state DAgger shards."""
+    shards = [base, *rounds]
+    keys = set(base)
+    if any(set(shard) != keys for shard in shards):
+        raise ValueError("all cumulative DAgger shards must share the same fields")
+    return {key: np.concatenate([np.asarray(shard[key]) for shard in shards]) for key in sorted(keys)}
 
 
 def extract_boundary_windows(report: dict, frames: list[dict], *, before: int = 25, after: int = 25) -> list[dict]:

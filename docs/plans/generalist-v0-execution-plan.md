@@ -1,6 +1,6 @@
 # Generalist v0 Execution Plan
 
-Status: active; P0 and P1 complete, P2 walk conditioned BC baseline is active.
+Status: paused; P0 and P1 complete, P2 is pending G0 direction review.
 
 This plan turns the current specialist evidence into two hardware-specific
 generalist tracks. It deliberately keeps single-policy validation separate from
@@ -98,9 +98,11 @@ edges are recorded. This gate is satisfied by the smoke/full reports under
 
 ### P2. Walk merged model
 
-Current slice: the 71D schema adapter and an offline BC MLP smoke are implemented
-from immutable `velstand_flat`/`velocity_flat` P0 traces. The smoke is a baseline
-only; it is not yet a rollout-qualified merged model.
+Current slice: the 71D schema adapter, teacher reconstruction, BC/DAgger,
+direct/hybrid PPO, reset routing, and evaluation tooling are implemented. No
+merged candidate is rollout-qualified. Repeated stand/locomotion tradeoffs and
+an unresolved specialist reset-equivalence gap have paused this phase for the
+direction review in `docs/status/active/generalist-g0-direction-review.md`.
 
 Use the no-wheel teacher subset: stand/velstand, velocity, sitstand, ground pick,
 kick, and roulade only after P0 passes. Collect balanced teacher data in the
@@ -108,9 +110,11 @@ all-collisions scene, including transition frontiers and recovery states. Train
 the conditioned student with behavior/profile fields and retain specialists as
 teachers and fallback.
 
-Order: schema/golden vectors -> offline BC -> student-state/DAgger -> optional
-small PPO fine-tune. Run the P1 official-controller composition battery after
-each candidate; do not advance on aggregate loss alone.
+The original order was schema/golden vectors -> offline BC ->
+student-state/DAgger -> optional small PPO fine-tune. It has been exhausted as
+a generic recipe and is no longer an automatic execution queue. Resume only
+after an explicit direction choice and a bounded hypothesis; do not advance on
+aggregate loss alone.
 
 ### P3. Roller merged model
 

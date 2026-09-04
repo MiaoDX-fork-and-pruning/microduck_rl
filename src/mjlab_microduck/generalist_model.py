@@ -5,6 +5,45 @@ import torch
 from torch import nn
 
 
+class VelstandProbeActor(nn.Module):
+    """Frozen Phase-B architecture matching the accepted specialist MLP."""
+
+    def __init__(self):
+        super().__init__()
+        self.mlp = nn.Sequential(
+            nn.Linear(71, 512), nn.ELU(), nn.Linear(512, 256), nn.ELU(),
+            nn.Linear(256, 128), nn.ELU(), nn.Linear(128, 14),
+        )
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        return self.mlp(observation).clamp(-1.0, 1.0)
+
+
+def initialize_velstand_probe_from_teacher(
+    model: VelstandProbeActor, checkpoint: str,
+) -> dict[str, object]:
+    """Exactly fold the 61D teacher normalizer into the 71D probe actor."""
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    state = payload["actor_state_dict"]
+    mean = state["obs_normalizer._mean"].reshape(-1)
+    std = state["obs_normalizer._std"].reshape(-1) + 0.01
+    legacy_to_g0 = tuple(range(48)) + tuple(range(54, 67))
+    with torch.no_grad():
+        first = model.mlp[0]
+        first.weight.zero_()
+        normalized_weight = state["mlp.0.weight"] / std.unsqueeze(0)
+        first.weight[:, legacy_to_g0] = normalized_weight
+        first.bias.copy_(state["mlp.0.bias"] - normalized_weight @ mean)
+        for index in (2, 4, 6):
+            model.mlp[index].weight.copy_(state[f"mlp.{index}.weight"])
+            model.mlp[index].bias.copy_(state[f"mlp.{index}.bias"])
+    return {
+        "mapping": {"specialist[0:48]": "student[0:48]", "specialist[48:61]": "student[54:67]"},
+        "unused_student_inputs_zeroed": list(range(48, 54)) + list(range(67, 71)),
+        "normalizer": "folded_into_first_linear_std_plus_0.01",
+    }
+
+
 class G0MultiHeadActor(nn.Module):
     """One conditioned actor with a shared trunk and three G0 behavior heads."""
 

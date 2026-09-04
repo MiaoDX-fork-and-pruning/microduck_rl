@@ -1,6 +1,6 @@
 # G0 VELSTAND Causal Probe
 
-Status: execution-ready-v2
+Status: paused-pending-direction-review
 Parent plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 Parent status: `docs/status/active/generalist-g0-merged-policy.md`
 
@@ -9,17 +9,19 @@ Parent status: `docs/status/active/generalist-g0-merged-policy.md`
 The implemented probe has produced a preliminary, fail-closed diagnostic but
 has not satisfied every evidence requirement in this contract. Teacher action
 reconstruction matches the exported ONNX normalizer (`_std + 0.01`) on the
-available 300-tick canonical trace (`max_abs=3.84e-7`, `mean_abs=4.78e-8`).
-VELSTAND-only nominal BC and two bounded DAgger rounds remain finite but fail
-closed loop with success `0.0` and maximum tilt `1.6762 rad` versus the
-`1.1345 rad` gate. The provisional diagnosis is
-`state_distribution_coverage_or_model_capacity`.
+canonical trace and on the current 32-case rollout observations. The latest
+parity is `max_abs=1.31e-6`, `mean_abs=2.98e-8` over 32,000 control ticks.
+The hand-authored recovery battery gives an aggregate native success of 0.375,
+but those reset poses have not been proven identical to the specialist
+acceptance evaluator's reset states. The provisional diagnosis is therefore
+`reset_semantics_or_state_distribution_coverage`, not a proven capacity,
+reward, or teacher-quality conclusion.
 
-This is not a complete Phase A/B acceptance result. The previous student
-harness repeated one upright reset, omitted the specialist main-task metric,
-and did not run the declared recovery, frontier, or control comparisons. This
-revision is the execution contract for the next context. No merged PPO run or
-G0 acceptance claim is authorized until Phase A and Phase B pass.
+This is not a complete Phase A/B acceptance result. The native battery and
+action parity are now implemented, but the reset equivalence gate is still
+open and Phase B control arms have intentionally not run. No merged PPO run or
+G0 acceptance claim is authorized until the reset contract is repaired and
+Phase A/B pass.
 
 ## Purpose
 

@@ -1,15 +1,14 @@
 # Generalist v0
 
-Status: ACTIVE
+Status: PAUSED_AT_P2_DIRECTION_REVIEW
 
 Source plan: `docs/plans/generalist-v0-execution-plan.md`
 
-Latest user intent: execute P0 completely; stop before P1.
-
-Current slice: P0 battery implementation and evidence run complete. The
-no-wheel walk/all-collisions specialists use the canonical `scene.xml`; roller
-specialists use `scene_rollers.xml`. Each policy has independent reset and
-per-case evidence. No controller or scheduler behavior was added.
+Current slice: P0 and P1 are complete. P2 produced the G0 merged-policy
+implementation and a substantial set of BC, DAgger, initialization, actor,
+direct PPO, and hybrid PPO diagnostics, but no merged candidate passed its
+closed-loop acceptance gates. P2 is paused pending the direction review in
+`docs/status/active/generalist-g0-direction-review.md`.
 
 Last proven evidence: the frozen manifest contains 13 accepted 61D -> 14D
 specialists with local checkpoint, ONNX, evaluation, and parity artifacts.
@@ -27,23 +26,23 @@ P0 gate result: PASSED. All 13 specialists pass their primary gates after
 `standup_flat/prone_recovery_probe` remains failed, but is evidence for the
 future recovery chain and does not count against standalone acceptance.
 
-P1 current evidence: official `pollen-robotics/microduck` is pinned at
-`590b986bd8c0d50ae02cb3ea2f59c463b6828168`. Its fall predictor tests pass 8/8;
-the production limp-pose ramp and default-enabled tests pass; the MuJoCo
-sit-to-stand handoff passes. Report:
-`artifacts/generalist-v0/p1-official-fall-recovery-prebridge.json`.
+P1 gate result: PASSED. The persistent official-controller replay is pinned at
+fork commit `66d4fa8facd4c564f8346dc54f361ceaa5e28d59`; its 300-active-tick walk and
+roller reports pass at the accepted `0.20 m/s` command. The official controller
+continues to own scheduling and state.
 
-P1 gate result: NOT PASSED. The pinned `robotd --fake` backend cannot accept
-external IMU/joint frames, so MuJoCo cannot yet drive the official persistent
-state machine end to end. Adding a test-only `RobotIo` NDJSON replay adapter in
-the official repository is the next bridge slice; do not duplicate the state
-machine in this repository.
+P2 gate result: NOT PASSED. Specialist artifacts and action reconstruction are
+validated, while the single conditioned actor repeatedly shows stand versus
+locomotion interference. The latest 32-case VELSTAND recovery probe passes
+action parity but uses hand-authored recovery poses, so reset and termination
+equivalence to the accepted specialist evaluator remains unproven.
 
-Stop condition: P0 is complete only if every intended teacher has an explicit,
-reproducible passing per-case report. P1 requires a deterministic persistent
-official-controller replay before composition parity may be claimed.
+Next decision: either repair the exact specialist reset contract once, retain
+specialists as the product architecture, or approve a new architecture
+hypothesis under a new plan. Do not continue merged PPO, add `VELOCITY`, change
+rewards, or expand the actor under the current plan.
 
-No-touch scope: official controller repository/API, runtime defaults, a second
-policy scheduler, generalist training, and hardware rollout.
+No-touch scope: specialist 61D ABI, production runtime defaults, official
+scheduler, roller/hardware behavior, and specialist fallback artifacts.
 
-Parked work: P1-P4.
+Parked work: P2 continuation, P3, and P4.

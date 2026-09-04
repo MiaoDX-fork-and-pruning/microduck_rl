@@ -70,3 +70,30 @@ def test_extract_boundary_windows_rejects_direct_velocity_sitstand_edge():
     frames = [{"step": i, "policy_id": "velocity_flat" if i < 10 else "sitstand_flat"} for i in range(20)]
     with pytest.raises(ValueError, match="unsupported G0 transition"):
         mod.extract_boundary_windows(report, frames, before=0, after=1)
+
+
+def test_velstand_frontier_is_exactly_8_plus_1_plus_8():
+    mod = _load("dagger_frontier", "scripts/collect_generalist_dagger.py")
+    frames = [{"reset_bucket": "recovery_face_up", "frontier_crossed": i >= 12} for i in range(25)]
+    window = mod.first_frontier_window(frames)
+    assert len(window) == 17
+    assert [row["frontier_offset"] for row in window] == list(range(-8, 9))
+
+
+def test_frontier_excludes_nominal_and_unrecoverable_buckets():
+    mod = _load("dagger_recovery", "scripts/collect_generalist_dagger.py")
+    nominal = [{"reset_bucket": "upright", "frontier_crossed": i == 10} for i in range(20)]
+    unrecoverable = [{"reset_bucket": "recovery_face_down", "frontier_crossed": i == 10,
+                      "physically_unrecoverable": True} for i in range(20)]
+    assert mod.first_frontier_window(nominal) == []
+    assert mod.first_frontier_window(unrecoverable) == []
+
+
+def test_dagger_rounds_are_cumulative():
+    mod = _load("dagger_cumulative", "scripts/collect_generalist_dagger.py")
+    base = {"inputs": np.zeros((2, 71)), "actions": np.zeros((2, 14))}
+    one = {"inputs": np.ones((3, 71)), "actions": np.ones((3, 14))}
+    two = {"inputs": np.full((4, 71), 2), "actions": np.full((4, 14), 2)}
+    merged = mod.cumulative_rounds(base, [one, two])
+    assert merged["inputs"].shape == (9, 71)
+    assert np.all(merged["inputs"][-4:] == 2)

@@ -1,31 +1,79 @@
 # Generalist G0 Merged Policy Plan
 
-Status: blocked-pending-velstand-debug-plan
+Status: paused-pending-direction-review
 
-Current checkpoint: P4 diagnostic evaluation complete; hybrid anchor
-implementation is now wired and smoke-verified. The versioned teacher
-manifest (`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition
-graph (`docs/generalist_g0_transition_graph.json`) are hash-verified; data
+Current checkpoint: implementation and diagnostic exploration complete; plan
+paused pending direction review. The versioned teacher manifest
+(`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition graph
+(`docs/generalist_g0_transition_graph.json`) are hash-verified; data
 collection, BC/DAgger, direct PPO, hybrid PPO, ONNX parity, latency, and
-fallback tooling are implemented and covered by focused tests. The current
-candidate is not accepted: stand and legal-edge success gates remain below
-the required thresholds, so work must continue on the merged-policy behavior
-before adding any new skill.
+fallback tooling are implemented and covered by focused tests. No merged
+candidate is accepted. Further work requires either one bounded reset-contract
+repair or a new approved hypothesis about whether a single conditioned actor
+is the right abstraction.
 
 ## Latest Checkpoint: VELSTAND Causal Probe
 
 The approved VELSTAND causal probe has run its available preliminary slices.
-Teacher reconstruction parity passes on the canonical trace, but VELSTAND-only
-BC and two bounded DAgger rounds fail closed loop. This evidence is useful but
-does not close the probe contract: recovery reset buckets, specialist reward
-metric, frontier-window coverage, control arms, ONNX parity, and video review
-remain incomplete. The current provisional diagnosis is
-`state_distribution_coverage_or_model_capacity`.
+Teacher reconstruction parity passes, while VELSTAND-only BC and two bounded
+DAgger rounds fail closed loop. The newer native battery still has an open reset
+equivalence gate because its recovery poses were hand-authored rather than
+replayed from the accepted specialist evaluator. The current provisional
+diagnosis is `reset_semantics_or_state_distribution_coverage`; this is not a
+closed learnability result.
 
-The next context should execute the frozen `execution-ready-v2` VELSTAND probe
-(`docs/plans/generalist-g0-velstand-causal-probe.md`) before any PPO run. No
-merged PPO, new behavior, or G0 acceptance claim is authorized until that probe
-passes its evaluator, per-bucket, control-arm, and closed-loop gates.
+The evaluator work reached action parity, but the recovery reset poses used by
+the latest probe are not yet proven to be the manifest-frozen specialist reset
+states. The native recovery numbers are consequently diagnostic only. The plan
+is paused for a direction review before any further probe training or PPO run.
+No merged PPO, new behavior, or G0 acceptance claim is authorized.
+
+## Evidence Ledger (2026-09-04)
+
+What is established:
+
+- The 61D specialist ABI, ONNX normalizer, frozen teacher artifacts, legal
+  transition graph, and specialist acceptance batteries are the stable part of
+  the system.
+- The 71D schema adapter is finite and tested. Teacher reconstruction parity
+  passes against the exported ONNX graph.
+- The merged-policy evaluator, BC/DAgger tooling, hybrid anchor, transition
+  routing, and smoke tests are implemented.
+
+What has been tried and what it showed:
+
+- Pooled dense BC: low offline MSE did not translate to stable closed-loop
+  behavior.
+- Student-state DAgger: finite actions, but no reliable VELSTAND recovery;
+  adding samples did not remove the stability gap.
+- Normalized inputs, bounded outputs, smaller/larger shared actors, and a
+  shared-trunk multi-head actor: each moved the stand/locomotion tradeoff but
+  none passed the joint gate.
+- Direct PPO: repeated runs failed the VELSTAND/transition acceptance gate.
+- Hybrid PPO with one-time initialization and anchor weights `0.1` and `1.0`:
+  anchoring slowed regression in some slices but did not produce a passing
+  merged policy.
+- Reset routing, termination horizon, staged discovery taxes, transition
+  spawns, and measured unlocks: useful diagnostics, no passing candidate.
+
+What is not established:
+
+- The current merged actor is not proven to have enough state coverage,
+  representation capacity, or suitable causal conditioning.
+- The latest hand-authored recovery battery is not a valid specialist baseline
+  until its reset qpos/qvel, command, and termination semantics are traced to
+  the accepted specialist evaluator.
+- No evidence justifies adding `VELOCITY`, changing rewards, expanding the
+  architecture, or launching another PPO sweep.
+
+Decision gate:
+
+The next action requires an explicit direction choice. The default
+recommendation is to repair the frozen reset evidence once, then decide whether
+the merged actor remains a worthwhile research bet. If the exact reset contract
+cannot be recovered, close the current G0 merge attempt as inconclusive and
+retain specialists as the validated deployment path; do not compensate with
+more hyperparameter searches.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the
@@ -34,8 +82,10 @@ can represent a small, already-validated transition graph before adding
 dynamic skills.
 
 Execution ordering is now strict: the direct/hybrid PPO work described in P2
-is suspended until the `execution-ready-v2` VELSTAND probe passes. The probe is
-the prerequisite learnability and evaluator gate; it is not another PPO arm.
+remains suspended while the plan is paused for direction review. If Option A is
+approved, the VELSTAND probe is rerun only to repair the reset-contract
+evidence and complete its frozen control comparison; it is not another PPO
+arm or an automatic authorization to resume merged training.
 
 ## Decision
 
