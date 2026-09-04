@@ -52,17 +52,46 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _set_command(term, value: tuple[float, float, float]) -> None:
-    term.command[:] = torch.as_tensor(value, device=term.command.device).reshape(1, 3)
-    term.is_standing_env[:] = False
+def _freeze_command_term(term, value: torch.Tensor) -> None:
+    """Hold a command term fixed for the whole deterministic battery case."""
+
+    term.command[:] = value.reshape(1, -1)
+    # CommandManager normally resamples on reset and whenever this timer
+    # expires.  Infinity keeps the fixed battery value stable between the
+    # explicit case writes below, including the pose slots.
     term.time_left[:] = float("inf")
+
+
+def _set_command(base_env, value: tuple[float, float, float]) -> None:
+    """Set the complete 13D command block used by the policy observation."""
+
+    velocity = base_env.command_manager.get_term("base_velocity")
+    _freeze_command_term(
+        velocity,
+        torch.as_tensor(value, device=velocity.command.device, dtype=velocity.command.dtype),
+    )
+    velocity.is_standing_env[:] = False
+    # Velocity-Flat's common battery commands only the twist.  Pose commands
+    # are nevertheless part of the actor ABI, so make their neutral values
+    # explicit instead of inheriting random values from reset/resampling.
+    for name, dim in (("head_pose", 4), ("body_pose", 6)):
+        term = base_env.command_manager.get_term(name)
+        _freeze_command_term(term, torch.zeros(dim, device=term.command.device, dtype=term.command.dtype))
+
+
+def _refresh_fixed_command_observation(base_env):
+    """Recompute obs after a reset so command slots match the forced values."""
+
+    base_env.obs_buf = base_env.observation_manager.compute(update_history=False)
 
 
 def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], steps: int) -> tuple[dict, object]:
     base_env = env.unwrapped
     robot = base_env.scene["robot"]
+    _set_command(base_env, value)
+    _refresh_fixed_command_observation(base_env)
+    obs = env.get_observations()
     command_term = base_env.command_manager.get_term("base_velocity")
-    _set_command(command_term, value)
 
     errors_xy: list[torch.Tensor] = []
     errors_yaw: list[torch.Tensor] = []
@@ -77,7 +106,9 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         with torch.inference_mode():
             action = policy(obs)
             obs, _, dones, _ = env.step(action)
-        _set_command(command_term, value)
+        _set_command(base_env, value)
+        _refresh_fixed_command_observation(base_env)
+        obs = env.get_observations()
         desired = command_term.command
         actual_xy = robot.data.root_lin_vel_b.torch[:, :2]
         actual_yaw = robot.data.root_ang_vel_b.torch[:, 2]
