@@ -63,7 +63,9 @@ def test_turn_bucket_is_not_rewritten_by_observation_or_reward() -> None:
 def test_velocity_flat_keeps_mjlab_air_time_reward_window() -> None:
     source = _source(TASK)
     assert "air_time = RewTerm(" in source
-    assert "func=contact_mdp.feet_air_time" in source
+    assert "func=air_time_reward" in source
+    assert "current_air_time" in source
+    assert "(current > threshold_min) & (current < threshold_max)" in source
     assert '"command_threshold": 0.01' in source
     assert '"threshold_min": 0.125' in source
     assert '"threshold_max": 0.300' in source

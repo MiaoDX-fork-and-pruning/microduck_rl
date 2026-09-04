@@ -333,6 +333,36 @@ def track_angular_velocity(
     return torch.exp(-error / std**2)
 
 
+def air_time_reward(
+    env: ManagerBasedEnv,
+    sensor_cfg: SceneEntityCfg,
+    threshold_min: float = 0.05,
+    threshold_max: float = 0.5,
+    command_name: str | None = None,
+    command_threshold: float = 0.5,
+) -> torch.Tensor:
+    """Count feet currently in mjlab's air-time window.
+
+    mjlab's ``feet_air_time`` is a per-step current-air-time count.  It does
+    not wait for a first-contact event or use ``last_air_time``; keeping that
+    distinction here is important because the resulting reward cadence differs
+    materially for a biped.
+    """
+
+    sensor = env.scene.sensors[sensor_cfg.name]
+    current = sensor.data.current_air_time
+    current = getattr(current, "torch", current)
+    body_ids = sensor_cfg.body_ids
+    current = current[:, body_ids]
+    reward = ((current > threshold_min) & (current < threshold_max)).float().sum(dim=1)
+    if command_name is not None:
+        command = env.command_manager.get_command(command_name)
+        linear_norm = torch.linalg.norm(command[:, :2], dim=1)
+        total = linear_norm + torch.abs(command[:, 2])
+        reward *= (total > command_threshold).float()
+    return reward
+
+
 def upright_gaussian(
     env: ManagerBasedEnv, std: float = 0.22360679774997896, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
 ) -> torch.Tensor:
@@ -696,7 +726,7 @@ class RewardsCfg:
     pose = RewTerm(func=pose_tracking, weight=1.0, params={"std": 0.3})
     head_pose = RewTerm(func=head_pose_tracking, weight=2.0, params={"std": 0.5})
     air_time = RewTerm(
-        func=contact_mdp.feet_air_time,
+        func=air_time_reward,
         weight=3.0,
         params={
             "sensor_cfg": SceneEntityCfg(
