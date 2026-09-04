@@ -20,6 +20,18 @@ def test_velocity_flat_declares_shared_policy_contract() -> None:
     assert "preserve_order=True" in source
     assert "return torch.cat((command, torch.zeros(command.shape[0], 10" in source
     assert "return asset.data.joint_pos.torch[:, ids] - _home(asset)" in source
+    assert "def track_linear_velocity(" in source
+    assert "def track_angular_velocity(" in source
+    assert "def upright_gaussian(" in source
+
+
+def test_velocity_flat_command_profile_matches_mjlab_recipe() -> None:
+    source = _source(TASK)
+    assert "resampling_time_range=(3.0, 8.0)" in source
+    assert "rel_standing_envs=0.02" in source
+    assert "lin_vel_x=(-0.4, 0.4)" in source
+    assert "lin_vel_y=(-0.3, 0.3)" in source
+    assert "ang_vel_z=(-1.0, 1.0)" in source
 
 
 def test_velocity_flat_uses_bam_asset_and_home_override() -> None:
@@ -56,12 +68,13 @@ def test_lazy_task_registry_points_at_velocity_cfg() -> None:
     assert "rsl_rl_cfg_entry_point" in source
 
 
-def test_ppo_runner_is_smoke_sized_and_keeps_policy_shape() -> None:
+def test_ppo_runner_matches_mjlab_budget_and_policy_shape() -> None:
     source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
     assert "MicroduckVelocityFlatPPORunnerCfg" in source
-    assert "max_iterations = 5" in source
+    assert "max_iterations = 6000" in source
     assert "num_steps_per_env = 24" in source
-    assert "hidden_dims=[128, 128, 128]" in source
+    assert "hidden_dims=[512, 256, 128]" in source
+    assert "save_interval = 250" in source
 
 
 def test_ppo_runner_keeps_observation_normalization_enabled() -> None:
@@ -70,7 +83,9 @@ def test_ppo_runner_keeps_observation_normalization_enabled() -> None:
     assert "obs_normalization=False" not in source
 
 
-def test_ppo_runner_uses_bounded_locomotion_optimization_defaults() -> None:
+def test_ppo_runner_matches_mjlab_optimization_defaults() -> None:
     source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
-    assert "entropy_coef=0.0" in source
-    assert "learning_rate=5.0e-4" in source
+    assert "entropy_coef=0.01" in source
+    assert "num_learning_epochs=5" in source
+    assert "num_mini_batches=4" in source
+    assert "learning_rate=1.0e-3" in source

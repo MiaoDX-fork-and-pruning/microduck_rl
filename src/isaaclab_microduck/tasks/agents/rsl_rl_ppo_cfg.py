@@ -12,11 +12,13 @@ from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPp
 @configclass
 class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    max_iterations = 5
-    save_interval = 5
-    experiment_name = "microduck_isaaclab_velocity_flat_normalized"
+    # Match the accepted mjlab Velocity-Flat PPO recipe. CLI smoke tests still
+    # override max_iterations to 5 explicitly.
+    max_iterations = 6000
+    save_interval = 250
+    experiment_name = "microduck_isaaclab_velocity_flat_mjlab_match"
     actor = RslRlMLPModelCfg(
-        hidden_dims=[128, 128, 128],
+        hidden_dims=[512, 256, 128],
         activation="elu",
         obs_normalization=True,
         distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
@@ -30,13 +32,10 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         value_loss_coef=1.0,
         use_clipped_value_loss=True,
         clip_param=0.2,
-        # Locomotion acceptance requires bounded deterministic action means;
-        # entropy pressure otherwise inflated the Gaussian scale to ~22 in the
-        # first normalized run despite the environment-side action clip.
-        entropy_coef=0.0,
-        num_learning_epochs=2,
-        num_mini_batches=2,
-        learning_rate=5.0e-4,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
         schedule="adaptive",
         gamma=0.99,
         lam=0.95,

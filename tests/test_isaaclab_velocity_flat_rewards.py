@@ -49,10 +49,18 @@ def _weight(name: str) -> float:
 
 def test_velocity_tracking_is_strong_enough_to_displace_standing_basin() -> None:
     assert _weight("alive") <= 0.20
-    assert _weight("track_lin_vel") >= 3.5
-    assert _literal(_term("track_lin_vel"), "params", "std") <= 0.25
+    assert _weight("track_lin_vel") == 2.0
+    assert _literal(_term("track_lin_vel"), "params", "std") == 0.31622776601683794
 
 
 def test_yaw_tracking_is_tight_enough_for_commanded_turns() -> None:
-    assert _weight("track_ang_vel") >= 1.5
-    assert _literal(_term("track_ang_vel"), "params", "std") <= 0.50
+    assert _weight("track_ang_vel") == 2.0
+    assert _literal(_term("track_ang_vel"), "params", "std") == 0.7071067811865476
+
+
+def test_core_reward_terms_use_mjlab_equivalent_functions() -> None:
+    source = TASK.read_text()
+    assert "func=track_linear_velocity" in source
+    assert "func=track_angular_velocity" in source
+    assert "upright = RewTerm(func=upright_gaussian, weight=2.0)" in source
+    assert "flat_orientation = RewTerm" not in source

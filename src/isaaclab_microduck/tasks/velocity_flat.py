@@ -82,6 +82,39 @@ def policy_command_block(env: ManagerBasedEnv, command_name: str = "base_velocit
     return torch.cat((command, torch.zeros(command.shape[0], 10, device=command.device)), dim=-1)
 
 
+def track_linear_velocity(
+    env: ManagerBasedEnv, std: float, command_name: str = "base_velocity", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Match mjlab's XY+Z linear velocity tracking kernel."""
+
+    asset = _asset(env, asset_cfg)
+    command = env.command_manager.get_command(command_name)
+    error = torch.sum(torch.square(command[:, :2] - asset.data.root_lin_vel_b.torch[:, :2]), dim=1)
+    error += torch.square(asset.data.root_lin_vel_b.torch[:, 2])
+    return torch.exp(-error / std**2)
+
+
+def track_angular_velocity(
+    env: ManagerBasedEnv, std: float, command_name: str = "base_velocity", asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Match mjlab's commanded-yaw plus uncommanded-XY angular kernel."""
+
+    asset = _asset(env, asset_cfg)
+    command = env.command_manager.get_command(command_name)
+    actual = asset.data.root_ang_vel_b.torch
+    error = torch.square(command[:, 2] - actual[:, 2]) + torch.sum(torch.square(actual[:, :2]), dim=1)
+    return torch.exp(-error / std**2)
+
+
+def upright_gaussian(
+    env: ManagerBasedEnv, std: float = 0.22360679774997896, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")
+) -> torch.Tensor:
+    """Match mjlab's flat-ground Gaussian upright reward."""
+
+    gravity_xy = _asset(env, asset_cfg).data.projected_gravity_b.torch[:, :2]
+    return torch.exp(-torch.sum(torch.square(gravity_xy), dim=1) / std**2)
+
+
 def fallen(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
     asset = _asset(env, asset_cfg)
     gravity_xy = asset.data.projected_gravity_b.torch[:, :2]
@@ -144,12 +177,13 @@ class SceneCfg(InteractiveSceneCfg):
 class CommandsCfg:
     base_velocity = mdp.UniformVelocityCommandCfg(
         asset_name="robot",
-        resampling_time_range=(4.0, 4.0),
-        rel_standing_envs=0.10,
+        # Match the mjlab velocity recipe for backend comparison.
+        resampling_time_range=(3.0, 8.0),
+        rel_standing_envs=0.02,
         heading_command=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
-            lin_vel_x=(-0.8, 0.8),
-            lin_vel_y=(-0.4, 0.4),
+            lin_vel_x=(-0.4, 0.4),
+            lin_vel_y=(-0.3, 0.3),
             ang_vel_z=(-1.0, 1.0),
         ),
     )
@@ -198,16 +232,16 @@ class RewardsCfg:
     alive = RewTerm(func=mdp.is_alive, weight=0.20)
     terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
     track_lin_vel = RewTerm(
-        func=mdp.track_lin_vel_xy_exp,
-        weight=3.5,
-        params={"std": 0.25, "command_name": "base_velocity"},
+        func=track_linear_velocity,
+        weight=2.0,
+        params={"std": 0.31622776601683794, "command_name": "base_velocity"},
     )
     track_ang_vel = RewTerm(
-        func=mdp.track_ang_vel_z_exp,
-        weight=1.5,
-        params={"std": 0.50, "command_name": "base_velocity"},
+        func=track_angular_velocity,
+        weight=2.0,
+        params={"std": 0.7071067811865476, "command_name": "base_velocity"},
     )
-    flat_orientation = RewTerm(func=mdp.flat_orientation_l2, weight=-1.0)
+    upright = RewTerm(func=upright_gaussian, weight=2.0)
     joint_vel = RewTerm(
         func=mdp.joint_vel_l1,
         weight=-0.005,
