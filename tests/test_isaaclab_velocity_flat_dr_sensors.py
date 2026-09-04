@@ -39,6 +39,12 @@ def test_velocity_flat_wires_reset_and_dr_events() -> None:
         assert name in source
 
 
+def test_reset_velocity_flat_state_resets_explicit_actuator_state() -> None:
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat_dr.py").read_text()
+    assert "actuators.reset(ids)" in source
+    assert "set_joint_position_target_index" in source
+
+
 def test_seeded_uniform_reference_is_repeatable() -> None:
     torch.manual_seed(23)
     first = sample_uniform((16, 3), -0.003, 0.003)

@@ -116,6 +116,22 @@ def reset_velocity_flat_state(
     asset.write_joint_position_to_sim_index(position=default_q, joint_ids=joints, env_ids=ids)
     asset.write_joint_velocity_to_sim_index(velocity=default_dq.clone(), joint_ids=joints, env_ids=ids)
 
+    # ``scene.write_data_to_sim`` runs after reset events and can otherwise
+    # feed the articulation's persistent target command from the prior
+    # episode into BAM. Seed that command with the canonical HOME/default
+    # state before the first post-reset simulation write.
+    set_target = getattr(asset, "set_joint_position_target_index", None)
+    if set_target is not None:
+        set_target(target=default_q, joint_ids=joints, env_ids=ids)
+
+    # IsaacLab's articulation reset restores native joint/root state, but its
+    # scene reset path does not reliably reset explicit actuator collections.
+    # Reset BAM here after the episode state is restored so its delay FIFO and
+    # previous motor effort cannot leak across episode boundaries.
+    actuators = getattr(asset, "actuators", None)
+    if actuators is not None and hasattr(actuators, "reset"):
+        actuators.reset(ids)
+
 
 def _cache(env: Any, name: str, value: torch.Tensor) -> torch.Tensor:
     key = f"_velocity_flat_default_{name}"

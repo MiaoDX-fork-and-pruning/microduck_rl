@@ -109,6 +109,11 @@ class BamActuator(ActuatorBase):
         # the battery-load estimate.
         self._previous_motor_effort = torch.zeros_like(self._last_target)
         self._applied_effort = torch.zeros_like(self._last_target)
+        # Runtime parity probes read this diagnostic to distinguish the raw
+        # absolute target from the target visible after BAM's control-step
+        # FIFO.  It is observational only and never participates in effort
+        # computation.
+        self._delayed_target = torch.zeros_like(self._last_target)
         self._friction_scale = torch.full(
             (self._num_envs, 1), cfg.friction_scale, dtype=torch.float32, device=self._device
         )
@@ -130,6 +135,7 @@ class BamActuator(ActuatorBase):
         self._delay.reset(ids, self._last_target[ids])
         self._previous_motor_effort[ids] = 0.0
         self._applied_effort[ids] = 0.0
+        self._delayed_target[ids] = self._last_target[ids]
         self.applied_effort = self._applied_effort
         self._delay_initialized[ids] = False
 
@@ -153,6 +159,7 @@ class BamActuator(ActuatorBase):
             self._last_target[uninitialized] = target_command[uninitialized].detach()
             self._delay_initialized[uninitialized] = True
         target = self._delay.push(target_command)
+        self._delayed_target.copy_(target.detach())
         self._last_target.copy_(target_command.detach())
         # Effective voltage uses the previous solved motor effort.  PhysX does
         # not expose the same-step external load to this callback; that

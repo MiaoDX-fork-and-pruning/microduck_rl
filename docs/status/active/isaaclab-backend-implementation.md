@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: action-boundary root-cause proof found; corrected unclipped path passes CPU contracts, fresh post-fix smoke and a new strict run are still required
+current_slice: directional trace completed; trained-policy battery exposes a reproducible forward/lateral response failure without command/action wiring drift
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: replacement 6000-iteration run was trained with an Isaac-only action clip and is invalid for strict parity
+blocker_fingerprint: corrected strict policy is stable but fails forward/lateral command-response gates while yaw/turn cases pass
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -47,7 +47,15 @@ last_proven_evidence: >-
   (`foot_material_runtime_probe.json`).
   The production push event proof covers a fixed-seed selected subset, finite
   exact velocity deltas, untouched environments, and reset non-accumulation
-  (`push_runtime_probe.json`).
+  (`push_runtime_probe.json`). The bounded directional trace records exact
+  command observation tails for zero/forward/lateral/yaw, raw policy actions,
+  policy-order processed actions, simulator-order BAM targets, delayed targets,
+  applied efforts, and body-frame root velocities across four environments and
+  24 control steps (`velocity_flat_directional_trace_4x24.json`). It shows no
+  command-slot or action-boundary mismatch; forward/lateral remain a trained
+  behavior failure under the current PhysX/BAM dynamics path.
+  The reset-fix regression battery remains finite with zero resets and the
+  same forward/lateral-only response failures (`velocity_flat_command_battery_resetfix_strict.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -67,20 +75,29 @@ completed: >-
   checkpoint's Isaac-only `clip_actions=1.0` was invalidated. Corrected
   64-env/5-iteration smoke and `[1,61] -> [1,14]` ONNX export pass in
   `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-31-53/`.
+  The corrected strict run completed `4096` environments and `6000`
+  iterations in `.../2026-09-04_18-52-35_strict_unclipped/`; its final
+  checkpoint is finite and uses `clip_actions: null`. The fixed six-case
+  battery is finite with zero resets and tilt <=0.375 rad, but forward and
+  lateral command response fail while zero/yaw/turn cases pass:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Run the fresh 64-env/5-iteration smoke with clip_actions=None, export/shape
-  check it, then launch one new strict 4096-env/6000-iteration run using the
-  corrected action boundary. Do not tune rewards/PPO or use the contaminated
-  model_5999.pt as a baseline.
+  Compare the directional trace against a same-reset, backend-neutral
+  command/action fixture and the mjlab reference path; classify the remaining
+  gap as dynamics/backend delta or policy behavior before any new run. Do not
+  tune rewards/PPO or launch another long run.
 next_proof: >-
-  Fresh post-fix 64-env/5-iteration smoke plus ONNX shape proof, followed by a
-  newly justified strict checkpoint and the fixed six-case battery. The root
-  cause artifact is `.cache/isaaclab-assets/velocity_flat_action_boundary_unclipped_model5999_4x50.json`.
+  Run the smallest deterministic backend-neutral command/action fixture with
+  identical reset state and fixed raw actions, then compare its target/delay/
+  effort output to the reset-safe directional trace. The command/action path
+  and BAM episode reset are now proven; remaining proof is a same-state
+  dynamics comparison against mjlab. Trace artifact:
+  `.cache/isaaclab-assets/velocity_flat_directional_trace_resetfix2_4x4.json`.
 stop_condition: >-
-  Do not start VelStand. The next strict run is permitted only after the
-  corrected action boundary passes the fresh smoke and ONNX shape gates. The
-  prior model_5999.pt is diagnostic only and never a strict baseline; do not
-  tune reward/PPO to hide behavior differences.
+  Do not start VelStand. Do not launch another long run while the corrected
+  strict policy fails the forward/lateral battery; do not tune reward/PPO to
+  hide behavior differences. MuJoCo/PhysX solver and same-step external-load
+  friction timing remain explicit backend limitations.
 no_touch_scope: existing mjlab behavior, uv.lock, production runtime, old long-run artifacts
 parked_todos: >-
   MuJoCo/PhysX solver behavior and unavailable same-step solved external-load
