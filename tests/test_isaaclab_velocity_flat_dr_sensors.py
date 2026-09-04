@@ -179,7 +179,7 @@ def test_reset_composes_world_yaw_after_authored_default_orientation() -> None:
         yaw_range=(torch.pi / 2, torch.pi / 2),
         asset_cfg=SimpleNamespace(name="robot", joint_ids=torch.tensor([0])),
     )
-    expected = torch.tensor([[0.5, -0.5, 0.5, 0.5]])
+    expected = torch.tensor([[0.5, 0.5, 0.5, 0.5]])
     assert torch.allclose(env.scene["robot"].root_pose[:, 3:], expected, atol=1e-6)
 
 

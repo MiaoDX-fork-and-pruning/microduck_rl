@@ -336,7 +336,8 @@ def body_pose_tracking(
         rel[:, 2] - (nominal_height + command[:, 2]),
     ]
     quat = asset.data.root_link_quat_w.torch
-    qw, qx, qy, qz = quat.unbind(dim=-1)
+    # IsaacLab/PhysX stores quaternions in xyzw order (scalar last).
+    qx, qy, qz, qw = quat.unbind(dim=-1)
     roll = torch.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx.square() + qy.square()))
     pitch = torch.asin(torch.clamp(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
     yaw = torch.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy.square() + qz.square()))

@@ -96,11 +96,12 @@ def reset_velocity_flat_state(
     yaw_quat[:, 3] = torch.cos(half_yaw)
     base_quat = default_pose[:, 3:]
     yaw_sin, yaw_cos = yaw_quat[:, 2], yaw_quat[:, 3]
+    # q_world = q_yaw * q_default in xyzw layout.
     pose[:, 3:] = torch.stack(
         (
-            yaw_cos * base_quat[:, 0] + yaw_sin * base_quat[:, 1],
-            -yaw_sin * base_quat[:, 0] + yaw_cos * base_quat[:, 1],
-            yaw_sin * base_quat[:, 3] + yaw_cos * base_quat[:, 2],
+            yaw_cos * base_quat[:, 0] - yaw_sin * base_quat[:, 1],
+            yaw_sin * base_quat[:, 0] + yaw_cos * base_quat[:, 1],
+            yaw_cos * base_quat[:, 2] + yaw_sin * base_quat[:, 3],
             yaw_cos * base_quat[:, 3] - yaw_sin * base_quat[:, 2],
         ),
         dim=-1,
