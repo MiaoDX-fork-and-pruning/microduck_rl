@@ -135,6 +135,53 @@ def test_reset_matches_mjlab_root_randomization_and_exact_home_joints() -> None:
     # The second call must use cached defaults, not the previous write.
 
 
+def test_reset_composes_world_yaw_after_authored_default_orientation() -> None:
+    class Asset:
+        device = torch.device("cpu")
+        num_joints = 1
+
+        def __init__(self):
+            self.data = SimpleNamespace(
+                default_root_pose=torch.tensor([[0.0, 0.0, 0.4, 0.0, 0.0, 0.70710677, 0.70710677]]),
+                default_root_vel=torch.zeros(1, 6),
+                default_joint_pos=torch.tensor([[0.2]]),
+                default_joint_vel=torch.zeros(1, 1),
+            )
+
+        def write_root_pose_to_sim_index(self, **kwargs):
+            self.root_pose = kwargs["root_pose"].clone()
+
+        def write_root_velocity_to_sim_index(self, **kwargs):
+            pass
+
+        def write_joint_position_to_sim_index(self, **kwargs):
+            pass
+
+        def write_joint_velocity_to_sim_index(self, **kwargs):
+            pass
+
+    class Scene(dict):
+        env_origins = torch.zeros(1, 3)
+
+    class Env:
+        num_envs = 1
+        device = torch.device("cpu")
+
+        def __init__(self):
+            self.scene = Scene(robot=Asset())
+
+    env = Env()
+    reset_velocity_flat_state(
+        env,
+        torch.tensor([0]),
+        z_range=(0.12, 0.12),
+        xy_range=(0.0, 0.0),
+        yaw_range=(0.0, 0.0),
+        asset_cfg=SimpleNamespace(name="robot", joint_ids=torch.tensor([0])),
+    )
+    assert torch.allclose(env.scene["robot"].root_pose[:, 3:], env.scene["robot"].data.default_root_pose[:, 3:])
+
+
 def test_imu_mounting_is_episode_stable_and_resettable() -> None:
     env = SimpleNamespace(num_envs=4, device=torch.device("cpu"))
     torch.manual_seed(7)

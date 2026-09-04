@@ -58,15 +58,17 @@ def reset_velocity_flat_state(
     env_ids: torch.Tensor | None,
     *,
     z_range: tuple[float, float] = (0.12, 0.13),
-    joint_scale_range: tuple[float, float] = (0.5, 1.5),
+    xy_range: tuple[float, float] = (-0.5, 0.5),
+    yaw_range: tuple[float, float] = (-3.14, 3.14),
     asset_cfg: Any | None = None,
 ) -> None:
     """Reset root z and joints like mjlab's velocity recipe.
 
-    The base pose is restored first, then z is sampled as an absolute height
-    relative to the environment origin. Joint positions are scaled from the
-    articulation's default (HOME) values and clamped to authored soft limits.
-    Velocities are reset to the default zero state.
+    The base pose is restored first, then x/y/yaw are sampled around the
+    environment origin and z is sampled as an absolute height relative to it.
+    Joint positions are reset to the articulation defaults (mjlab's
+    ``position_range=(0, 0)``), not multiplied by a random scale. Velocities
+    are reset to the default zero state.
     """
 
     asset = env.scene[asset_cfg.name if asset_cfg is not None else "robot"]
@@ -81,7 +83,28 @@ def reset_velocity_flat_state(
         origins = torch.zeros((env.num_envs, 3), device=device)
     pose = default_pose
     pose[:, :3] = origins[ids].to(device) + default_pose[:, :3]
+    pose[:, 0] += sample_uniform((n,), *xy_range, device=device)
+    pose[:, 1] += sample_uniform((n,), *xy_range, device=device)
     pose[:, 2] = origins[ids, 2].to(device) + sample_uniform((n,), *z_range, device=device)
+    yaw = sample_uniform((n,), *yaw_range, device=device)
+    half_yaw = 0.5 * yaw
+    yaw_quat = torch.zeros((n, 4), device=device, dtype=pose.dtype)
+    # IsaacLab and USD use xyzw quaternions. Compose the authored default
+    # orientation with the sampled world-yaw delta, matching mjlab's
+    # ``quat_mul(default_root_state.quat, orientations_delta)``.
+    yaw_quat[:, 2] = torch.sin(half_yaw)
+    yaw_quat[:, 3] = torch.cos(half_yaw)
+    base_quat = default_pose[:, 3:]
+    yaw_sin, yaw_cos = yaw_quat[:, 2], yaw_quat[:, 3]
+    pose[:, 3:] = torch.stack(
+        (
+            yaw_cos * base_quat[:, 0] + yaw_sin * base_quat[:, 1],
+            yaw_cos * base_quat[:, 1] - yaw_sin * base_quat[:, 0],
+            yaw_cos * base_quat[:, 2] + yaw_sin * base_quat[:, 3],
+            yaw_cos * base_quat[:, 3] - yaw_sin * base_quat[:, 2],
+        ),
+        dim=-1,
+    )
     asset.write_root_pose_to_sim_index(root_pose=pose, env_ids=ids)
     default_vel = _data_tensor(asset.data, "default_root_vel")[ids]
     asset.write_root_velocity_to_sim_index(root_velocity=default_vel.clone(), env_ids=ids)
@@ -89,10 +112,7 @@ def reset_velocity_flat_state(
     joints = _joint_ids(asset, asset_cfg)
     default_q = _data_tensor(asset.data, "default_joint_pos")[ids[:, None], joints].clone()
     default_dq = _data_tensor(asset.data, "default_joint_vel")[ids[:, None], joints].clone()
-    q = default_q * sample_uniform(default_q.shape, *joint_scale_range, device=device)
-    limits = _data_tensor(asset.data, "soft_joint_pos_limits")[ids[:, None], joints]
-    q = q.clamp(limits[..., 0], limits[..., 1])
-    asset.write_joint_position_to_sim_index(position=q, joint_ids=joints, env_ids=ids)
+    asset.write_joint_position_to_sim_index(position=default_q, joint_ids=joints, env_ids=ids)
     asset.write_joint_velocity_to_sim_index(velocity=default_dq.clone(), joint_ids=joints, env_ids=ids)
 
 
