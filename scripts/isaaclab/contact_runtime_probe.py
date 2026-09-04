@@ -62,9 +62,12 @@ def main() -> None:
     try:
         print("CONTACT_PROBE:imports_start", flush=True)
         import gymnasium as gym
+        print("CONTACT_PROBE:import_gym_done", flush=True)
 
         from isaaclab.sim.utils.queries import resolve_matching_prims_from_source
+        print("CONTACT_PROBE:import_queries_done", flush=True)
         from isaaclab_microduck.tasks import register_tasks
+        print("CONTACT_PROBE:import_tasks_done", flush=True)
         from isaaclab_microduck.policy_abi import (
             ACTION_SIZE,
             HOME_POSITION,
@@ -73,6 +76,7 @@ def main() -> None:
         )
         from isaaclab_microduck.tasks.velocity_flat_contact import self_collision_cost
         from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+        print("CONTACT_PROBE:import_cfg_done", flush=True)
 
         print("CONTACT_PROBE:imports_done", flush=True)
         register_tasks()
