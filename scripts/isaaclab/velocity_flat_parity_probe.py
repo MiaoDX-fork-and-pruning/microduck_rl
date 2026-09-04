@@ -31,6 +31,14 @@ def _axis_summary(value: torch.Tensor) -> list[dict[str, object]]:
     return [_summary(value[:, index]) for index in range(value.shape[1])]
 
 
+def _yaw_from_xyzw(quat: torch.Tensor) -> torch.Tensor:
+    qx, qy, qz, qw = quat.unbind(dim=-1)
+    return torch.atan2(
+        2.0 * (qw * qz + qx * qy),
+        1.0 - 2.0 * (qy.square() + qz.square()),
+    )
+
+
 def _assert_runtime_contract(record: dict[str, object], *, num_envs: int) -> None:
     """Fail the probe when sampled runtime state leaves the mjlab bounds."""
 
@@ -40,6 +48,8 @@ def _assert_runtime_contract(record: dict[str, object], *, num_envs: int) -> Non
     assert -0.500001 <= relative["max"] <= 0.500001
     assert 0.1199 <= record["root_pos_relative_axes"][2]["min"] <= 0.1301
     assert 0.1199 <= record["root_pos_relative_axes"][2]["max"] <= 0.1301
+    assert -3.1416 <= record["root_yaw_rad"]["min"] <= record["root_yaw_rad"]["max"] <= 3.1416
+    assert record["joint_default_error_max"] <= 1.0e-6
     assert record["joint_pos"]["shape"] == [num_envs, 14]
     assert record["actor_obs"]["shape"] == [num_envs, 61]
     assert 3.0 <= record["_delay"]["min"] <= record["_delay"]["max"] <= 6.0
@@ -88,11 +98,17 @@ def main() -> None:
             root_pos = _tensor(data.root_link_pos_w)
             origins = _tensor(base_env.scene.env_origins)
             root_pos_relative = root_pos - origins
+            root_yaw = _yaw_from_xyzw(_tensor(data.root_link_quat_w))
+            joint_default_error = torch.abs(
+                _tensor(data.joint_pos) - _tensor(data.default_joint_pos)
+            ).max(dim=1).values
             record = {
                 "reset_index": reset_index,
                 "root_pos": _summary(root_pos),
                 "root_pos_relative": _summary(root_pos_relative),
                 "root_pos_relative_axes": _axis_summary(root_pos_relative),
+                "root_yaw_rad": _summary(root_yaw.unsqueeze(1)),
+                "joint_default_error_max": float(joint_default_error.max().item()),
                 "joint_pos": _summary(data.joint_pos),
                 "joint_vel": _summary(data.joint_vel),
                 "commands": commands,
