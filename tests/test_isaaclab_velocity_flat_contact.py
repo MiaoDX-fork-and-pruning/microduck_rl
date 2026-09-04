@@ -210,3 +210,45 @@ def test_stateful_swing_term_uses_isaaclab_manager_contract():
 def test_first_contact_is_normalized_to_boolean_for_stateful_masks():
     source = (ROOT / "src/isaaclab_microduck/tasks/velocity_flat_contact.py").read_text()
     assert "compute_first_contact(env.step_dt)).to(dtype=torch.bool)" in source
+
+
+def test_raw_self_collision_adapter_preserves_multi_env_count_shape():
+    class _View:
+        def __init__(self, counts):
+            self.counts = counts
+
+        def get_contact_data(self, dt):
+            del dt
+            return (None, None, None, None, self.counts, None)
+
+    class _SimView:
+        def __init__(self):
+            self.calls = []
+
+        def create_rigid_contact_view(self, patterns, filter_patterns, max_contact_data_count):
+            self.calls.append((patterns, filter_patterns, max_contact_data_count))
+            if len(self.calls) == 1:
+                return _View(torch.tensor([[1, 2], [0, 1]], dtype=torch.int32))
+            return _View(torch.tensor([[3], [4]], dtype=torch.int32))
+
+    class _Foot:
+        body_physx_view = SimpleNamespace(
+            prim_paths=[
+                "/World/envs/env_0/Robot/Geometry/trunk_base",
+                "/World/envs/env_1/Robot/Geometry/trunk_base",
+                "/World/envs/env_0/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+                "/World/envs/env_1/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+                "/World/envs/env_0/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+                "/World/envs/env_1/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+            ]
+        )
+        _physics_sim_view = _SimView()
+
+    env = SimpleNamespace(
+        num_envs=2,
+        device=torch.device("cpu"),
+        step_dt=0.005,
+        sim=SimpleNamespace(cfg=SimpleNamespace(dt=0.005)),
+        scene=SimpleNamespace(sensors={"feet_ground_contact": _Foot()}),
+    )
+    assert torch.equal(c.self_collision_cost(env, ("missing",)), torch.tensor([6.0, 5.0]))

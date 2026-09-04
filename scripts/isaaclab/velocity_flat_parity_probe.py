@@ -1,0 +1,121 @@
+"""Collect seeded runtime evidence for Velocity-Flat reset/DR/sensor/commands."""
+
+from __future__ import annotations
+
+import argparse
+import json
+from pathlib import Path
+
+import torch
+
+from isaaclab.app import AppLauncher
+
+
+def _tensor(value):
+    return getattr(value, "torch", value)
+
+
+def _summary(value: torch.Tensor) -> dict[str, object]:
+    value = _tensor(value).detach().float()
+    return {
+        "shape": list(value.shape),
+        "finite": bool(torch.isfinite(value).all().item()),
+        "min": float(value.min().item()),
+        "max": float(value.max().item()),
+        "mean": float(value.mean().item()),
+    }
+
+
+def _axis_summary(value: torch.Tensor) -> list[dict[str, object]]:
+    value = _tensor(value).detach().float()
+    return [_summary(value[:, index]) for index in range(value.shape[1])]
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--num-envs", type=int, default=16)
+    parser.add_argument("--resets", type=int, default=4)
+    parser.add_argument("--steps", type=int, default=8)
+    parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--output", type=Path)
+    AppLauncher.add_app_launcher_args(parser)
+    args = parser.parse_args()
+    launcher = AppLauncher(args)
+    app = launcher.app
+    env = None
+    try:
+        import gymnasium as gym
+
+        from isaaclab_microduck.policy_abi import ACTION_SIZE
+        from isaaclab_microduck.tasks import register_tasks
+        from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+
+        register_tasks()
+        cfg = make_velocity_flat_env_cfg(num_envs=args.num_envs)
+        cfg.seed = args.seed
+        env = gym.make("IsaacLab-Velocity-Flat-MicroDuck", cfg=cfg)
+        base_env = env.unwrapped
+        robot = base_env.scene["robot"]
+        records = []
+        for reset_index in range(args.resets):
+            obs, _ = env.reset(seed=args.seed + reset_index)
+            commands = {
+                name: _summary(base_env.command_manager.get_command(name))
+                for name in ("base_velocity", "head_pose", "body_pose")
+            }
+            data = robot.data
+            record = {
+                "reset_index": reset_index,
+                "root_pos": _summary(data.root_link_pos_w),
+                "root_pos_axes": _axis_summary(data.root_link_pos_w),
+                "joint_pos": _summary(data.joint_pos),
+                "joint_vel": _summary(data.joint_vel),
+                "commands": commands,
+                "turn_bucket_count": int(
+                    ((torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, :2]).sum(dim=1) < 1.0e-6)
+                    & (torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, 2]) >= 0.4)
+                ).sum().item()
+                ),
+                "actor_obs": _summary(obs["policy"] if isinstance(obs, dict) else obs),
+            }
+            for name in ("_encoder_bias", "_imu_mount_quat", "_gyro_lag", "_gravity_lag", "_joint_vel_history"):
+                value = getattr(base_env, name, None)
+                if value is not None:
+                    record[name] = _summary(value)
+            actuator = next(iter(robot.actuators.values()))
+            for name in ("_supply_voltage", "_vin_drop_gain", "_friction_scale", "_delay"):
+                value = getattr(actuator, name, None)
+                if value is None:
+                    continue
+                if name == "_delay":
+                    value = value.delay
+                record[name] = _summary(value)
+            records.append(record)
+            for _ in range(args.steps):
+                env.step(torch.zeros((args.num_envs, ACTION_SIZE), device=base_env.device))
+        report = {
+            "seed": args.seed,
+            "num_envs": args.num_envs,
+            "resets": args.resets,
+            "steps_between_resets": args.steps,
+            "records": records,
+            "finite": all(
+                bool(item["root_pos"]["finite"])
+                and bool(item["joint_pos"]["finite"])
+                and bool(item["actor_obs"]["finite"])
+                for item in records
+            ),
+        }
+        encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
+        if args.output:
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(encoded)
+        print(encoded, end="")
+    finally:
+        if env is not None:
+            env.close()
+        app.close()
+
+
+if __name__ == "__main__":
+    main()
