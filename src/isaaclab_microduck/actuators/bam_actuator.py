@@ -102,10 +102,9 @@ class BamActuator(ActuatorBase):
         self._delay_initialized = torch.zeros(
             (self._num_envs,), dtype=torch.bool, device=self._device
         )
-        # Keep the most recent absolute target per environment.  mjlab's
-        # delayed actuator history is reset to the episode's initial command,
-        # never to zero; retaining this value lets a partial IsaacLab reset
-        # seed its FIFO without a transient HOME-to-zero command.
+        # Keep the most recent absolute target for runtime diagnostics. The
+        # delay FIFO itself follows mjlab's reset-to-empty then first-command
+        # backfill semantics, so an episode cannot inherit an old target.
         self._last_target = torch.zeros(
             (self._num_envs, num_joints), dtype=torch.float32, device=self._device
         )

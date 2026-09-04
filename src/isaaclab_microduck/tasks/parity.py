@@ -58,10 +58,13 @@ def effective_supply_voltage(
 
 
 class ControlStepDelay:
-    """Per-environment FIFO for BAM's 3..6 control-step target delay.
+    """Per-environment FIFO for BAM's target delay.
 
     ``push`` returns the target that is visible to the actuator this control
-    step.  The queue is intentionally resettable by env id, preventing stale
+    step.  With ``sample_lag_each_push=True`` it follows mjlab's
+    :class:`DelayBuffer` semantics (lag sampling, hold/update policy, and
+    reset-row backfill); the default fixed-lag mode remains available for
+    lightweight callers. The queue is resettable by env id, preventing stale
     actions from leaking across episode boundaries.
     """
 
