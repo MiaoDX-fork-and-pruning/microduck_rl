@@ -9,32 +9,32 @@ any P0 row is `NOT_STARTED` or `BLOCKED`.
 | --- | --- | --- | --- | --- | --- |
 | Actor ABI 61D / action 14D | `microduck_velocity_env_cfg.py`, policy ABI | `tasks/velocity_flat.py`, `policy_abi.py` | MATCHED | ABI fixture and shape smoke | task |
 | HOME + action scale | mjlab JointPositionActionCfg | `parity.policy_action_to_target`, `ActionsCfg` | MATCHED | raw action clip/target unit tests | actuator |
-| Action clipping | RSL-RL wrapper clip=1.0 | `parity.clip_policy_action`, battery wrapper | MATCHED | exact `[-1,1]` fixture | actuator |
+| Action clipping | RSL-RL wrapper clip=1.0 | `parity.clip_policy_action`, battery wrapper | MATCHED | exact `[-1,1]` fixture; runtime training wrapper proof still required | actuator |
 | BAM target delay | `delay_min_lag=3`, `delay_max_lag=6` | `BamActuator` FIFO | MATCHED | deterministic queue test | actuator |
 | BAM voltage DR | `vin_range=(6.5,8.2)` | `BamActuator` per-env supply | MATCHED | seeded range/floor test | actuator |
 | BAM voltage sag | `vin_drop_gain_range=(0,0.2)`, `vin_min=6.0` | `effective_supply_voltage` | MATCHED | pure math fixture | actuator |
-| BAM friction scale | `randomize_bam_friction`, friction budget | actuator scale hook / asset contract | MATCHED | BAM numerical bench; PhysX write pending | actuator |
+| BAM friction scale | `randomize_bam_friction`, friction budget | actuator scale hook / asset contract | BLOCKED | `set_friction_scale` exists, but Velocity-Flat reset wiring and PhysX dynamics write proof are still missing | actuator |
 | External-load friction timing | same-step solved torque in MuJoCo | PhysX force getters refresh post-step | BACKEND_DELTA | `force_timing_probe.json`; motor-only bridge explicit | backend |
-| Asset joint order / limits | walk MJCF | converted `microduck_walk.usd` | MATCHED | asset report + joint mapping tests | asset |
+| Asset joint order / limits | walk MJCF | converted `microduck_walk.usd` | BLOCKED | names/order are mapped, but USD right-hip-yaw limit `0.436` conflicts with canonical HOME `0.4579`; strict runtime handling remains unresolved | asset |
 | Asset damping/friction | MJCF damping 0.053; BAM zeroes dof friction | USD import + explicit BAM metadata | BLOCKED | runtime USD still carries nominal joint friction; same-step BAM external-load bridge unavailable | asset |
-| Reset height / HOME | reset z 0.12..0.13, reset joint offsets | `EventsCfg`, task initial state | MATCHED | seeded reset contract; right hip limit clamp documented | task |
+| Reset height / HOME | reset z 0.12..0.13, x/y ±0.5, yaw ±3.14, joint offsets (0,0) | `reset_velocity_flat_state`, `EventsCfg` | BLOCKED | reset distribution and exact-default joint writes are implemented and CPU-tested; IsaacLab runtime distribution proof pending | task |
 | CoM/head CoM DR | `dr.body_ipos` add, non-accumulating | `velocity_flat_dr.randomize_com_offsets` | BLOCKED | reset hook and restore-then-apply code exist; seeded runtime distribution proof pending | task |
 | Mass/inertia DR | `dr.pseudo_inertia` startup | `velocity_flat_dr.randomize_mass_inertia` | BLOCKED | startup hook and coupled scaling exist; asset tensor mutation benchmark pending | task |
 | Armature/friction DR | `dr.joint_armature`, BAM friction scale | actuator/asset hooks | BLOCKED | armature reset hook and friction scale exist; PhysX dynamics write proof pending | actuator |
 | Push / foot friction DR | interval pushes + foot material range | IsaacLab event terms | BLOCKED | push/material terms wired; OVPhysX material effect and seeded runtime proof pending | task |
-| Encoder bias | actor-only `biased=True`, +/-0.015 | `policy_joint_pos` | MATCHED | actor/critic separation test | task |
-| IMU noise/misalignment | actor noise + random mounting rotation | root-state adapter corruption | BLOCKED | adapter and reset hook exist; runtime distribution proof pending | task |
-| Gyro/gravity delay | lag 0..1, update period 64 | state history adapter | MATCHED | deterministic history test | task |
-| Joint velocity delay/noise | fixed lag 1, +/-0.25 | state history adapter | MATCHED | deterministic history test | task |
-| Head/body commands | 4D + 6D non-zero commands | `_pose_commands`, 13D block | MATCHED | command shape/non-zero fixture | task |
-| Turn-in-place bucket | 15%, lin=0, yaw 0.4..1.0 | `policy_command_block` | MATCHED | seeded command battery | task |
-| Velocity rewards | XY+Z Gaussian std sqrt(.1) | `track_linear_velocity` | MATCHED | pure reward test | task |
-| Angular rewards | yaw+XY Gaussian std sqrt(.5) | `track_angular_velocity` | MATCHED | pure reward test | task |
-| Pose/head rewards | leg pose + head pose tracking | `pose_tracking`, `head_pose_tracking` | MATCHED | sign/config tests | task |
-| Regularizers | body ang vel, momentum, action rate, joint vel | task reward terms | MATCHED | penalty sign tests | task |
-| Contact rewards | air-time, clearance, swing, slip, self collision | `velocity_flat_contact` + ContactSensor | BACKEND_DELTA | real body-level sensor: 15 named bodies including `ankle_left`/`ankle_right`, finite forces in `.cache/isaaclab-assets/velocity_flat_smoke_contact_final2.json`; geom-level pair filtering remains unavailable | task |
-| Terminations | timeout, 70deg fell-over, bounds, NaN | timeout, 70deg + z, bounds, NaN | MATCHED | manager runtime loaded; 70-degree formula and finite sensor checks covered by focused tests/smoke | task |
-| Privileged critic | base lin vel + foot height/air/contact | separate `critic` observation group | MATCHED | runtime group shape 76D with finite contact forces and named ankle bodies; body-level contact limitation recorded above | task |
+| Encoder bias | actor-only `biased=True`, +/-0.015 | `policy_joint_pos` | MATCHED | actor/critic separation and reset-state tests | task |
+| IMU noise/misalignment | actor noise + random mounting rotation | root-state adapter corruption | BLOCKED | control path and episode-stable state are implemented; runtime distribution and sensor-source proof pending | task |
+| Gyro/gravity delay | lag 0..1, update period 64 | state history adapter | BLOCKED | control-step helper and deterministic CPU tests exist; runtime manager/substep proof pending | task |
+| Joint velocity delay/noise | fixed lag 1, +/-0.25 | state history adapter | BLOCKED | helper is wired and CPU-tested; runtime actor observation proof pending | task |
+| Head/body commands | 4D + 6D non-zero commands, 2..5 s resampling | `UniformPoseCommand` manager terms, 13D block | BLOCKED | terms and ranges are wired; actual IsaacLab CommandManager initialization/runtime shape proof pending | task |
+| Turn-in-place bucket | 15%, lin=0, yaw 0.4..1.0 at every velocity resample | `MicroduckVelocityCommand` | BLOCKED | command-term implementation and unit/config tests exist; runtime resampling/battery proof pending | task |
+| Velocity rewards | XY+Z Gaussian std sqrt(.1) | `track_linear_velocity` | BLOCKED | kernel is covered in isolation, but full reward uses an incomplete task reward set and runtime command manager | task |
+| Angular rewards | yaw+XY Gaussian std sqrt(.5) | `track_angular_velocity` | BLOCKED | kernel is covered in isolation, but full reward uses an incomplete task reward set and runtime command manager | task |
+| Pose/head rewards | variable leg pose, head tracking, body tracking, head bias | `pose_tracking`, `head_pose_tracking` | BLOCKED | current pose formula is not mjlab `variable_posture`; body tracking and head-bias terms are still missing | task |
+| Regularizers | body ang vel, angular momentum sensor, dof limits, action rate | task reward terms | BLOCKED | angular momentum reads root angular velocity, dof limit term is missing, and extra `alive`/`terminating`/`joint_vel` terms remain | task |
+| Contact rewards | air-time, clearance, swing, slip, self collision | `velocity_flat_contact` + ContactSensor | BLOCKED | current formulas/data sources are body-level approximations; only geom-level filtering is an explicit backend delta | task |
+| Terminations | timeout, 70deg orientation, terrain bounds, NaN | timeout, 70deg + z, bounds, NaN | BLOCKED | Isaac term adds a `z < 0.055` cutoff and uses different state/sensor sources; semantics need explicit closure | task |
+| Privileged critic | base lin vel + foot height/air/contact/contact force | separate `critic` observation group | BLOCKED | 76D wiring exists, but command terms, IMU source, and body-level contact source are not yet strict runtime parity | task |
 | PPO implementation | `rsl-rl-lib 5.0.1` | image `rsl-rl-lib 5.4.1` | BACKEND_DELTA | 5.0.1 install attempt incompatible with IsaacLab 3.0; controlled probe/report | training |
 | Fixed command battery | mjlab 300-step continuous cases | shared `velocity_flat_battery_spec` and IsaacLab harness | NOT_STARTED | spec is shared (seed 2026, 300 steps, six cases); revised checkpoint run still required | eval |
 | Solver/contact behavior | MuJoCo implicitfast | PhysX GPU solver | BACKEND_DELTA | deterministic physics battery; no reward/PPO compensation | backend |
