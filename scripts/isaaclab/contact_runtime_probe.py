@@ -312,6 +312,8 @@ def main() -> None:
                     )]
                     robot.write_joint_position_to_sim_index(position=sim_q)
                     robot.write_joint_velocity_to_sim_index(velocity=zero_dq)
+                    written_q = robot.data.joint_pos.torch.detach().clone()
+                    written_target_error = float(torch.abs(written_q - sim_q).max().item())
                     # The articulation write reaches PhysX directly.  Do not
                     # flush manager actuator buffers here: Isaac Sim 6.0.1
                     # can terminate when that flush follows an external state
@@ -353,6 +355,7 @@ def main() -> None:
                     "policy_joint_position": forced_policy_q[0].cpu().tolist(),
                     "sim_joint_order": list(robot.joint_names),
                     "actual_sim_joint_position": actual_q[0].cpu().tolist(),
+                    "written_target_error_max": written_target_error if args.forced_self_contact_direct else None,
                     "target_error_max": float(torch.abs(actual_q - target_sim_q).max().item()),
                     "baseline_total": int(baseline_total),
                     "forced_total": int(forced_total),
