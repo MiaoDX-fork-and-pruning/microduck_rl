@@ -176,8 +176,59 @@ def observation_noise(value: torch.Tensor, amplitude: float, *, generator: torch
     return value + torch.empty_like(value).uniform_(-amplitude, amplitude, generator=generator)
 
 
+def _quat_xyzw_to_matrix(quat: torch.Tensor) -> torch.Tensor:
+    """Convert scalar-last quaternions to rotation matrices."""
+
+    x, y, z, w = quat.unbind(dim=-1)
+    return torch.stack(
+        (
+            1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+            2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+            2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y),
+        ),
+        dim=-1,
+    ).reshape(*quat.shape[:-1], 3, 3)
+
+
+def subtree_angular_momentum(
+    mass: torch.Tensor,
+    com_pos_w: torch.Tensor,
+    com_lin_vel_w: torch.Tensor,
+    com_ang_vel_w: torch.Tensor,
+    inertia_principal: torch.Tensor,
+    inertia_quat_w: torch.Tensor,
+) -> torch.Tensor:
+    """Compute rigid-body subtree angular momentum about its aggregate COM.
+
+    All body tensors use ``(env, body, ...)`` layout. ``inertia_principal``
+    accepts either diagonal values, flattened matrices, or 3x3 matrices.
+    The returned vector is expressed in world coordinates.
+    """
+
+    if mass.ndim == 3 and mass.shape[-1] == 1:
+        mass = mass.squeeze(-1)
+    if inertia_principal.shape[-1] == 9:
+        inertia_principal = inertia_principal.reshape(*inertia_principal.shape[:-1], 3, 3)
+    elif inertia_principal.shape[-2:] == (3, 3):
+        pass
+    elif inertia_principal.shape[-1] == 3:
+        inertia_principal = torch.diag_embed(inertia_principal)
+    else:
+        raise ValueError(f"unexpected body inertia shape: {tuple(inertia_principal.shape)}")
+
+    total_mass = mass.sum(dim=1, keepdim=True).clamp_min(torch.finfo(mass.dtype).eps)
+    subtree_com = (mass.unsqueeze(-1) * com_pos_w).sum(dim=1, keepdim=True) / total_mass.unsqueeze(-1)
+    relative = com_pos_w - subtree_com
+    orbital = torch.cross(relative, mass.unsqueeze(-1) * com_lin_vel_w, dim=-1)
+    rotation = _quat_xyzw_to_matrix(inertia_quat_w)
+    world_inertia = rotation @ inertia_principal @ rotation.transpose(-1, -2)
+    spin = torch.matmul(world_inertia, com_ang_vel_w.unsqueeze(-1)).squeeze(-1)
+    return (orbital + spin).sum(dim=1)
+
+
 __all__ = [
     "ControlStepDelay", "clip_policy_action", "effective_supply_voltage",
     "force_turn_in_place", "gaussian_tracking", "l1_penalty",
     "observation_noise", "policy_action_to_target", "sample_uniform_with_zero",
+    "subtree_angular_momentum",
 ]

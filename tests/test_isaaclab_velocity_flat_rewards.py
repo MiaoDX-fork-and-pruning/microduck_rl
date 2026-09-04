@@ -43,8 +43,7 @@ def _literal(term: ast.Assign, keyword: str, key: str) -> float:
 
 def _weight(name: str) -> float:
     value = _keyword(_term(name), "weight")
-    assert isinstance(value, ast.Constant)
-    return float(value.value)
+    return float(ast.literal_eval(value))
 
 
 def test_velocity_tracking_is_strong_enough_to_displace_standing_basin() -> None:
@@ -97,4 +96,5 @@ def test_angular_momentum_does_not_fallback_to_root_angular_velocity() -> None:
     end = source.index("\ndef joint_pos_limits(", start)
     function = source[start:end]
     assert "root_ang_vel_b" not in function
-    assert "subtree-angmom" in function
+    assert "subtree_angular_momentum(" in function
+    assert _weight("angular_momentum") == -0.02

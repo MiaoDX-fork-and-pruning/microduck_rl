@@ -38,6 +38,7 @@ from isaaclab_microduck.tasks.parity import (
     gaussian_tracking,
     l1_penalty,
     observation_noise,
+    subtree_angular_momentum,
 )
 from isaaclab_microduck.tasks import velocity_flat_contact as contact_mdp
 from isaaclab_microduck.tasks.velocity_flat_dr import (
@@ -393,17 +394,32 @@ def body_ang_vel_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEnt
 
 
 def angular_momentum_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Read the subtree angular-momentum sensor; never substitute angular velocity."""
+    """Match MuJoCo's ``subtreeangmom`` sensor from IsaacLab body tensors.
 
-    sensor = getattr(env.scene, "sensors", {}).get("root_angmom")
-    if sensor is None:
-        raise RuntimeError(
-            "Velocity-Flat angular_momentum requires an IsaacLab subtree-angmom "
-            "sensor; root angular velocity is not an equivalent substitute"
-        )
-    value = sensor.data.output
-    value = getattr(value, "torch", value)
-    return value.square().sum(dim=-1)
+    IsaacLab 3.0 has no manager sensor for MuJoCo's subtree angular momentum,
+    but it exposes the same rigid-body quantities.  The trunk subtree contains
+    every body in this articulation, so compute momentum about its aggregate
+    center of mass: ``sum(r x m*v + R*I*R.T*w)``.  This is deliberately based
+    on COM velocities/inertias and is not a root angular-velocity proxy.
+    """
+
+    del asset_cfg  # trunk_base is the articulation root; its subtree is all bodies.
+    asset = _asset(env, SceneEntityCfg("robot"))
+    data = asset.data
+
+    def tensor(name: str) -> torch.Tensor:
+        value = getattr(data, name)
+        return getattr(value, "torch", value)
+
+    momentum = subtree_angular_momentum(
+        tensor("body_mass"),
+        tensor("body_com_pos_w"),
+        tensor("body_com_lin_vel_w"),
+        tensor("body_com_ang_vel_w"),
+        tensor("body_inertia"),
+        tensor("body_com_quat_w"),
+    )
+    return momentum.square().sum(dim=-1)
 
 
 def joint_pos_limits(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -941,8 +957,7 @@ class RewardsCfg:
         weight=-0.05,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=("trunk_base",))},
     )
-    # IsaacLab 3.0 has no subtree-angmom sensor equivalent.  Do not substitute
-    # root angular velocity; the mjlab term remains a documented parity gap.
+    angular_momentum = RewTerm(func=angular_momentum_cost, weight=-0.02)
     action_rate_l2 = RewTerm(func=action_rate_cost, weight=-0.1)
     dof_pos_limits = RewTerm(
         func=joint_pos_limits,

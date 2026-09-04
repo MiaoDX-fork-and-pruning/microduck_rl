@@ -12,6 +12,7 @@ from isaaclab_microduck.tasks.parity import (
     gaussian_tracking,
     policy_action_to_target,
     sample_uniform_with_zero,
+    subtree_angular_momentum,
 )
 
 
@@ -100,3 +101,18 @@ def test_zero_bucket_and_reward_kernel() -> None:
                                    generator=torch.Generator().manual_seed(2))
     assert torch.count_nonzero(out) == 0
     assert torch.allclose(gaussian_tracking(torch.zeros(4, 3), 0.5), torch.ones(4))
+
+
+def test_subtree_angular_momentum_includes_orbital_and_spin_terms() -> None:
+    mass = torch.tensor([[1.0, 1.0]])
+    position = torch.tensor([[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]])
+    # Opposed y velocities give +2 z orbital momentum about the aggregate COM.
+    linear_velocity = torch.tensor([[[0.0, -1.0, 0.0], [0.0, 1.0, 0.0]]])
+    angular_velocity = torch.tensor([[[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]])
+    inertia = torch.tensor([[[1.0, 1.0, 2.0], [1.0, 1.0, 2.0]]])
+    identity = torch.tensor([[[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]]])
+    momentum = subtree_angular_momentum(
+        mass, position, linear_velocity, angular_velocity, inertia, identity
+    )
+    # Each body's spin contributes +2 z, for total Lz = 2 + 2 + 2 = 6.
+    assert torch.equal(momentum, torch.tensor([[0.0, 0.0, 6.0]]))
