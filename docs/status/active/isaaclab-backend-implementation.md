@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: contact, foot-material, and push reset-subset proofs complete; fixed command battery remains open
+current_slice: P0 semantic contracts, fresh smoke, battery harness, and ONNX shape gate complete; trained-policy behavior acceptance remains open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: fixed command battery behavior gate remains open
+blocker_fingerprint: trained-policy battery behavior gate remains open; smoke checkpoint is integration-only
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -64,17 +64,18 @@ completed: >-
   finite; direct and historical probe startup failures were traced to incomplete
   PYTHONPATH rather than simulator semantics.
 next_action: >-
-  Run the fixed command battery and deterministic parity tests; do not treat
-  behavior-gate failures as permission to tune rewards or PPO.
-  Do not start the unified command battery until those rows are closed; then
-  run the fresh 64-env/5-iteration PPO smoke.
+  Start the replacement strict-parity 4096-env/6000-iteration run using the
+  fresh smoke-validated task and a new manifest. Do not tune rewards/PPO or use
+  the old long run as baseline; rerun the six-case battery on the trained
+  checkpoint for behavior acceptance.
 next_proof: >-
-  Fixed command battery followed by a fresh 64-env/5-iteration smoke and ONNX
-  shape/export gate.
+  New strict-parity training manifest and checkpoint, followed by the fixed
+  six-case battery and comparison against the accepted mjlab policy.
 stop_condition: >-
-  Do not start VelStand or a new 4096-env/6000-iteration run while any P0 ledger
-  row is BLOCKED/NOT_STARTED, or before the unified battery and subsequent smoke
-  both pass. Old long runs are diagnostic only and never a strict baseline.
+  Do not start VelStand. The replacement long run is allowed only after the
+  semantic ledger, deterministic battery harness, and fresh 64-env/5-iteration
+  smoke plus ONNX shape gate pass. Old long runs are diagnostic only and never a
+  strict baseline; do not tune reward/PPO to hide behavior differences.
 no_touch_scope: existing mjlab behavior, uv.lock, production runtime, old long-run artifacts
 parked_todos: >-
   MuJoCo/PhysX solver behavior and unavailable same-step solved external-load

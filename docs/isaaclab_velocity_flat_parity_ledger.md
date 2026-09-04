@@ -36,7 +36,8 @@ any P0 row is `NOT_STARTED` or `BLOCKED`.
 | Terminations | timeout, 70deg orientation, terrain bounds, NaN | timeout, 70deg, bounds, NaN | MATCHED | `reward_termination_runtime_fixture_4.json`: exact four termination sources are present, finite, and produce finite booleans; 70-degree boundary and NaN kernels are CPU-tested | task |
 | Privileged critic | base lin vel + foot height/air/contact/contact force | separate `critic` observation group | MATCHED | `reward_termination_runtime_fixture_4.json`: live critic shape is `[4,76]`, finite, with command/IMU/contact slots sourced from the dedicated critic group | task |
 | PPO implementation | `rsl-rl-lib 5.0.1` | image `rsl-rl-lib 5.4.1` | BACKEND_DELTA | 5.0.1 install attempt incompatible with IsaacLab 3.0; controlled probe/report | training |
-| Fixed command battery | mjlab 300-step continuous cases | shared `velocity_flat_battery_spec` and IsaacLab harness | BLOCKED | six fixed cases have run deterministically, but the current checkpoint fails behavior gates (saturated actions/high tilt/poor yaw); rerun is required after semantic closure | eval |
+| Fixed command battery harness | mjlab 300-step continuous cases | shared `velocity_flat_battery_spec` and IsaacLab harness | MATCHED | six fixed cases run deterministically with seed 2026, 16 envs, 300 steps, finite tensors, and identical command/reset instrumentation; fresh smoke checkpoint artifact: `.cache/isaaclab-assets/velocity_flat_command_battery_fresh.json` | eval |
+| Trained-policy battery behavior | mjlab trained-policy acceptance | IsaacLab trained-policy acceptance | BLOCKED | the fresh 5-iteration integration checkpoint fails behavior gates (high tilt/resets and missing lateral/yaw response); this is deferred until a new strict trained checkpoint exists and is not evidence of a semantic mismatch in the harness | eval |
 | Solver/contact behavior | MuJoCo implicitfast | PhysX GPU solver | BACKEND_DELTA | deterministic physics battery; no reward/PPO compensation | backend |
 
 ## Software-stack probe
@@ -50,7 +51,8 @@ matched and the version difference is kept visible in every run manifest.
 ## Gate order
 
 1. Close P0 action/BAM/asset and reset/DR rows with CPU fixtures.
-2. Run the common fixed command battery and deterministic parity tests.
+2. Run the common fixed command battery harness and deterministic parity tests;
+   defer motion-quality gates until a trained strict-parity checkpoint exists.
 3. Run `64` environments for `5` iterations and export/shape-check the policy.
 4. Only after those gates pass may a new `4096`-environment, `6000`-iteration
    run start.  VelStand and the prior long run are excluded from this gate.

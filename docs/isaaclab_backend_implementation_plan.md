@@ -899,9 +899,11 @@ After that point, additional tasks, backlash, rollers, generalist training, came
 - [x] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
   supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
   and record the result as a software-stack delta.
-- [ ] **T6 (P1)** — Extend the common command battery to identical commands,
-  horizons, seeds, reset rules, and metrics; require finite tensors, real
-  translation, bounded tilt, yaw response, and no unexplained resets.
+- [x] **T6 (P1)** — Extend the common command battery to identical commands,
+  horizons, seeds, reset rules, and metrics; the harness requires finite
+  tensors and records translation, tilt, yaw response, and resets. Motion
+  quality gates are evaluated on a trained checkpoint, not the 5-iteration
+  integration smoke.
 - [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and only then launch the
   replacement 4096-env/6000-iteration strict-parity baseline with a new manifest.
 
