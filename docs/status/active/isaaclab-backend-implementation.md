@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H long Velocity-Flat training run authorized and in progress
+current_slice: Task H long Velocity-Flat run complete; walking battery failed acceptance
 blocker_kind: evaluation_battery
   blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
@@ -93,10 +93,20 @@ completed: >-
   fall nearly universally. A follow-up 4096-env/1000-iteration diagnostic was
   started and stopped after about four minutes during scene initialization
   without producing a checkpoint, so it is not training evidence.
+  A subsequent authorized 4096-env/4000-iteration run completed in about 2393
+  seconds and produced `model_3999.pt` (SHA256
+  `d6d235a3b528079a4a714efbcad1131cb09ec4c7b02e411d3fb3f51f61fed13d`). The
+  final fixed battery is finite, but forward and lateral commands produce only
+  about 0.008 m/s actual XY speed, while yaw reaches about 0.150 rad/s for a
+  0.5 rad/s command with 5 resets and max tilt 1.299 rad. Zero command has no
+  resets. Full details are in
+  `docs/isaaclab_velocity_flat_long_run_report.md` and
+  `.cache/isaaclab-assets/velocity_flat_command_battery_long_3999.json`.
 next_action: >-
-  Complete the authorized 4096-env/4000-iteration Velocity-Flat run, then
-  evaluate its best/latest checkpoint with the fixed zero/forward/lateral/yaw
-  battery before deciding whether Task H is credible. Keep the USD
+  Do not start VelStand/Task I. Redesign the Velocity-Flat early-balance and
+  crouched/standing local optimum, or run a controlled action/effort semantics
+  benchmark before another long PPO job. The completed long run proves runtime
+  sustainability but fails walking acceptance. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control, not
   implicit PhysX PD. PhysX force getters are available, but only as post-step
   data; a one-step delayed controller would require a new design decision.
@@ -111,14 +121,15 @@ next_proof: >-
   The container dependency probe is green with `torch==2.10.0+cu128`,
   `tensordict==0.10.0`, and `rsl_rl==5.0.1`.
 stop_condition: >-
-  Do not claim simulator parity or reliable walking until the fixed command
-  battery, mjlab comparison, and PhysX drive/BAM behavior are explicitly
-  documented. Do not start another long PPO run without a new Task H decision.
+  Do not claim simulator parity or reliable walking, and do not start VelStand/
+  Task I, until a revised Velocity-Flat checkpoint passes the fixed command
+  battery with real translation, bounded tilt, and no yaw instability. Do not
+  start another long PPO run without a new Task H experiment design.
 no_touch_scope: existing mjlab code, dependency lock, production runtime
 parked_todos: >-
   External-load friction parity remains unresolved because same-step solved
-  torque is unavailable to the explicit actuator callback; a longer IsaacLab
-  run is pending an explicit Task H resource/experiment decision; DCMotorCfg is
-  not accepted as BAM parity. The previous 4096-env retry produced no
-  checkpoint and was stopped during initialization; this authorized run is the
-  first retry after the reward adjustment.
+  torque is unavailable to the explicit actuator callback; DCMotorCfg is not
+  accepted as BAM parity. The previous 4096-env retry produced no checkpoint
+  and was stopped during initialization; the authorized retry completed but
+  failed the walking battery. The long-run checkpoint remains available for
+  analysis.
