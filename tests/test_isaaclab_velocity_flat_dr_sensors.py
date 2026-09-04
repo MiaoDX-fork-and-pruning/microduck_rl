@@ -320,6 +320,26 @@ def test_periodic_sensor_delay_is_control_step_based_and_bounded() -> None:
     assert 0 <= env._gyro_lag.item() <= 1
 
 
+def test_dynamic_sensor_signal_has_exact_zero_or_one_step_lag() -> None:
+    """The actor path must delay a changing signal by control steps, not substeps."""
+
+    def collect(delay: int) -> list[float]:
+        env = SimpleNamespace(num_envs=1, device=torch.device("cpu"))
+        outputs = []
+        for value in range(5):
+            signal = torch.tensor([[float(value)]])
+            outputs.append(
+                sensor_corruption(env, "gyro", signal, noise=0.0, delay=delay)
+                .item()
+            )
+        return outputs
+
+    assert collect(0) == [0.0, 1.0, 2.0, 3.0, 4.0]
+    # DelayBuffer-style initialization backfills the first sample.  Once the
+    # history is warm, every output is exactly the preceding control-step value.
+    assert collect(1) == [0.0, 0.0, 1.0, 2.0, 3.0]
+
+
 def test_sensor_delay_subset_reset_does_not_rewind_other_envs() -> None:
     env = SimpleNamespace(num_envs=2, device=torch.device("cpu"))
     for step in range(4):

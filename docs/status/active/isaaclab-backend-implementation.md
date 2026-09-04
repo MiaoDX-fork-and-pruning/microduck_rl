@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
 current_slice: forced self-contact runtime proof and seeded reset/DR/command contracts complete; remaining P0 dynamics/source rows open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 asset-friction dynamics, actor-sensor effect/source, command resampling, full reward/termination/critic fixtures remain open
+blocker_fingerprint: P0 asset-friction dynamics, command resampling, full reward/termination/critic fixtures remain open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -22,7 +22,9 @@ last_proven_evidence: >-
   61D actor observations, BAM
   delay/voltage/sag/friction ranges, and finite 3/4/6D command terms. The
   previous filtered ContactSensor path remains disabled because its nested USD
-  expansion is not multi-env safe.
+  expansion is not multi-env safe. A concrete 4-env sensor-delay runtime probe
+  injects a changing yaw-rate signal and observes finite delayed gyro values
+  matching the previous control step (`sensor_delay_runtime_probe_4.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -39,13 +41,13 @@ completed: >-
   finite; direct and historical probe startup failures were traced to incomplete
   PYTHONPATH rather than simulator semantics.
 next_action: >-
-  Complete P0 source/effect fixtures for BAM friction dynamics, actor sensor
-  corruption/delay, command resampling, and reward/termination/critic values.
+  Complete P0 source/effect fixtures for BAM friction dynamics, command
+  resampling, and reward/termination/critic values.
   Do not start the unified command battery until those rows are closed; then
   run the fresh 64-env/5-iteration PPO smoke.
 next_proof: >-
-  Seeded runtime effect reports for friction/asset dynamics and actor sensor
-  noise/delay, followed by command-resampling statistics and numerical
+  Seeded runtime effect reports for friction/asset dynamics, followed by
+  command-resampling statistics and numerical
   reward/termination/critic fixtures. The final training gate is the unified
   command battery followed by a fresh 64-env/5-iteration smoke.
 stop_condition: >-

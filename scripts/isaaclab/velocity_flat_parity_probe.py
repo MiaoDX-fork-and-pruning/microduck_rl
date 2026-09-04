@@ -82,6 +82,18 @@ def _assert_runtime_contract(record: dict[str, object], *, num_envs: int) -> Non
     assert record["sensor_effects"]["gravity"]["max_abs"] <= 0.15
 
 
+def _command_change(before: dict[str, torch.Tensor], after: dict[str, torch.Tensor]) -> dict[str, object]:
+    values = []
+    for name in before:
+        values.append((_tensor(after[name]) - _tensor(before[name])).abs())
+    delta = torch.cat([value.reshape(value.shape[0], -1) for value in values], dim=-1)
+    return {
+        "max_abs": float(delta.max().item()),
+        "changed_envs": int((delta.max(dim=1).values > 1.0e-8).sum().item()),
+        "finite": bool(torch.isfinite(delta).all().item()),
+    }
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-envs", type=int, default=16)
@@ -114,6 +126,7 @@ def main() -> None:
         base_env = env.unwrapped
         robot = base_env.scene["robot"]
         records = []
+        command_change_records = []
         for reset_index in range(args.resets):
             obs, _ = env.reset(seed=args.seed + reset_index)
             commands = {
@@ -180,14 +193,24 @@ def main() -> None:
                 record[name] = _summary(value)
             records.append(record)
             _assert_runtime_contract(record, num_envs=args.num_envs)
+            before_commands = {
+                name: _tensor(base_env.command_manager.get_command(name)).detach().clone()
+                for name in ("base_velocity", "head_pose", "body_pose")
+            }
             for _ in range(args.steps):
                 env.step(torch.zeros((args.num_envs, ACTION_SIZE), device=base_env.device))
+            after_commands = {
+                name: _tensor(base_env.command_manager.get_command(name)).detach().clone()
+                for name in ("base_velocity", "head_pose", "body_pose")
+            }
+            command_change_records.append(_command_change(before_commands, after_commands))
         report = {
             "seed": args.seed,
             "num_envs": args.num_envs,
             "resets": args.resets,
             "steps_between_resets": args.steps,
             "records": records,
+            "command_change_records": command_change_records,
             "finite": all(
                 bool(item["root_pos"]["finite"])
                 and bool(item["joint_pos"]["finite"])
@@ -196,6 +219,10 @@ def main() -> None:
                 for item in records
             ),
         }
+        if not all(item["finite"] for item in command_change_records):
+            raise AssertionError("command resampling produced non-finite values")
+        if args.steps * 0.02 >= 2.0 and not any(item["changed_envs"] > 0 for item in command_change_records):
+            raise AssertionError("command terms did not resample during the runtime probe")
         encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
         if args.output:
             args.output.parent.mkdir(parents=True, exist_ok=True)
