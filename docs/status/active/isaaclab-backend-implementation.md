@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
 current_slice: forced self-contact runtime proof and seeded reset/DR/command contracts complete; remaining P0 dynamics/source rows open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 asset damping/foot-material boundaries, full reward/termination/critic fixtures remain open
+blocker_fingerprint: P0 asset damping/foot-material boundaries, contact numerical fixture and fixed command battery remain open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -32,6 +32,10 @@ last_proven_evidence: >-
   3..8 s velocity-command intervals over 64 environments, plus a 13.11%
   turn-in-place sample fraction with zero linear velocity and bounded yaw
   (`command_runtime_probe_64.json`).
+  The reward/termination fixture confirms the exact 16 reward and 4
+  termination source sets, finite non-positive penalties, <=1e-5 direct-kernel
+  agreement for stateless terms, and finite 61D/76D actor/critic outputs
+  (`reward_termination_runtime_fixture_4.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -49,13 +53,12 @@ completed: >-
   PYTHONPATH rather than simulator semantics.
 next_action: >-
   Complete P0 source/effect fixtures for the remaining asset boundaries and
-  reward/termination/critic values.
+  contact force/slip numerical behavior; then run the fixed command battery.
   Do not start the unified command battery until those rows are closed; then
   run the fresh 64-env/5-iteration PPO smoke.
 next_proof: >-
   Seeded runtime effect reports for the remaining asset boundaries, followed by
-  numerical
-  reward/termination/critic fixtures. The final training gate is the unified
+  contact numerical fixtures and the fixed command battery. The final training gate is the unified
   command battery followed by a fresh 64-env/5-iteration smoke.
 stop_condition: >-
   Do not start VelStand or a new 4096-env/6000-iteration run while any P0 ledger
