@@ -877,7 +877,7 @@ After that point, additional tasks, backlash, rollers, generalist training, came
 
 ## 25. Implementation tasks for the next context
 
-- [ ] **T1 (P1)** — Create and maintain the parity ledger; populate every
+- [x] **T1 (P1)** — Create and maintain the parity ledger; populate every
   Velocity-Flat surface from the current comparison audit and attach tests or
   benchmark evidence to each row.
 - [ ] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
@@ -889,7 +889,7 @@ After that point, additional tasks, backlash, rollers, generalist training, came
 - [ ] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
   Velocity-Flat rewards/terminations, and privileged critic observations while
   preserving the 61D actor ABI; add pure-function and config tests.
-- [ ] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
+- [x] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
   supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
   and record the result as a software-stack delta.
 - [ ] **T6 (P1)** — Extend the common command battery to identical commands,

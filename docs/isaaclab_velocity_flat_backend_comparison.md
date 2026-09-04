@@ -1,6 +1,6 @@
 # Velocity-Flat Backend Comparison
 
-Status: **mjlab-match recipe smoke-validated; long-run comparison pending**
+Status: **strict semantic closure in progress; runtime smoke validated, battery gate pending**
 
 This compares the current IsaacLab smoke checkpoint with the accepted mjlab
 `velocity_flat` policy. The only directly comparable case is a forward command
@@ -50,17 +50,17 @@ ordered roughly by expected effect on the learned behavior.
 
 | Area | mjlab Velocity-Flat | IsaacLab status | Impact |
 | --- | --- | --- | --- |
-| Actuator delay | BAM position loop delay `3..6` control steps | no actuator delay | high |
-| BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range only; no load sag | high |
+| Actuator delay | BAM position loop delay `3..6` control steps | per-environment FIFO delay `3..6` | aligned; runtime trace pending |
+| BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range plus previous-effort sag and floor | aligned; actuator bench evidence |
 | BAM friction | friction budget written into solver friction/damping using solved external load | friction budget is only a bench helper; PhysX callback cannot see solved load | high / backend limit |
 | BAM gain DR | reset-time `kp`/`kd` and friction-scale hooks | no `kp`/`kd` DR; friction scale is not applied to PhysX | medium-high |
-| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | only alive, terminating, velocity tracking, upright, joint velocity | high |
-| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | command block is permanently zero-padded; no pose command terms | high |
-| Turn-in-place | explicit 15% command bucket | absent; yaw is sampled independently | medium-high |
-| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | clean root-state tensors; no noise, delay, or encoder bias | high |
-| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | critic currently aliases the 61D policy group | medium-high |
-| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | only plane creation and default reset | high |
-| Termination | timeout, 70-degree orientation, terrain bounds, NaN state | timeout plus custom `gravity_xy > 0.75` or `z < 0.055` | medium |
+| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | terms wired; contact terms use real body-level sensors, geom-level filtering is a backend delta | high / contact delta |
+| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | non-zero sampled 4D+6D command block and pose terms wired; curriculum proof pending | medium-high |
+| Turn-in-place | explicit 15% command bucket | explicit held 15% turn bucket | aligned; battery proof pending |
+| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | stateful adapter wired; runtime seeded distribution proof pending | high |
+| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | separate 76D critic group with real contact sensor tensors | aligned; body-level contact delta |
+| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | event terms wired with restore-then-apply adapters; seeded runtime distribution proof pending | high |
+| Termination | timeout, 70-degree orientation, terrain bounds, NaN state | timeout, 70-degree orientation, terrain bounds, NaN state | aligned; runtime smoke |
 | Asset sensors | MJCF IMU/ang-momentum/foot sites are available to mjlab | USD has the articulated geometry but does not import MJCF sensor objects | medium; root IMU terms are approximations |
 | Asset dynamics | MJCF default joint damping `0.053` and BAM solver-side friction path | USD damping is zero and PhysX joint friction is nominal-only; explicit BAM does not close the loop | high |
 | Physics solver | MuJoCo `implicitfast`, 10 iterations / LS 20 | PhysX GPU solver, articulation iterations 4/1 | intentional backend difference |
@@ -86,11 +86,10 @@ Additional concrete mismatches found in the runtime/config audit:
   `dof_frictionloss` and injects its own solver-side budget. Until the PhysX
   friction bridge exists, leaving the USD value active is an additional hidden
   dynamics difference.
-- **Action path:** mjlab position actuators have a `ctrlrange=(-10, 10)` and
-  `forcerange=(-0.96, 0.96)` around the BAM computation. IsaacLab has no action
-  term clip and sends the absolute target directly to the explicit actuator,
-  whose PWM clamp is the only saturation. The two policies therefore see
-  different behavior when their Gaussian action scale grows.
+- **Action path:** raw policy actions are clipped at the RSL-RL VecEnv boundary
+  (`clip_actions=1.0`) before the absolute HOME+scale target transform.
+  IsaacLab's action term intentionally has `clip=None`, because its clip field
+  runs after scale+offset and would change the mjlab semantics.
 - **HOME/limit inconsistency:** the canonical policy HOME uses
   `right_hip_yaw=0.4579 rad`, while both the MJCF and imported USD cap that joint
   at `0.4363 rad`. IsaacLab clamps only the spawn value, so its initial policy

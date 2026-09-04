@@ -44,6 +44,13 @@ def test_velocity_flat_uses_bam_asset_and_home_override() -> None:
     assert "offset={name: float(value)" in source
 
 
+def test_velocity_flat_keeps_raw_clip_at_rl_wrapper_boundary() -> None:
+    source = _source(TASK)
+    assert "clip=None" in source
+    assert "def clip_actions_for_training(" in source
+    assert "return clip_policy_action(action, limit=1.0)" in source
+
+
 def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     tree = ast.parse(_source(SMOKE))
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}
@@ -53,6 +60,10 @@ def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     assert "torch.isfinite" in source
     assert "uniform_(-1.0, 1.0)" in source
     assert "ground_event_ready" in source
+    assert "contact_reporter_count" in source
+    assert "contact_body_count" in source
+    assert "contact_forces_finite" in source
+    assert "contact_body_names" in source
 
 
 def test_ground_is_injected_at_the_prestartup_hook() -> None:
@@ -60,6 +71,8 @@ def test_ground_is_injected_at_the_prestartup_hook() -> None:
     assert "def spawn_ground_after_clone" in source
     assert 'mode="prestartup"' in source
     assert 'cfg.func("/World/ground", cfg)' in source
+    assert "def activate_contact_reporters_after_clone" in source
+    assert "activate_contact_reporters = EventTerm" in source
 
 
 def test_lazy_task_registry_points_at_velocity_cfg() -> None:
@@ -74,8 +87,9 @@ def test_ppo_runner_matches_mjlab_budget_and_policy_shape() -> None:
     assert "max_iterations = 6000" in source
     assert "num_steps_per_env = 24" in source
     assert "hidden_dims=[512, 256, 128]" in source
-    assert 'obs_groups = {"actor": ["policy"], "critic": ["policy"]}' in source
+    assert 'obs_groups = {"actor": ["policy"], "critic": ["critic"]}' in source
     assert "save_interval = 250" in source
+    assert "clip_actions = 1.0" in source
 
 
 def test_ppo_runner_keeps_observation_normalization_enabled() -> None:

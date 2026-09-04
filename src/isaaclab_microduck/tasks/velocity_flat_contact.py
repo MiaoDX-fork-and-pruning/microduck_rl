@@ -16,7 +16,7 @@ from typing import TYPE_CHECKING
 import torch
 
 try:  # keep deterministic CPU tests importable outside the IsaacLab container
-    from isaaclab.managers import SceneEntityCfg
+    from isaaclab.managers import ManagerTermBase, SceneEntityCfg
     from isaaclab.managers.manager_term_cfg import RewardTermCfg
 except ModuleNotFoundError:  # pragma: no cover - exercised by host-side tests
     from dataclasses import dataclass, field
@@ -30,6 +30,13 @@ except ModuleNotFoundError:  # pragma: no cover - exercised by host-side tests
         preserve_order: bool = False
 
     RewardTermCfg = Any  # type: ignore[misc,assignment]
+
+    class ManagerTermBase:  # type: ignore[no-redef]
+        """Small host-test fallback for IsaacLab's stateful term base."""
+
+        def __init__(self, cfg: Any, env: Any) -> None:
+            self.cfg = cfg
+            self._env = env
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv, ManagerBasedRLEnv
@@ -149,7 +156,7 @@ def feet_air_time(
     """Reward completed swing phases in the mjlab target time window."""
 
     sensor = _scene_sensor(env, sensor_cfg)
-    first = _tensor(sensor.compute_first_contact(env.step_dt))
+    first = _tensor(sensor.compute_first_contact(env.step_dt)).to(dtype=torch.bool)
     air = getattr(sensor.data, "last_air_time", None)
     if air is None:
         raise RuntimeError("feet contact sensor must set track_air_time=True")
@@ -175,10 +182,11 @@ def feet_clearance(
     return cost * _command_active(env, command_name, command_threshold).float()
 
 
-class feet_swing_height:
+class feet_swing_height(ManagerTermBase):
     """Stateful peak swing-height error, charged exactly on first contact."""
 
     def __init__(self, cfg: RewardTermCfg, env: ManagerBasedRLEnv):
+        super().__init__(cfg, env)
         self.peak_heights = torch.zeros((env.num_envs, 2), device=env.device)
 
     def __call__(
@@ -197,7 +205,7 @@ class feet_swing_height:
         heights = foot_height(env, asset_cfg)
         in_air = ~_select(_contact_mask(sensor), sensor_cfg)
         self.peak_heights = torch.where(in_air, torch.maximum(self.peak_heights, heights), self.peak_heights)
-        first = _select(_tensor(sensor.compute_first_contact(env.step_dt)), sensor_cfg)
+        first = _select(_tensor(sensor.compute_first_contact(env.step_dt)).to(dtype=torch.bool), sensor_cfg)
         error = torch.square(self.peak_heights / max(target_height, 1.0e-6) - 1.0)
         cost = (error * first.float()).sum(dim=1) * _command_active(env, command_name, command_threshold).float()
         self.peak_heights = torch.where(first, torch.zeros_like(self.peak_heights), self.peak_heights)

@@ -107,3 +107,15 @@ def test_slip_self_collision_nan_and_flat_bounds_are_real_terms():
     env.scene.sensors["feet_ground_contact"].data.net_forces_w = _Proxy(torch.tensor([[[float("nan"), 0.0, 0.0], [0.0, 0.0, 0.0]]]))
     assert bool(c.nan_state(env, sensor_names=("feet_ground_contact",))[0])
     assert not bool(c.terrain_out_of_bounds(env)[0])
+
+
+def test_stateful_swing_term_uses_isaaclab_manager_contract():
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat_contact.py").read_text()
+    assert "from isaaclab.managers import ManagerTermBase, SceneEntityCfg" in source
+    assert "class feet_swing_height(ManagerTermBase):" in source
+    assert "super().__init__(cfg, env)" in source
+
+
+def test_first_contact_is_normalized_to_boolean_for_stateful_masks():
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat_contact.py").read_text()
+    assert "compute_first_contact(env.step_dt)).to(dtype=torch.bool)" in source

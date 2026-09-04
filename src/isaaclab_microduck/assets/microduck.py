@@ -60,6 +60,11 @@ MICRODUCK_CFG = ArticulationCfg(
     spawn=sim_utils.UsdFileCfg(
         usd_path=str(USD_PATH),
         activate_contact_sensors=True,
+        # ContactSensor activation must author PhysxContactReportAPI on the
+        # nested ankle leaf bodies.  The converted USD is referenced as an
+        # instance by default, so make the spawned copy editable before the
+        # spawner walks its rigid-body descendants.
+        make_uninstanceable=True,
         articulation_props=sim_utils.ArticulationRootPropertiesCfg(
             enabled_self_collisions=True,
             solver_position_iteration_count=4,

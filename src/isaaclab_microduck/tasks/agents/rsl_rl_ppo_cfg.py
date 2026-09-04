@@ -12,6 +12,9 @@ from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPp
 @configclass
 class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
+    # Match mjlab's RSL-RL VecEnv boundary: clip raw policy actions before the
+    # position target transform, never absolute joint targets in the action term.
+    clip_actions = 1.0
     # Match the accepted mjlab Velocity-Flat PPO recipe. CLI smoke tests still
     # override max_iterations to 5 explicitly.
     max_iterations = 6000
@@ -20,7 +23,9 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     # Keep the critic capacity identical to the accepted mjlab recipe.  The
     # critic currently consumes the shared policy observation group; once the
     # privileged critic group is ported, this remains the same architecture.
-    obs_groups = {"actor": ["policy"], "critic": ["policy"]}
+    # Actor stays the deployable 61D ABI; critic receives privileged velocity
+    # and contact data from the task's separate group.
+    obs_groups = {"actor": ["policy"], "critic": ["critic"]}
     actor = RslRlMLPModelCfg(
         hidden_dims=[512, 256, 128],
         activation="elu",

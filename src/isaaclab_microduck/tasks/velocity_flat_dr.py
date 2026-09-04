@@ -215,7 +215,13 @@ def randomize_foot_material(
         cfg = EventTermCfg(
             func=isaac_mdp.randomize_rigid_body_material,
             mode="startup",
-            params={"asset_cfg": asset_cfg},
+            params={
+                "asset_cfg": asset_cfg,
+                "static_friction_range": static_friction_range,
+                "dynamic_friction_range": dynamic_friction_range,
+                "restitution_range": restitution_range,
+                "num_buckets": num_buckets,
+            },
         )
         term = isaac_mdp.randomize_rigid_body_material(cfg, env)
         env._velocity_flat_foot_material_term = term
