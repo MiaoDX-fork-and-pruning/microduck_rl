@@ -64,10 +64,14 @@ def main() -> None:
                 for name in ("base_velocity", "head_pose", "body_pose")
             }
             data = robot.data
+            root_pos = _tensor(data.root_link_pos_w)
+            origins = _tensor(base_env.scene.env_origins)
+            root_pos_relative = root_pos - origins
             record = {
                 "reset_index": reset_index,
-                "root_pos": _summary(data.root_link_pos_w),
-                "root_pos_axes": _axis_summary(data.root_link_pos_w),
+                "root_pos": _summary(root_pos),
+                "root_pos_relative": _summary(root_pos_relative),
+                "root_pos_relative_axes": _axis_summary(root_pos_relative),
                 "joint_pos": _summary(data.joint_pos),
                 "joint_vel": _summary(data.joint_vel),
                 "commands": commands,
@@ -75,6 +79,11 @@ def main() -> None:
                     ((torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, :2]).sum(dim=1) < 1.0e-6)
                     & (torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, 2]) >= 0.4)
                 ).sum().item()
+                ),
+                "turn_bucket_fraction": float(
+                    ((torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, :2]).sum(dim=1) < 1.0e-6)
+                    & (torch.abs(_tensor(base_env.command_manager.get_command("base_velocity"))[:, 2]) >= 0.4)
+                ).float().mean().item()
                 ),
                 "actor_obs": _summary(obs["policy"] if isinstance(obs, dict) else obs),
             }
@@ -102,6 +111,7 @@ def main() -> None:
             "finite": all(
                 bool(item["root_pos"]["finite"])
                 and bool(item["joint_pos"]["finite"])
+                and bool(item["root_pos_relative"]["finite"])
                 and bool(item["actor_obs"]["finite"])
                 for item in records
             ),
