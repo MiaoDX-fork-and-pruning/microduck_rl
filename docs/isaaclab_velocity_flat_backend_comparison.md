@@ -50,7 +50,7 @@ backend behavior.
 
 | Backend | Task | Policy artifact | Artifact hash | Scene/runtime |
 | --- | --- | --- | --- | --- |
-| IsaacLab (mjlab-match smoke) | `IsaacLab-Velocity-Flat-MicroDuck` | `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_03-00-29/model_4.pt` | generated smoke artifact; not a quality baseline | IsaacLab 3.0.0 / Isaac Sim 6.0.1 |
+| IsaacLab (mjlab-match final) | `IsaacLab-Velocity-Flat-MicroDuck` | `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_03-03-23/model_5999.pt` | `a60ff567c4849725798870bf383b9443c56b378d8106df9f92d21190dd40ce37` | IsaacLab 3.0.0 / Isaac Sim 6.0.1 |
 | mjlab | `Mjlab-Velocity-Flat-MicroDuck` | `artifacts/specialists/velocity_flat/policy.onnx` | `a092ee993b691fab1fdc96206a7b3eab832d88c14248e205b3cd43f3c9e73317` | MuJoCo `scene.xml` |
 
 The mjlab artifact is the accepted policy from source commit `facd4f4`; its
@@ -59,6 +59,29 @@ checkpoint hash is `a71c6c26ff369cb3c2a093649467d3a10bb2dd818dd75f21fb29918ae2cb
 The earlier IsaacLab-only smoke checkpoint remains useful for debugging, but
 must not be compared as a matched baseline because it used a different command
 profile, reward kernel, network, and PPO budget.
+
+## Matched final battery
+
+The final IsaacLab checkpoint was evaluated with the same fixed command battery
+shape used for the runtime gate (250 control steps per case, 16 environments):
+
+| Command | Mean actual velocity | Mean tracking error | Resets | Max tilt | Mean absolute raw action |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| zero | `(-0.010, 0.003) m/s` | `0.087 m/s` | `0` | `0.665 rad` | `75.4` |
+| forward `0.20` | `(0.131, 0.002) m/s` | `0.121 m/s` | `0` | `1.526 rad` | `74.1` |
+| lateral `0.20` | `(-0.011, 0.129) m/s` | `0.112 m/s` | `0` | `1.877 rad` | `72.2` |
+| yaw `0.50` | `(-0.008, 0.006) m/s`, `0.004 rad/s` yaw | `0.088 m/s`, `1.201 rad/s` yaw | `0` | `0.888 rad` | `75.3` |
+
+Raw policy actions are large (p95 absolute action is about 125); the harness
+clips actions before applying them, so this is evidence of a saturated policy,
+not a hardware-ready command magnitude. The run is finite and survives the
+battery, but it does not match the accepted mjlab policy's forward behavior
+(`0.079 m/s` equivalent over its continuous slice) plus low tilt (`0.082 rad`),
+and it fails the commanded-yaw behavior. The correct conclusion is therefore
+“training is reproducible, behavior is not yet equivalent.”
+
+Battery artifact:
+`.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_match_5999.json`.
 
 ## Common forward slice
 
@@ -98,10 +121,12 @@ Sim 6.0.1 runtime.
 ## Decision boundary
 
 Task H has a reproducible runtime battery, checkpoint manifest, and an
-explicitly matched core recipe. It should not be marked accepted as a walking
-result because the smoke checkpoint was trained for only five iterations and
-does not measure learning quality. Starting the 6000-iteration run is now a
-well-defined Task H resource/experiment decision;
+explicitly matched core recipe. The 6000-iteration run completed normally, but
+it should not be marked accepted as a walking or backend-parity result: the
+final battery shows saturated actions, high tilt, and failed yaw tracking.
+The next engineering step is to close the remaining semantic gaps (especially
+action scaling/actuator semantics, contact rewards, DR, noise/delay, and
+curricula) before attributing the difference to simulator backend behavior;
 the remaining model limitation is also explicit: USD `drive_configured=false`
 and BAM external-load friction parity is unavailable.
 
