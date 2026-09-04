@@ -16,6 +16,25 @@ from .report import ACTUATED_ORDER, ROOT
 
 USD_PATH = ROOT / ".cache/isaaclab-assets/microduck_walk.usd"
 
+# mjlab's BAM ``edit_spec`` removes MuJoCo dof_frictionloss and supplies the
+# friction budget from the actuator.  Keep these values explicit so the USD
+# inspection and parity ledger cannot mistake the converter's nominal joint
+# friction for the training dynamics.  Damping is the authored MJCF default.
+MJLAB_BAM_JOINT_FRICTION = 0.0
+# BamActuator.edit_spec zeros authored MJCF damping and frictionloss before
+# each solve, then writes its own viscous/friction budget.  IsaacLab must not
+# inherit the converter's 0.0048 joint friction as a second hidden budget.
+MJLAB_JOINT_DAMPING = 0.0
+MJLAB_BAM_ARMATURE = 0.0018077432831600838
+MJLAB_BAM_VISCOUS_FRICTION = 0.005359668274599504
+ASSET_DYNAMICS_CONTRACT = {
+    "joint_friction": MJLAB_BAM_JOINT_FRICTION,
+    "joint_damping": MJLAB_JOINT_DAMPING,
+    "joint_armature": MJLAB_BAM_ARMATURE,
+    "joint_viscous_friction": MJLAB_BAM_VISCOUS_FRICTION,
+    "friction_bridge": "motor_only_external_effort_unavailable",
+}
+
 MICRODUCK_ACTUATOR_CFG = BamActuatorCfg(
     joint_names_expr=list(ACTUATED_ORDER),
     kp_fw=200.0,
@@ -24,6 +43,13 @@ MICRODUCK_ACTUATOR_CFG = BamActuatorCfg(
     effort_limit_sim=1.0e9,
     velocity_limit=100.0,
     velocity_limit_sim=100.0,
+    # Match BAM's edit_spec/compute path.  Static and dynamic friction are
+    # supplied by the explicit actuator bridge when load data is available;
+    # the authored USD friction is deliberately overridden to zero.
+    armature=MJLAB_BAM_ARMATURE,
+    friction=0.0,
+    dynamic_friction=0.0,
+    viscous_friction=MJLAB_BAM_VISCOUS_FRICTION,
 )
 
 MICRODUCK_CFG = ArticulationCfg(
