@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import traceback
 
 import torch
 
@@ -402,6 +403,10 @@ def main() -> None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(encoded)
         print(encoded, end="", flush=True)
+    except BaseException:
+        print("CONTACT_PROBE:failure", flush=True)
+        traceback.print_exc()
+        raise
     finally:
         if env is not None:
             env.close()
