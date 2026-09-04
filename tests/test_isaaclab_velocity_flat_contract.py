@@ -74,6 +74,7 @@ def test_ppo_runner_matches_mjlab_budget_and_policy_shape() -> None:
     assert "max_iterations = 6000" in source
     assert "num_steps_per_env = 24" in source
     assert "hidden_dims=[512, 256, 128]" in source
+    assert 'obs_groups = {"actor": ["policy"], "critic": ["policy"]}' in source
     assert "save_interval = 250" in source
 
 

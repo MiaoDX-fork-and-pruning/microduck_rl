@@ -17,6 +17,10 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     max_iterations = 6000
     save_interval = 250
     experiment_name = "microduck_isaaclab_velocity_flat_mjlab_match"
+    # Keep the critic capacity identical to the accepted mjlab recipe.  The
+    # critic currently consumes the shared policy observation group; once the
+    # privileged critic group is ported, this remains the same architecture.
+    obs_groups = {"actor": ["policy"], "critic": ["policy"]}
     actor = RslRlMLPModelCfg(
         hidden_dims=[512, 256, 128],
         activation="elu",
@@ -24,7 +28,7 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
         distribution_cfg=RslRlMLPModelCfg.GaussianDistributionCfg(init_std=1.0),
     )
     critic = RslRlMLPModelCfg(
-        hidden_dims=[128, 128, 128],
+        hidden_dims=[512, 256, 128],
         activation="elu",
         obs_normalization=True,
     )

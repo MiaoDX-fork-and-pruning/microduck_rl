@@ -27,6 +27,8 @@ Strictly aligned for the next cross-backend run:
 - XY+Z linear tracking, yaw+XY angular tracking, and flat-ground upright
   Gaussian formulas (with mjlab-equivalent standard deviations);
 - actor MLP `[512, 256, 128]`, observation normalization, 24 steps per env;
+- critic MLP `[512, 256, 128]` and explicit `actor`/`critic` observation-group
+  mapping (the previous long run used an accidental `[128, 128, 128]` critic);
 - PPO entropy `0.01`, 5 learning epochs, 4 mini-batches, learning rate
   `1e-3`, `gamma=0.99`, `lambda=0.95`, adaptive KL schedule, and 6000
   iterations.
@@ -40,6 +42,35 @@ claim:
 - mjlab domain randomization, observation noise/delay, curricula, and its
   explicit turn-in-place command bucket;
 - privileged critic observations and the USD/PhysX drive configuration.
+
+## Full parity inventory
+
+The following differences remain after the core recipe alignment. They are
+ordered roughly by expected effect on the learned behavior.
+
+| Area | mjlab Velocity-Flat | IsaacLab status | Impact |
+| --- | --- | --- | --- |
+| Actuator delay | BAM position loop delay `3..6` control steps | no actuator delay | high |
+| BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range only; no load sag | high |
+| BAM friction | friction budget written into solver friction/damping using solved external load | friction budget is only a bench helper; PhysX callback cannot see solved load | high / backend limit |
+| BAM gain DR | reset-time `kp`/`kd` and friction-scale hooks | no `kp`/`kd` DR; friction scale is not applied to PhysX | medium-high |
+| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | only alive, terminating, velocity tracking, upright, joint velocity | high |
+| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | command block is permanently zero-padded; no pose command terms | high |
+| Turn-in-place | explicit 15% command bucket | absent; yaw is sampled independently | medium-high |
+| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | clean root-state tensors; no noise, delay, or encoder bias | high |
+| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | critic currently aliases the 61D policy group | medium-high |
+| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | only plane creation and default reset | high |
+| Termination | timeout, 70-degree orientation, terrain bounds, NaN state | timeout plus custom `gravity_xy > 0.75` or `z < 0.055` | medium |
+| Asset sensors | MJCF IMU/ang-momentum/foot sites are available to mjlab | USD has the articulated geometry but does not import MJCF sensor objects | medium; root IMU terms are approximations |
+| Asset dynamics | MJCF default joint damping `0.053` and BAM solver-side friction path | USD damping is zero and PhysX joint friction is nominal-only; explicit BAM does not close the loop | high |
+| Physics solver | MuJoCo `implicitfast`, 10 iterations / LS 20 | PhysX GPU solver, articulation iterations 4/1 | intentional backend difference |
+| RL implementation | `rsl-rl-lib 5.0.1` | IsaacLab image bundles `rsl-rl-lib 5.4.1` | medium; PPO code path is not byte-identical |
+| Evaluation | mjlab accepted battery is 300 steps, one continuous env, forward sweeps | IsaacLab battery is 250 steps across 16 envs, fixed zero/forward/lateral/yaw | medium; metrics need a common harness |
+
+Asset geometry and canonical joint limits are currently close: the compiled
+MJCF and USD both contain 14 actuated revolute joints and 75 collision
+geometries. The remaining asset concern is dynamics and sensor authoring, not
+the joint-name mapping itself.
 
 The first long run answers whether the matched core recipe learns comparable
 velocity behavior. A second run that ports the remaining reward, DR, and
