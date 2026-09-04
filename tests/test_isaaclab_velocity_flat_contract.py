@@ -27,11 +27,47 @@ def test_velocity_flat_declares_shared_policy_contract() -> None:
 
 def test_velocity_flat_command_profile_matches_mjlab_recipe() -> None:
     source = _source(TASK)
+    assert "base_velocity = MicroduckVelocityCommandCfg(" in source
+    assert "class_type=MicroduckVelocityCommand" in source
     assert "resampling_time_range=(3.0, 8.0)" in source
     assert "rel_standing_envs=0.02" in source
+    assert "rel_turn_in_place_envs=0.15" in source
     assert "lin_vel_x=(-0.4, 0.4)" in source
     assert "lin_vel_y=(-0.3, 0.3)" in source
     assert "ang_vel_z=(-1.0, 1.0)" in source
+
+
+def test_pose_commands_are_held_manager_terms_with_mjlab_ranges() -> None:
+    source = _source(TASK)
+    assert "head_pose = UniformPoseCommandCfg(" in source
+    assert "body_pose = UniformPoseCommandCfg(" in source
+    assert "class_type=UniformPoseCommand" in source
+    # Both pose command terms resample independently every 2--5 seconds.  The
+    # velocity task intentionally has no exact-zero pose bucket; that is a
+    # standup-specific curriculum setting.
+    assert source.count("resampling_time_range=(2.0, 5.0)") >= 2
+    assert source.count("zero_command_prob=0.0") >= 2
+    assert "manager.get_command(\"head_pose\")" in source
+    assert "manager.get_command(\"body_pose\")" in source
+
+
+def test_turn_bucket_is_not_rewritten_by_observation_or_reward() -> None:
+    source = _source(TASK)
+    assert "_turn_bucket" not in source
+    assert "_turn_yaw" not in source
+    # The command term is the only place where turn-in-place is sampled.
+    assert "class MicroduckVelocityCommand(mdp.UniformVelocityCommand):" in source
+    assert "def _resample_command(self, env_ids) -> None:" in source
+
+
+def test_velocity_flat_keeps_mjlab_air_time_reward_window() -> None:
+    source = _source(TASK)
+    assert "air_time = RewTerm(" in source
+    assert "func=contact_mdp.feet_air_time" in source
+    assert '"command_threshold": 0.01' in source
+    assert '"threshold_min": 0.125' in source
+    assert '"threshold_max": 0.300' in source
+    assert "weight=3.0" in source
 
 
 def test_velocity_flat_uses_bam_asset_and_home_override() -> None:

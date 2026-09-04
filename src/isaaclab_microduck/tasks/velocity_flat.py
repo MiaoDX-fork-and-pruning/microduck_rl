@@ -16,6 +16,7 @@ import torch
 from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.envs import mdp
+from isaaclab.managers import CommandTerm, CommandTermCfg
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -32,7 +33,6 @@ from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 from isaaclab_microduck.policy_abi import HOME_POSITION, POLICY_JOINT_ORDER
 from isaaclab_microduck.tasks.parity import (
     clip_policy_action,
-    force_turn_in_place,
     gaussian_tracking,
     l1_penalty,
     observation_noise,
@@ -49,10 +49,97 @@ from isaaclab_microduck.tasks.velocity_flat_dr import (
 from isaaclab_microduck.tasks.velocity_flat_sensors import (
     misaligned_imu,
     reset_actor_sensor_state as reset_actor_sensor_state_event,
+    sensor_corruption,
 )
 
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
+
+
+@configclass
+class MicroduckVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
+    """mjlab-compatible velocity command with a held turn-in-place bucket."""
+
+    class_type: type["MicroduckVelocityCommand"] | str = "isaaclab_microduck.tasks.velocity_flat:MicroduckVelocityCommand"
+    rel_turn_in_place_envs: float = 0.15
+
+
+class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
+    """Sample turn-in-place commands once per command resampling event."""
+
+    cfg: MicroduckVelocityCommandCfg
+
+    def _resample_command(self, env_ids) -> None:
+        # CommandManager can pass ``slice(None)`` during an all-env reset,
+        # while UniformVelocityCommand expects a sized sequence. Normalize it
+        # once so initial reset and subset reset use the same path.
+        ids = _command_env_ids(env_ids, self.num_envs, self.device)
+        super()._resample_command(ids)
+        fraction = float(self.cfg.rel_turn_in_place_envs)
+        if fraction <= 0.0 or len(ids) == 0:
+            return
+        select = torch.rand(len(ids), device=self.device) < fraction
+        turn_ids = ids[select]
+        if len(turn_ids) == 0:
+            return
+        self.vel_command_b[turn_ids, :2] = 0.0
+        signs = torch.where(
+            torch.rand(len(turn_ids), device=self.device) < 0.5,
+            -torch.ones(len(turn_ids), device=self.device),
+            torch.ones(len(turn_ids), device=self.device),
+        )
+        lo, hi = self.cfg.ranges.ang_vel_z
+        magnitude = torch.empty(len(turn_ids), device=self.device).uniform_(
+            0.4 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+        )
+        self.vel_command_b[turn_ids, 2] = signs * magnitude
+        self.is_standing_env[turn_ids] = False
+
+
+@configclass
+class UniformPoseCommandCfg(CommandTermCfg):
+    """Held per-dimension pose command used by the 13D policy command block."""
+
+    class_type: type["UniformPoseCommand"] | str = "isaaclab_microduck.tasks.velocity_flat:UniformPoseCommand"
+    ranges: tuple[tuple[float, float], ...] = ()
+    zero_command_prob: float = 0.0
+
+
+class UniformPoseCommand(CommandTerm):
+    cfg: UniformPoseCommandCfg
+
+    def __init__(self, cfg: UniformPoseCommandCfg, env: ManagerBasedEnv):
+        super().__init__(cfg, env)
+        self._command = torch.zeros(env.num_envs, len(cfg.ranges), device=env.device)
+
+    @property
+    def command(self) -> torch.Tensor:
+        return self._command
+
+    def _update_metrics(self) -> None:
+        pass
+
+    def _update_command(self) -> None:
+        pass
+
+    def _resample_command(self, env_ids) -> None:
+        ids = _command_env_ids(env_ids, self.num_envs, self.device)
+        if len(ids) == 0:
+            return
+        unit = torch.empty(len(ids), device=self.device)
+        for index, (low, high) in enumerate(self.cfg.ranges):
+            self._command[ids, index] = unit.uniform_(low, high)
+        if self.cfg.zero_command_prob > 0.0:
+            zero = torch.rand(len(ids), device=self.device) < self.cfg.zero_command_prob
+            self._command[ids[zero]] = 0.0
+
+
+def _command_env_ids(env_ids, num_envs: int, device: torch.device) -> torch.Tensor:
+    """Normalize CommandManager reset ids to a concrete 1-D tensor."""
+
+    if isinstance(env_ids, slice):
+        return torch.arange(num_envs, device=device, dtype=torch.long)[env_ids]
+    return torch.as_tensor(env_ids, device=device, dtype=torch.long).reshape(-1)
 
 
 def _policy_indices(asset) -> torch.Tensor:
@@ -81,7 +168,14 @@ def policy_gyro(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg
     value = _asset(env, asset_cfg).data.root_ang_vel_b.torch
     if corrupt:
         value = misaligned_imu(value, env)
-    return _sensor_corruption(env, "gyro", value, noise=0.03 if corrupt else 0.0, delay=0)
+    return sensor_corruption(
+        env,
+        "gyro",
+        value,
+        noise=0.03 if corrupt else 0.0,
+        delay=1 if corrupt else 0,
+        delay_update_period=64 if corrupt else 0,
+    )
 
 
 def policy_projected_gravity(
@@ -90,7 +184,14 @@ def policy_projected_gravity(
     value = _asset(env, asset_cfg).data.projected_gravity_b.torch
     if corrupt:
         value = misaligned_imu(value, env)
-    return _sensor_corruption(env, "gravity", value, noise=0.01 if corrupt else 0.0, delay=0)
+    return sensor_corruption(
+        env,
+        "gravity",
+        value,
+        noise=0.01 if corrupt else 0.0,
+        delay=1 if corrupt else 0,
+        delay_update_period=64 if corrupt else 0,
+    )
 
 
 def policy_joint_pos(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), biased: bool = True) -> torch.Tensor:
@@ -104,104 +205,39 @@ def policy_joint_pos(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEnti
     key = "encoder_bias"
     if not hasattr(env, f"_{key}"):
         setattr(env, f"_{key}", torch.empty_like(value).uniform_(-0.015, 0.015))
-    return value + getattr(env, f"_{key}")
+    # mjlab's actor joint encoder includes both a persistent per-env bias and
+    # fresh bounded observation noise.  The critic requests ``biased=False``
+    # and therefore receives the clean value without either corruption.
+    return observation_noise(value + getattr(env, f"_{key}"), 0.001)
 
 
 def policy_joint_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"), corrupt: bool = True) -> torch.Tensor:
     asset = _asset(env, asset_cfg)
     ids = _policy_indices(asset)
     value = asset.data.joint_vel.torch[:, ids] - asset.data.default_joint_vel.torch[:, ids]
-    return _sensor_corruption(env, "joint_vel", value, noise=0.25 if corrupt else 0.0, delay=1 if corrupt else 0)
-
-
-def _sensor_corruption(env: ManagerBasedEnv, name: str, value: torch.Tensor, *, noise: float, delay: int) -> torch.Tensor:
-    """Apply episode-stable bias-free noise and deterministic sample delay."""
-
-    key = f"_{name}_history"
-    history = getattr(env, key, None)
-    if history is None or history.shape != (delay + 1, *value.shape):
-        # State must remain writable after inference-mode policy evaluation;
-        # allocating from the input tensor directly would create an inference
-        # tensor and make the next episode reset fail on in-place clearing.
-        with torch.inference_mode(False):
-            history = torch.empty((delay + 1, *value.shape), device=value.device, dtype=value.dtype)
-            history.copy_(value.unsqueeze(0))
-        setattr(env, key, history)
-    elif history.is_inference():
-        with torch.inference_mode(False):
-            writable = torch.empty_like(history)
-            writable.copy_(history)
-        history = writable
-        setattr(env, key, history)
-    with torch.inference_mode(False):
-        history[:-1].copy_(history[1:])
-        history[-1].copy_(value)
-    out = history[0] if delay else value
-    return observation_noise(out, noise)
+    return sensor_corruption(env, "joint_vel", value, noise=0.25 if corrupt else 0.0, delay=1 if corrupt else 0)
 
 
 def _pose_commands(env: ManagerBasedEnv) -> tuple[torch.Tensor, torch.Tensor]:
-    """Sample non-zero head/body command slots without changing actor ABI."""
+    """Read the held command-manager pose terms (with a test fallback)."""
 
-    n = env.num_envs
-    device = env.device
-    head = getattr(env, "_head_pose_command", None)
-    body = getattr(env, "_body_pose_command", None)
-    if head is None or head.shape[0] != n:
-        head = torch.zeros(n, 4, device=device)
-        body = torch.zeros(n, 6, device=device)
-        setattr(env, "_head_pose_command", head)
-        setattr(env, "_body_pose_command", body)
-    fresh = getattr(env, "episode_length_buf", torch.ones(n, device=device)) <= 1
-    if fresh.any():
-        head[fresh] = torch.empty(int(fresh.sum()), 4, device=device).uniform_(-0.05, 0.05)
-        body[fresh] = torch.empty(int(fresh.sum()), 6, device=device).uniform_(-0.05, 0.05)
-    return head, body
+    manager = getattr(env, "command_manager", None)
+    if manager is not None:
+        return manager.get_command("head_pose"), manager.get_command("body_pose")
+    n, device = env.num_envs, env.device
+    return torch.zeros(n, 4, device=device), torch.zeros(n, 6, device=device)
 
 
 def policy_command_block(env: ManagerBasedEnv, command_name: str = "base_velocity") -> torch.Tensor:
     command = effective_velocity_command(env, command_name)
     head, body = _pose_commands(env)
-    turn = getattr(env, "_turn_bucket", None)
-    if turn is None or turn.shape[0] != command.shape[0]:
-        turn = torch.rand(command.shape[0], device=command.device) < 0.15
-        setattr(env, "_turn_bucket", turn)
-    command = command.clone()
-    command[turn, :2] = 0.0
-    turn_yaw = getattr(env, "_turn_yaw", None)
-    if turn_yaw is None or turn_yaw.shape[0] != command.shape[0]:
-        turn_yaw = torch.zeros(command.shape[0], device=command.device)
-        setattr(env, "_turn_yaw", turn_yaw)
-    if turn.any() and (getattr(env, "episode_length_buf", torch.zeros(command.shape[0], device=command.device)) <= 1).any():
-        fresh = turn & (getattr(env, "episode_length_buf", torch.zeros(command.shape[0], device=command.device)) <= 1)
-        turn_yaw[fresh] = torch.where(
-            torch.rand(int(fresh.sum()), device=command.device) < 0.5, -1.0, 1.0
-        ) * torch.empty(int(fresh.sum()), device=command.device).uniform_(0.4, 1.0)
-    command[turn, 2] = turn_yaw[turn]
     return torch.cat((command, head, body), dim=-1)
 
 
 def effective_velocity_command(env: ManagerBasedEnv, command_name: str = "base_velocity") -> torch.Tensor:
-    """Return the held command after the explicit turn-in-place bucket."""
+    """Return the command-manager value, already held by its resampling term."""
 
-    command = env.command_manager.get_command(command_name).clone()
-    turn = getattr(env, "_turn_bucket", None)
-    if turn is None or turn.shape[0] != command.shape[0]:
-        turn = torch.rand(command.shape[0], device=command.device) < 0.15
-        setattr(env, "_turn_bucket", turn)
-    turn_yaw = getattr(env, "_turn_yaw", None)
-    if turn_yaw is None or turn_yaw.shape[0] != command.shape[0]:
-        turn_yaw = torch.zeros(command.shape[0], device=command.device)
-        setattr(env, "_turn_yaw", turn_yaw)
-    episode = getattr(env, "episode_length_buf", torch.zeros(command.shape[0], device=command.device))
-    fresh = turn & (episode <= 1)
-    if fresh.any():
-        turn_yaw[fresh] = torch.where(
-            torch.rand(int(fresh.sum()), device=command.device) < 0.5, -1.0, 1.0
-        ) * torch.empty(int(fresh.sum()), device=command.device).uniform_(0.4, 1.0)
-    command[turn, :2] = 0.0
-    command[turn, 2] = turn_yaw[turn]
-    return command
+    return env.command_manager.get_command(command_name).clone()
 
 
 def _legacy_zero_pad(command: torch.Tensor) -> torch.Tensor:
@@ -267,15 +303,10 @@ def reset_actor_history(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
                 value[:, ids] = 0.0
             else:
                 value[ids] = 0.0
-    for name in ("_encoder_bias", "_turn_bucket", "_turn_yaw"):
+    for name in ("_encoder_bias",):
         value = getattr(env, name, None)
         if value is not None and value.shape[0] == env.num_envs:
-            if name == "_turn_bucket":
-                value[ids] = torch.rand(len(ids), device=env.device) < 0.15
-            elif name == "_turn_yaw":
-                value[ids] = 0.0
-            else:
-                value[ids] = torch.empty_like(value[ids]).uniform_(-0.015, 0.015)
+            value[ids] = torch.empty_like(value[ids]).uniform_(-0.015, 0.015)
 
 
 def track_linear_velocity(
@@ -442,17 +473,50 @@ class SceneCfg(InteractiveSceneCfg):
 
 @configclass
 class CommandsCfg:
-    base_velocity = mdp.UniformVelocityCommandCfg(
+    # Keep the command generators as the sole owner of command sampling.  In
+    # particular, turn-in-place is sampled by MicroduckVelocityCommand during
+    # each command resample and must not be re-randomized by observations or
+    # rewards.
+    base_velocity = MicroduckVelocityCommandCfg(
+        class_type=MicroduckVelocityCommand,
         asset_name="robot",
         # Match the mjlab velocity recipe for backend comparison.
         resampling_time_range=(3.0, 8.0),
         rel_standing_envs=0.02,
+        rel_turn_in_place_envs=0.15,
         heading_command=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.4, 0.4),
             lin_vel_y=(-0.3, 0.3),
             ang_vel_z=(-1.0, 1.0),
         ),
+    )
+    # These are held commands, independently resampled from the velocity
+    # command.  The velocity task's mjlab config deliberately leaves the
+    # exact-zero pose bucket disabled (standup enables its own 0.3 bucket).
+    head_pose = UniformPoseCommandCfg(
+        class_type=UniformPoseCommand,
+        resampling_time_range=(2.0, 5.0),
+        ranges=(
+            (-0.05, 0.05),
+            (-0.05, 0.05),
+            (-0.07, 0.07),
+            (-0.015, 0.015),
+        ),
+        zero_command_prob=0.0,
+    )
+    body_pose = UniformPoseCommandCfg(
+        class_type=UniformPoseCommand,
+        resampling_time_range=(2.0, 5.0),
+        ranges=(
+            (-0.005, 0.005),
+            (-0.005, 0.005),
+            (-0.005, 0.005),
+            (-0.05, 0.05),
+            (-0.05, 0.05),
+            (-0.05, 0.05),
+        ),
+        zero_command_prob=0.0,
     )
 
 
@@ -542,7 +606,8 @@ class EventsCfg:
         mode="reset",
         params={
             "z_range": (0.12, 0.13),
-            "joint_scale_range": (0.5, 1.5),
+            "xy_range": (-0.5, 0.5),
+            "yaw_range": (-3.14, 3.14),
             "asset_cfg": SceneEntityCfg("robot", joint_names=list(POLICY_JOINT_ORDER)),
         },
     )
@@ -630,6 +695,21 @@ class RewardsCfg:
     upright = RewTerm(func=upright_gaussian, weight=2.0)
     pose = RewTerm(func=pose_tracking, weight=1.0, params={"std": 0.3})
     head_pose = RewTerm(func=head_pose_tracking, weight=2.0, params={"std": 0.5})
+    air_time = RewTerm(
+        func=contact_mdp.feet_air_time,
+        weight=3.0,
+        params={
+            "sensor_cfg": SceneEntityCfg(
+                "feet_ground_contact",
+                body_names=["ankle_left", "ankle_right"],
+                preserve_order=True,
+            ),
+            "command_name": "base_velocity",
+            "command_threshold": 0.01,
+            "threshold_min": 0.125,
+            "threshold_max": 0.300,
+        },
+    )
     body_ang_vel = RewTerm(func=body_ang_vel_cost, weight=-0.05)
     angular_momentum = RewTerm(func=angular_momentum_cost, weight=-0.02)
     action_rate = RewTerm(func=action_rate_cost, weight=-0.1)
