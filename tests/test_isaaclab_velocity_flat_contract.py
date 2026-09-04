@@ -87,6 +87,11 @@ def test_velocity_flat_keeps_mjlab_unclipped_action_path() -> None:
     assert "def clip_actions_for_training(" not in source
 
 
+def test_velocity_command_disables_unused_heading_bucket_like_mjlab() -> None:
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat.py").read_text()
+    assert "rel_heading_envs=0.0" in source
+
+
 def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     tree = ast.parse(_source(SMOKE))
     names = {node.id for node in ast.walk(tree) if isinstance(node, ast.Name)}

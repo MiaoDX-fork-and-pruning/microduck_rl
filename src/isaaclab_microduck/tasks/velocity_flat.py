@@ -686,6 +686,10 @@ class CommandsCfg:
         # Match the mjlab velocity recipe for backend comparison.
         resampling_time_range=(3.0, 8.0),
         rel_standing_envs=0.02,
+        # Match mjlab's explicit ``rel_heading_envs=0.0``.  Heading control is
+        # disabled, but leaving the inherited IsaacLab default (1.0) would make
+        # this latent sampling policy diverge if heading is enabled later.
+        rel_heading_envs=0.0,
         rel_turn_in_place_envs=0.15,
         heading_command=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
