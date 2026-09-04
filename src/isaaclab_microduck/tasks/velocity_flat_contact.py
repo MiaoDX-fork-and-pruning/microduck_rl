@@ -387,6 +387,11 @@ def _raw_physx_self_collision_cost(env: ManagerBasedEnv) -> torch.Tensor:
     for view in cache:
         _, _, _, _, counts, _ = view.get_contact_data(dt=dt)
         counts_total += torch.as_tensor(counts, device=env.device).reshape(env.num_envs, -1).sum(dim=1).float()
+    # Keep the production observation available to deterministic probes after
+    # ManagerBasedEnv.step().  Isaac Sim 6.0.1 may invalidate a direct tensor
+    # view read after the manager has completed its step, while the same read
+    # during reward evaluation is stable.
+    setattr(env, "_velocity_flat_last_raw_self_contact_counts", counts_total.detach().clone())
     return counts_total
 
 

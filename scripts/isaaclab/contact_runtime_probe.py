@@ -36,21 +36,41 @@ def main() -> None:
     parser.add_argument("--candidate-ankle-view", action="store_true")
     parser.add_argument("--filtered-self-collision", action="store_true")
     parser.add_argument("--raw-self-contact", action="store_true")
+    parser.add_argument(
+        "--forced-self-contact",
+        action="store_true",
+        help="compare concrete raw contact counts before and after a deterministic MJCF-valid pose",
+    )
+    parser.add_argument(
+        "--forced-self-contact-direct",
+        action="store_true",
+        help="write the deterministic MJCF-valid pose directly before stepping PhysX",
+    )
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument("--replicate-physics", action="store_true")
     parser.add_argument("--steps", type=int, default=4)
     parser.add_argument("--output", type=Path)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
+    if args.forced_self_contact_direct:
+        args.raw_self_contact = True
+        args.forced_self_contact = True
     launcher = AppLauncher(args)
     app = launcher.app
+    print("CONTACT_PROBE:app_ready", flush=True)
     env = None
     try:
         import gymnasium as gym
 
         from isaaclab.sim.utils.queries import resolve_matching_prims_from_source
         from isaaclab_microduck.tasks import register_tasks
-        from isaaclab_microduck.policy_abi import ACTION_SIZE
+        from isaaclab_microduck.policy_abi import (
+            ACTION_SIZE,
+            HOME_POSITION,
+            POLICY_JOINT_ORDER,
+            reorder_policy_joints,
+        )
+        from isaaclab_microduck.tasks.velocity_flat_contact import self_collision_cost
         from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
 
         register_tasks()
@@ -148,6 +168,7 @@ def main() -> None:
             sim_view = base_env.scene.sensors["feet_ground_contact"]._physics_sim_view
             known_paths = list(base_env.scene.sensors["feet_ground_contact"].body_physx_view.prim_paths)
             raw_cases = {}
+            raw_views = {}
             for name, body_path, filters in (
                 (
                     "trunk",
@@ -206,9 +227,127 @@ def main() -> None:
                         "counts": torch.as_tensor(counts).tolist(),
                         "finite": bool(torch.isfinite(torch.as_tensor(net)).all().item()),
                     }
+                    raw_views[name] = view
                 except Exception as exc:  # retain all view diagnostics in the report
                     raw_cases[name] = {"error": f"{type(exc).__name__}: {exc}"}
             report["raw_self_contact"] = raw_cases
+            if args.forced_self_contact or args.forced_self_contact_direct:
+                if set(raw_views) != {"trunk", "left_leg"}:
+                    raise RuntimeError(
+                        "forced self-contact fixture requires both concrete trunk and left-leg views"
+                    )
+
+                def _counts(view):
+                    values = view.get_contact_data(dt=float(base_env.sim.cfg.dt))[4]
+                    return torch.as_tensor(values, device=base_env.device).clone()
+
+                # This pose was found by evaluating robot_walk.xml with
+                # MuJoCo's collision detector.  It produces a trunk/left-leg
+                # overlap while keeping all 14 joints inside their authored
+                # limits, making the PhysX check a geometry-source comparison.
+                forced_action = torch.tensor(
+                    [
+                        -0.29586331, -0.34041397, -0.02215451, -0.46743155, -0.33582527,
+                        0.04877433, 0.03852781, 0.14460955, -0.26784449,
+                        0.32895650, 0.51486951, -0.38104408, 0.50578374, -0.34331586,
+                    ],
+                    dtype=robot.data.default_joint_pos.torch.dtype,
+                    device=base_env.device,
+                ).expand(args.num_envs, -1).clone()
+                forced_policy_q = forced_action + torch.as_tensor(
+                    HOME_POSITION, dtype=forced_action.dtype, device=base_env.device
+                ).reshape(1, -1)
+                print("CONTACT_PROBE_FORCED:pose_ready", flush=True)
+                home_q = robot.data.default_joint_pos.torch.clone()
+                zero_dq = torch.zeros_like(home_q)
+                root_pose = robot.data.default_root_pose.torch.clone()
+                root_vel = robot.data.default_root_vel.torch.clone()
+
+                # Initialize the manager and PhysX state through the same
+                # reset path used by the production task before issuing raw
+                # articulation writes.  Calling SimulationContext.step on an
+                # unreset ManagerBasedEnv can terminate Kit without a Python
+                # exception in Isaac Sim 6.0.1.
+                print("CONTACT_PROBE_FORCED:reset", flush=True)
+                env.reset(seed=7)
+                print("CONTACT_PROBE_FORCED:reset_done", flush=True)
+                # Reuse the same concrete views as the production reward term.
+                # A second live set can destabilize the PhysX tensor plugin.
+                self_collision_cost(base_env, ("missing",))
+                production_views = getattr(base_env, "_velocity_flat_raw_self_contact_views", None)
+                if production_views is not None:
+                    raw_views = {"trunk": production_views[0], "left_leg": production_views[1]}
+                # ``env.reset`` already writes the clean HOME state through
+                # the manager and gives us a synchronized zero-contact
+                # baseline.  Avoid a second raw write here: Isaac Sim 6.0.1
+                # can terminate Kit when a ManagerBasedEnv has pending
+                # actuator data and ``scene.write_data_to_sim`` is called
+                # immediately after an external joint-state write.
+                baseline_total = float(
+                    getattr(base_env, "_velocity_flat_last_raw_self_contact_counts", torch.zeros(args.num_envs, device=base_env.device)).sum().item()
+                )
+
+                counts_history: list[float] = []
+                if args.forced_self_contact_direct:
+                    # This isolates collision/reporting semantics from BAM
+                    # convergence.  The state write uses the same simulator
+                    # joint ordering as the articulation, then one complete
+                    # PhysX step synchronizes raw contact views.
+                    print("CONTACT_PROBE_FORCED:direct_write", flush=True)
+                    sim_q = forced_policy_q[..., torch.as_tensor(
+                        reorder_policy_joints(torch.arange(ACTION_SIZE), robot.joint_names),
+                        device=base_env.device,
+                    )]
+                    robot.write_joint_position_to_sim_index(position=sim_q)
+                    robot.write_joint_velocity_to_sim_index(velocity=zero_dq)
+                    # The articulation write reaches PhysX directly.  Do not
+                    # flush manager actuator buffers here: Isaac Sim 6.0.1
+                    # can terminate when that flush follows an external state
+                    # write in the same frame.
+                    base_env.sim.step()
+                    base_env.scene.update(base_env.sim.cfg.dt)
+                    counts_now = _counts(raw_views["trunk"]).sum() + _counts(raw_views["left_leg"]).sum()
+                    counts_history.append(float(counts_now.item()))
+                    forced_total = float(counts_now.item())
+                else:
+                    # Drive toward the valid collision pose through the complete
+                    # manager/actuator path.  The action was found in MuJoCo as
+                    # a HOME-relative pose and is inside the policy clip range.
+                    print("CONTACT_PROBE_FORCED:target_drive", flush=True)
+                    for _ in range(300):
+                        env.step(forced_action)
+                        counts_history.append(
+                            float(
+                                getattr(
+                                    base_env,
+                                    "_velocity_flat_last_raw_self_contact_counts",
+                                    torch.zeros(args.num_envs, device=base_env.device),
+                                ).sum().item()
+                            )
+                        )
+                    print("CONTACT_PROBE_FORCED:target_drive_done", flush=True)
+                    forced_total = float(
+                        getattr(base_env, "_velocity_flat_last_raw_self_contact_counts", torch.zeros(args.num_envs, device=base_env.device)).sum().item()
+                    )
+                actual_q = robot.data.joint_pos.torch.detach().clone()
+                target_sim_q = forced_policy_q[..., torch.as_tensor(
+                    reorder_policy_joints(torch.arange(ACTION_SIZE), robot.joint_names),
+                    device=base_env.device,
+                )]
+                report["forced_self_contact"] = {
+                    "pose_source": "robot_walk.xml_mujoco_collision_search_seed_2026",
+                    "policy_joint_order": list(POLICY_JOINT_ORDER),
+                    "policy_joint_position": forced_policy_q[0].cpu().tolist(),
+                    "sim_joint_order": list(robot.joint_names),
+                    "actual_sim_joint_position": actual_q[0].cpu().tolist(),
+                    "target_error_max": float(torch.abs(actual_q - target_sim_q).max().item()),
+                    "baseline_total": int(baseline_total),
+                    "forced_total": int(forced_total),
+                    "peak_transition_total": int(max(counts_history, default=0.0)),
+                    "counts_history_total": counts_history,
+                    "transition_nonzero": bool(baseline_total == 0 and forced_total > 0),
+                    "finite": bool(torch.isfinite(actual_q).all().item()),
+                }
         if args.candidate_ankle_view:
             ankle_glob = "/World/envs/env_*/Robot/Geometry/trunk_base/*/*/*/*/*"
             print(f"CONTACT_PROBE_CANDIDATE_START:{ankle_glob}", flush=True)
