@@ -6,6 +6,10 @@ from pathlib import Path
 import torch
 
 from isaaclab_microduck.tasks.velocity_flat_dr import (
+    curriculum_event_range,
+    curriculum_pose_command_ranges,
+    curriculum_reward_weight,
+    curriculum_standing_probability,
     randomize_bam_friction,
     randomize_mass_inertia,
     reset_velocity_flat_state,
@@ -112,6 +116,53 @@ def test_bam_friction_randomization_targets_actuator_and_only_reset_subset() -> 
     randomize_bam_friction(env, torch.tensor([1]), (1.0, 1.0), SimpleNamespace(name="robot"))
     assert torch.equal(actuator.scale[[0, 2, 3]], before[[0, 2, 3]])
     assert torch.equal(actuator.scale[1], torch.ones(1))
+
+
+def test_curricula_update_live_manager_configs_at_stage_boundaries() -> None:
+    reward_cfg = SimpleNamespace(weight=-0.1)
+    event_cfg = SimpleNamespace(params={"ranges": (-0.003, 0.003)})
+    command_cfg = SimpleNamespace(rel_standing_envs=0.02, ranges=((0.0, 0.0),))
+    reward_manager = SimpleNamespace(
+        get_term_cfg=lambda _: reward_cfg,
+        set_term_cfg=lambda _, cfg: None,
+    )
+    event_manager = SimpleNamespace(
+        get_term_cfg=lambda _: event_cfg,
+        set_term_cfg=lambda _, cfg: None,
+    )
+    command_term = SimpleNamespace(cfg=command_cfg)
+    command_manager = SimpleNamespace(get_term=lambda _: command_term)
+    env = SimpleNamespace(
+        common_step_counter=500 * 24,
+        device=torch.device("cpu"),
+        reward_manager=reward_manager,
+        event_manager=event_manager,
+        command_manager=command_manager,
+    )
+    stages = [{"step": 0, "weight": -0.1}, {"step": 500 * 24, "weight": -0.2}]
+    curriculum_reward_weight(env, None, "action_rate_l2", stages)
+    assert reward_cfg.weight == -0.2
+    curriculum_standing_probability(
+        env,
+        None,
+        "base_velocity",
+        [{"step": 0, "rel_standing_envs": 0.02}, {"step": 500 * 24, "rel_standing_envs": 0.05}],
+    )
+    assert command_cfg.rel_standing_envs == 0.05
+    curriculum_pose_command_ranges(
+        env,
+        None,
+        "head_pose",
+        [{"step": 0, "ranges": ((-0.05, 0.05),)}, {"step": 500 * 24, "ranges": ((-0.17, 0.17),)}],
+    )
+    assert command_cfg.ranges == ((-0.17, 0.17),)
+    curriculum_event_range(
+        env,
+        None,
+        "randomize_com",
+        [{"step": 0, "range": 0.003}, {"step": 500 * 24, "range": 0.005}],
+    )
+    assert event_cfg.params["ranges"] == (-0.005, 0.005)
 
 
 def test_reset_matches_mjlab_root_randomization_and_exact_home_joints() -> None:

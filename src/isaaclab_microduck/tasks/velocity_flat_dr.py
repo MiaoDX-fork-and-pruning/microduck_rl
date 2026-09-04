@@ -230,6 +230,83 @@ def randomize_bam_friction(
         raise RuntimeError("Velocity-Flat BAM friction DR found no friction-scale actuator")
 
 
+def _latest_stage(step: int, stages: list[dict], key: str):
+    """Return the latest step-qualified curriculum value."""
+
+    value = stages[0][key]
+    for stage in stages:
+        if step >= int(stage["step"]):
+            value = stage[key]
+    return value
+
+
+def curriculum_reward_weight(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    reward_name: str,
+    weight_stages: list[dict],
+) -> torch.Tensor:
+    """Apply a stepwise reward schedule through the live RewardManager."""
+
+    del env_ids
+    cfg = env.reward_manager.get_term_cfg(reward_name)
+    cfg.weight = float(_latest_stage(env.common_step_counter, weight_stages, "weight"))
+    env.reward_manager.set_term_cfg(reward_name, cfg)
+    return torch.tensor([cfg.weight], device=_device(env))
+
+
+def curriculum_standing_probability(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    command_name: str,
+    standing_stages: list[dict],
+) -> torch.Tensor:
+    """Update the live velocity command's standing bucket probability."""
+
+    del env_ids
+    term = env.command_manager.get_term(command_name)
+    if term is None:
+        raise RuntimeError(f"Velocity-Flat command term {command_name!r} is missing")
+    term.cfg.rel_standing_envs = float(
+        _latest_stage(env.common_step_counter, standing_stages, "rel_standing_envs")
+    )
+    return torch.tensor([term.cfg.rel_standing_envs], device=_device(env))
+
+
+def curriculum_pose_command_ranges(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    command_name: str,
+    range_stages: list[dict],
+) -> torch.Tensor:
+    """Update a held pose command's live per-dimension sampling ranges."""
+
+    del env_ids
+    term = env.command_manager.get_term(command_name)
+    if term is None:
+        raise RuntimeError(f"Velocity-Flat command term {command_name!r} is missing")
+    ranges = tuple(_latest_stage(env.common_step_counter, range_stages, "ranges"))
+    term.cfg.ranges = ranges
+    max_abs = max((max(abs(float(lo)), abs(float(hi))) for lo, hi in ranges), default=0.0)
+    return torch.tensor([max_abs], device=_device(env))
+
+
+def curriculum_event_range(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    event_name: str,
+    range_stages: list[dict],
+) -> torch.Tensor:
+    """Update a reset event's symmetric CoM range through EventManager."""
+
+    del env_ids
+    cfg = env.event_manager.get_term_cfg(event_name)
+    value = float(_latest_stage(env.common_step_counter, range_stages, "range"))
+    cfg.params["ranges"] = (-value, value)
+    env.event_manager.set_term_cfg(event_name, cfg)
+    return torch.tensor([value], device=_device(env))
+
+
 def push_velocity(
     env: Any,
     env_ids: torch.Tensor | None,
@@ -302,6 +379,10 @@ __all__ = [
     "randomize_armature",
     "randomize_bam_friction",
     "randomize_com_offsets",
+    "curriculum_event_range",
+    "curriculum_pose_command_ranges",
+    "curriculum_reward_weight",
+    "curriculum_standing_probability",
     "randomize_foot_material",
     "randomize_mass_inertia",
     "reset_velocity_flat_state",

@@ -18,6 +18,7 @@ from isaaclab.assets import ArticulationCfg
 from isaaclab.envs import ManagerBasedRLEnvCfg
 from isaaclab.envs import mdp
 from isaaclab.managers import CommandTerm, CommandTermCfg
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import ObservationGroupCfg as ObsGroup
 from isaaclab.managers import ObservationTermCfg as ObsTerm
@@ -46,6 +47,10 @@ from isaaclab_microduck.tasks.velocity_flat_dr import (
     randomize_com_offsets,
     randomize_foot_material,
     randomize_mass_inertia,
+    curriculum_event_range,
+    curriculum_pose_command_ranges,
+    curriculum_reward_weight,
+    curriculum_standing_probability,
     reset_velocity_flat_state,
 )
 from isaaclab_microduck.tasks.velocity_flat_sensors import (
@@ -973,6 +978,95 @@ class TerminationsCfg:
 
 
 @configclass
+class CurriculumCfg:
+    """Stepwise schedules ported from mjlab's Velocity-Flat recipe."""
+
+    action_rate_weight = CurrTerm(
+        func=curriculum_reward_weight,
+        params={
+            "reward_name": "action_rate_l2",
+            "weight_stages": [
+                {"step": 0, "weight": -0.1},
+                {"step": 500 * 24, "weight": -0.2},
+                {"step": 750 * 24, "weight": -0.4},
+                {"step": 1000 * 24, "weight": -0.6},
+                {"step": 1250 * 24, "weight": -0.8},
+                {"step": 1500 * 24, "weight": -1.0},
+            ],
+        },
+    )
+    standing_envs = CurrTerm(
+        func=curriculum_standing_probability,
+        params={
+            "command_name": "base_velocity",
+            "standing_stages": [
+                {"step": 0, "rel_standing_envs": 0.02},
+                {"step": 500 * 24, "rel_standing_envs": 0.05},
+                {"step": 750 * 24, "rel_standing_envs": 0.10},
+                {"step": 1000 * 24, "rel_standing_envs": 0.15},
+                {"step": 1500 * 24, "rel_standing_envs": 0.20},
+                {"step": 2000 * 24, "rel_standing_envs": 0.25},
+            ],
+        },
+    )
+    head_pose_range = CurrTerm(
+        func=curriculum_pose_command_ranges,
+        params={
+            "command_name": "head_pose",
+            "range_stages": [
+                {"step": 0, "ranges": ((-0.05, 0.05), (-0.05, 0.05), (-0.07, 0.07), (-0.015, 0.015))},
+                {"step": 500 * 24, "ranges": ((-0.17, 0.17), (-0.17, 0.17), (-0.21, 0.21), (-0.047, 0.047))},
+                {"step": 1000 * 24, "ranges": ((-0.39, 0.39), (-0.39, 0.39), (-0.49, 0.49), (-0.11, 0.11))},
+                {"step": 1500 * 24, "ranges": ((-0.72, 0.72), (-0.72, 0.72), (-0.91, 0.91), (-0.20, 0.20))},
+                {"step": 2000 * 24, "ranges": ((-1.10, 1.10), (-1.10, 1.10), (-1.40, 1.40), (-0.31, 0.31))},
+            ],
+        },
+    )
+    body_pose_range = CurrTerm(
+        func=curriculum_pose_command_ranges,
+        params={
+            "command_name": "body_pose",
+            "range_stages": [{"step": 0, "ranges": ((-0.005, 0.005), (-0.005, 0.005), (-0.005, 0.005), (-0.05, 0.05), (-0.05, 0.05), (-0.05, 0.05))}],
+        },
+    )
+    com_range = CurrTerm(
+        func=curriculum_event_range,
+        params={
+            "event_name": "randomize_com",
+            "range_stages": [
+                {"step": 0, "range": 0.003},
+                {"step": 500 * 24, "range": 0.005},
+                {"step": 1000 * 24, "range": 0.01},
+                {"step": 1500 * 24, "range": 0.015},
+            ],
+        },
+    )
+    head_com_range = CurrTerm(
+        func=curriculum_event_range,
+        params={
+            "event_name": "randomize_head_com",
+            "range_stages": [
+                {"step": 0, "range": 0.003},
+                {"step": 500 * 24, "range": 0.005},
+                {"step": 1000 * 24, "range": 0.01},
+            ],
+        },
+    )
+    head_pose_bias_weight = CurrTerm(
+        func=curriculum_reward_weight,
+        params={
+            "reward_name": "head_pose_bias",
+            "weight_stages": [
+                {"step": 0, "weight": 0.0},
+                {"step": 600 * 24, "weight": 1.0},
+                {"step": 1000 * 24, "weight": 2.0},
+                {"step": 1500 * 24, "weight": 3.0},
+            ],
+        },
+    )
+
+
+@configclass
 class IsaacLabVelocityFlatEnvCfg(ManagerBasedRLEnvCfg):
     scene: SceneCfg = SceneCfg(num_envs=1, env_spacing=2.0)
     observations: ObservationsCfg = ObservationsCfg()
@@ -981,6 +1075,7 @@ class IsaacLabVelocityFlatEnvCfg(ManagerBasedRLEnvCfg):
     events: EventsCfg = EventsCfg()
     rewards: RewardsCfg = RewardsCfg()
     terminations: TerminationsCfg = TerminationsCfg()
+    curriculum: CurriculumCfg = CurriculumCfg()
 
     def __post_init__(self) -> None:
         self.seed = 7
