@@ -76,7 +76,9 @@ def reset_velocity_flat_state(
     default_pose = _data_tensor(asset.data, "default_root_pose")[ids].clone()
     origins = getattr(env.scene, "env_origins", None)
     if origins is None:
-        origins = getattr(env.scene, "terrain", env.scene).env_origins
+        origins = getattr(getattr(env.scene, "terrain", None), "env_origins", None)
+    if origins is None:
+        origins = torch.zeros((env.num_envs, 3), device=device)
     pose = default_pose
     pose[:, :3] = origins[ids].to(device) + default_pose[:, :3]
     pose[:, 2] = origins[ids, 2].to(device) + sample_uniform((n,), *z_range, device=device)
