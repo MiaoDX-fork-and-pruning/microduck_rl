@@ -33,15 +33,15 @@ Strictly aligned for the next cross-backend run:
   `1e-3`, `gamma=0.99`, `lambda=0.95`, adaptive KL schedule, and 6000
   iterations.
 
-Still intentionally not aligned, and therefore excluded from a backend-only
-claim:
+Still excluded from a backend-only claim because runtime parity evidence or
+equivalent PhysX data sources are not closed:
 
-- foot/contact sensors and foot clearance, air-time, slip, and self-collision
-  rewards;
-- pose and head-pose tracking terms;
+- contact sensors and geom-level foot clearance, air-time, slip, and
+  self-collision semantics;
+- runtime proof for pose/head/body tracking and head-bias curricula;
 - mjlab domain randomization, observation noise/delay, curricula, and its
   explicit turn-in-place command bucket;
-- privileged critic observations and the USD/PhysX drive configuration.
+- privileged critic source closure and the USD/PhysX drive configuration.
 
 ## Full parity inventory
 
