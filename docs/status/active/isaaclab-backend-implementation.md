@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: fixed-root same-state BAM dynamics proof and accepted-policy IsaacLab A/B diagnosis completed; strict trained-policy battery still blocks forward/lateral response
+current_slice: checkpoint provenance and normalizer/weight cross-evaluation completed; strict trained-policy battery still blocks forward/lateral response
 blocker_kind: implementation_and_parity_evidence
 blocker_fingerprint: corrected strict policy fails forward/lateral command-response gates while accepted mjlab policy passes the same IsaacLab battery
 last_proven_evidence: >-
@@ -74,6 +74,15 @@ last_proven_evidence: >-
   `(0.118,0.011) m/s` and lateral `(-0.040,0.068) m/s`; this separates the
   remaining strict-checkpoint behavior failure from command/action wiring or
   BAM target semantics (`velocity_flat_command_battery_mjlab_policy_p0.json`).
+  A simulator-free audit confirms strict checkpoints `model_1250`, `model_5000`,
+  and `model_5999` have finite 61D actor / 76D critic normalizers, identical
+  tensor schemas and parameter counts, and the expected serialized normalizer
+  fields (`velocity_flat_checkpoint_audit_p0.json`). A two-way normalizer/weight
+  cross-evaluation under the same IsaacLab six-case battery shows that replacing
+  only normalizer statistics does not recover forward/lateral response:
+  strict weights with the accepted normalizer produce exploding actions/resets,
+  while accepted weights with the strict normalizer remain finite but fail those
+  two cases (`velocity_flat_normalizer_weight_cross_eval_p0.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -101,14 +110,17 @@ completed: >-
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
   Keep the strict trained-policy forward/lateral gate blocked. Do not tune
-  rewards/PPO or launch another long run; the accepted-policy A/B proves the
-  runtime can express the directional behavior. Any further work must inspect
-  strict-run training provenance or reproduce the accepted policy's training
-  recipe, while retaining solver/friction as explicit backend delta.
+  rewards/PPO or launch another long run; the accepted-policy A/B and the
+  normalizer/weight cross-evaluation prove the runtime can express directional
+  behavior and that normalizer drift alone is insufficient. The next bounded
+  proof is a read-only strict-run recipe audit against the mjlab runner,
+  including seed, symmetry setting, curriculum/event timing, and checkpoint
+  provenance, before any replacement run is considered.
 next_proof: >-
-  Completed: accepted-policy A/B battery in IsaacLab, with finite all-case
-  response and zero resets, in
-  `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_policy_p0.json`.
+  Completed: checkpoint schema/normalizer audit plus two-way normalizer/weight
+  cross-evaluation under the fixed 16-env/300-step battery. Artifacts:
+  `.cache/isaaclab-assets/velocity_flat_checkpoint_audit_p0.json` and
+  `.cache/isaaclab-assets/velocity_flat_normalizer_weight_cross_eval_p0.json`.
 stop_condition: >-
   Do not start VelStand. Do not launch another long run while the corrected
   strict policy fails the forward/lateral battery; do not tune reward/PPO to
