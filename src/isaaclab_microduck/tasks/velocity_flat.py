@@ -120,10 +120,22 @@ def _sensor_corruption(env: ManagerBasedEnv, name: str, value: torch.Tensor, *, 
     key = f"_{name}_history"
     history = getattr(env, key, None)
     if history is None or history.shape != (delay + 1, *value.shape):
-        history = value.unsqueeze(0).repeat(delay + 1, 1, 1)
+        # State must remain writable after inference-mode policy evaluation;
+        # allocating from the input tensor directly would create an inference
+        # tensor and make the next episode reset fail on in-place clearing.
+        with torch.inference_mode(False):
+            history = torch.empty((delay + 1, *value.shape), device=value.device, dtype=value.dtype)
+            history.copy_(value.unsqueeze(0))
         setattr(env, key, history)
-    history[:-1] = history[1:].clone()
-    history[-1] = value
+    elif history.is_inference():
+        with torch.inference_mode(False):
+            writable = torch.empty_like(history)
+            writable.copy_(history)
+        history = writable
+        setattr(env, key, history)
+    with torch.inference_mode(False):
+        history[:-1].copy_(history[1:])
+        history[-1].copy_(value)
     out = history[0] if delay else value
     return observation_noise(out, noise)
 

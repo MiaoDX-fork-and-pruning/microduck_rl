@@ -5,6 +5,20 @@ from __future__ import annotations
 import torch
 
 
+def _writable_clone(value: torch.Tensor) -> torch.Tensor:
+    """Copy a tensor out of inference mode into mutable episode state."""
+
+    with torch.inference_mode(False):
+        out = torch.empty_like(value)
+        out.copy_(value.detach())
+    return out
+
+
+def _writable_zeros(shape: tuple[int, ...], *, device, dtype=torch.float32) -> torch.Tensor:
+    with torch.inference_mode(False):
+        return torch.zeros(shape, device=device, dtype=dtype)
+
+
 def _ids(env, env_ids):
     if env_ids is None:
         return torch.arange(env.num_envs, device=env.device, dtype=torch.long)
@@ -13,7 +27,7 @@ def _ids(env, env_ids):
 
 def _axis_angle_quat(axis: torch.Tensor, angle: torch.Tensor) -> torch.Tensor:
     half = angle * 0.5
-    q = torch.zeros((*angle.shape, 4), device=angle.device, dtype=angle.dtype)
+    q = _writable_zeros((*angle.shape, 4), device=angle.device, dtype=angle.dtype)
     # IsaacLab math utilities use xyzw quaternion order.
     q[..., :3] = axis * torch.sin(half)[..., None]
     q[..., 3] = torch.cos(half)
@@ -33,8 +47,11 @@ def reset_imu_mounting(env, env_ids, max_angle_deg: float = 6.0) -> None:
     q = _axis_angle_quat(axis, angle)
     state = getattr(env, "_imu_mount_quat", None)
     if state is None or state.shape != (env.num_envs, 4):
-        state = torch.zeros(env.num_envs, 4, device=env.device)
+        state = _writable_zeros((env.num_envs, 4), device=env.device)
         state[:, 3] = 1.0
+        env._imu_mount_quat = state
+    elif state.is_inference():
+        state = _writable_clone(state)
         env._imu_mount_quat = state
     state[ids] = q
 
@@ -42,8 +59,11 @@ def reset_imu_mounting(env, env_ids, max_angle_deg: float = 6.0) -> None:
 def imu_mount_quat(env) -> torch.Tensor:
     q = getattr(env, "_imu_mount_quat", None)
     if q is None:
-        q = torch.zeros(env.num_envs, 4, device=env.device)
+        q = _writable_zeros((env.num_envs, 4), device=env.device)
         q[:, 3] = 1.0
+        env._imu_mount_quat = q
+    elif q.is_inference():
+        q = _writable_clone(q)
         env._imu_mount_quat = q
     return q
 
@@ -69,12 +89,18 @@ def reset_actor_sensor_state(env, env_ids) -> None:
         value = getattr(env, name, None)
         if value is None:
             continue
+        if value.is_inference():
+            value = _writable_clone(value)
+            setattr(env, name, value)
         if value.ndim >= 2 and name.endswith("history"):
             value[:, ids] = 0.0
         else:
             value[ids] = 0.0
     bias = getattr(env, "_encoder_bias", None)
     if bias is not None:
+        if bias.is_inference():
+            bias = _writable_clone(bias)
+            env._encoder_bias = bias
         bias[ids] = torch.empty_like(bias[ids]).uniform_(-0.015, 0.015)
     reset_imu_mounting(env, ids)
 
