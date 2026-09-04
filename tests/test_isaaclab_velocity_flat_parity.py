@@ -16,11 +16,18 @@ from isaaclab_microduck.tasks.parity import (
 )
 
 
-def test_action_clip_and_home_transform_are_mjlab_semantics() -> None:
+def test_action_target_is_unclipped_by_default_like_mjlab_velocity_flat() -> None:
     action = torch.tensor([[-2.0, -0.25, 0.5, 2.0]])
     home = torch.ones(1, 4)
     assert torch.equal(clip_policy_action(action), torch.tensor([[-1.0, -0.25, 0.5, 1.0]]))
-    assert torch.equal(policy_action_to_target(action, home), torch.tensor([[0.0, 0.75, 1.5, 2.0]]))
+    assert torch.equal(policy_action_to_target(action, home), torch.tensor([[-1.0, 0.75, 1.5, 3.0]]))
+    assert torch.equal(policy_action_to_target(action, home, clip=1.0), torch.tensor([[0.0, 0.75, 1.5, 2.0]]))
+
+
+def test_live_mjlab_velocity_runner_does_not_clip_actions() -> None:
+    from mjlab_microduck.tasks.microduck_velocity_env_cfg import MicroduckRlCfg
+
+    assert MicroduckRlCfg.clip_actions is None
 
 
 def test_bam_config_keeps_reference_delay_sag_contract() -> None:

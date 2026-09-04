@@ -205,11 +205,12 @@ def main() -> None:
         env_cfg.commands.base_velocity.resampling_time_range = (1.0e9, 1.0e9)
         env = gym.make(TASK, cfg=env_cfg)
         print("ISAACLAB_VELOCITY_BATTERY:env_made", flush=True)
-        # IsaacLab's wrapper forwards this value to gymnasium.Box(high=...),
-        # which requires a numeric bound rather than a boolean.
-        vec_env = RslRlVecEnvWrapper(env, clip_actions=1.0)
-        print("ISAACLAB_VELOCITY_BATTERY:wrapper_made", flush=True)
         agent_cfg = MicroduckVelocityFlatPPORunnerCfg()
+        # Use the same action boundary as training and the production mjlab
+        # recipe. In particular, do not silently make evaluation safer by
+        # clipping raw policy output here.
+        vec_env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+        print("ISAACLAB_VELOCITY_BATTERY:wrapper_made", flush=True)
         # The official IsaacLab entrypoint migrates legacy model fields before
         # handing the config to rsl-rl. Keep this standalone harness on the
         # same compatibility path.
@@ -241,6 +242,7 @@ def main() -> None:
             "checkpoint": str(args.checkpoint),
             "checkpoint_sha256": _sha256(args.checkpoint),
             "actuator": "BamActuator",
+            "clip_actions": agent_cfg.clip_actions,
             "friction_bridge": "motor_only_external_effort_unavailable",
             "passed": all(case["passed"] for case in cases),
             "cases": cases,

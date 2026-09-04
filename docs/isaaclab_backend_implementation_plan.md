@@ -882,20 +882,24 @@ After that point, additional tasks, backlash, rollers, generalist training, came
 - [x] **T1 (P1)** — Create and maintain the parity ledger; populate every
   Velocity-Flat surface from the current comparison audit and attach tests or
   benchmark evidence to each row.
-- [ ] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
+- [x] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
   per-environment voltage sag, friction duplication, USD damping, and HOME/limit
-  handling; add actuator and asset regression tests. Action, delay, sag, and
-  HOME are closed; PhysX friction/damping application remains open.
-- [ ] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
+  handling; add actuator and asset regression tests. The production mjlab
+  runner's default `clip_actions=None` is now matched; the previous strict
+  checkpoint used an Isaac-only clip and is diagnostic-invalid. Remaining
+  solved external-load timing is the explicit `BACKEND_DELTA`.
+- [x] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
   encoder bias, IMU and observation noise/delay, preserving non-accumulation;
-  add deterministic seeded distribution tests. The implementation and CPU
-  contracts exist; seeded production-runtime distribution evidence remains.
-- [ ] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
+  add deterministic seeded distribution tests. Implementation, CPU contracts,
+  and seeded production-runtime distribution evidence are attached in the
+  active parity ledger.
+- [x] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
   Velocity-Flat rewards/terminations, and privileged critic observations while
   preserving the 61D actor ABI; add pure-function and config tests. All terms
-  are wired and finite in the one-environment production probe. Foot-site and
-  direct count kernels are covered, but the filtered self-contact view fails
-  multi-environment initialization; seeded command/source parity also remains.
+  are wired and finite in the production probes. Foot-site/direct count
+  kernels, seeded commands, rewards, terminations, and the 76D critic are
+  covered; the filtered self-contact view remains intentionally disabled in
+  favor of the concrete raw PhysX view.
 - [x] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
   supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
   and record the result as a software-stack delta.
@@ -904,10 +908,12 @@ After that point, additional tasks, backlash, rollers, generalist training, came
   tensors and records translation, tilt, yaw response, and resets. Motion
   quality gates are evaluated on a trained checkpoint, not the 5-iteration
   integration smoke.
-- [x] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch the replacement
-  4096-env/6000-iteration strict-parity run with a new manifest. The run and
-  final ONNX export completed; its trained-policy battery remains rejected
-  pending root-cause investigation (`velocity_flat_command_battery_model5999.json`).
+- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch a replacement
+  4096-env/6000-iteration strict-parity run with a new manifest. The corrected
+  64-env/5-iteration smoke and `[1,61] -> [1,14]` ONNX export now pass in
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-31-53/`.
+  The earlier 6000-iteration run was trained with `clip_actions=1.0` and is
+  invalid; the corrected long run and trained-policy battery remain pending.
 
 ## 26. Failure modes and verification
 

@@ -26,13 +26,21 @@ def policy_action_to_target(
     home: torch.Tensor,
     *,
     scale: float = 1.0,
-    clip: float = 1.0,
+    clip: float | None = None,
 ) -> torch.Tensor:
-    """Map clipped raw actions to absolute servo targets around HOME."""
+    """Map policy actions to absolute servo targets around HOME.
+
+    The production mjlab Velocity-Flat runner leaves ``clip_actions`` unset,
+    so its BAM target receives the complete policy output.  ``clip`` remains
+    available for backend-neutral probes, but is opt-in rather than part of
+    the task's action contract.
+    """
 
     if action.shape[-1] != home.shape[-1]:
         raise ValueError(f"action/home dimension mismatch: {action.shape[-1]} != {home.shape[-1]}")
-    return home + float(scale) * clip_policy_action(action, clip)
+    if clip is not None:
+        action = clip_policy_action(action, clip)
+    return home + float(scale) * action
 
 
 def effective_supply_voltage(

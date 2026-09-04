@@ -34,7 +34,6 @@ import isaaclab.sim as sim_utils
 from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 from isaaclab_microduck.policy_abi import HOME_POSITION, POLICY_JOINT_ORDER
 from isaaclab_microduck.tasks.parity import (
-    clip_policy_action,
     observation_noise,
     subtree_angular_momentum,
 )
@@ -733,18 +732,12 @@ class ActionsCfg:
         scale=1.0,
         offset={name: float(value) for name, value in zip(POLICY_JOINT_ORDER, HOME_POSITION)},
         use_default_offset=False,
-        # Do not clip here: IsaacLab applies this field after scale+offset,
-        # which would clamp absolute joint targets rather than raw policy
-        # actions.  RslRlVecEnvWrapper performs the mjlab-equivalent raw
-        # [-1, 1] clip at the policy boundary.
+        # Do not clip here: the production mjlab Velocity-Flat runner leaves
+        # clip_actions unset and sends the complete raw policy output through
+        # HOME+scale to BAM. IsaacLab's action-term clip would additionally run
+        # after scale+offset, changing that target contract.
         clip=None,
     )
-
-
-def clip_actions_for_training(action: torch.Tensor) -> torch.Tensor:
-    """Training-side raw action clip; VecEnv uses the same bound at runtime."""
-
-    return clip_policy_action(action, limit=1.0)
 
 
 @configclass

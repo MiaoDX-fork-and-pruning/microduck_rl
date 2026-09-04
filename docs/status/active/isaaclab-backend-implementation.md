@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: P0 semantic contracts, fresh smoke, battery harness, ONNX export, and replacement 4096-env/6000-iteration run complete; trained-policy behavior acceptance remains open
+current_slice: action-boundary root-cause proof found; corrected unclipped path passes CPU contracts, fresh post-fix smoke and a new strict run are still required
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: trained-policy battery behavior gate remains open after replacement 6000-iteration run
+blocker_fingerprint: replacement 6000-iteration run was trained with an Isaac-only action clip and is invalid for strict parity
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -51,7 +51,7 @@ last_proven_evidence: >-
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
-  explicit BAM actuator with action clipping, 3..6-step delay, per-env voltage,
+  explicit BAM actuator with mjlab-unclipped action boundary, 3..6-step delay, per-env voltage,
   previous-motor-effort sag, and friction-scale state; reset/DR, sensor
   corruption, commands, turn bucket, rewards, terminations, and curricula are
   wired with CPU contracts. Subtree angular momentum is computed from body
@@ -62,21 +62,25 @@ completed: >-
   Foot height/slip/clearance now use the canonical MJCF sites. Production
   self-collision reward uses concrete raw PhysX views and a 4-env task smoke is
   finite; direct and historical probe startup failures were traced to incomplete
-  PYTHONPATH rather than simulator semantics.
+  PYTHONPATH rather than simulator semantics. The production mjlab runner's
+  `clip_actions=None` boundary is now matched in IsaacLab; the prior strict
+  checkpoint's Isaac-only `clip_actions=1.0` was invalidated. Corrected
+  64-env/5-iteration smoke and `[1,61] -> [1,14]` ONNX export pass in
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-31-53/`.
 next_action: >-
-  Investigate the observed trained-policy battery failure against the strict
-  semantic ledger and accepted mjlab policy. Do not tune rewards/PPO or use the
-  old long run as baseline; any next run requires a documented semantic cause
-  and focused proof first.
+  Run the fresh 64-env/5-iteration smoke with clip_actions=None, export/shape
+  check it, then launch one new strict 4096-env/6000-iteration run using the
+  corrected action boundary. Do not tune rewards/PPO or use the contaminated
+  model_5999.pt as a baseline.
 next_proof: >-
-  Root-cause proof for the final battery failures, then a rerun of the fixed
-  six-case battery on a newly justified checkpoint; current final artifact is
-  `.cache/isaaclab-assets/velocity_flat_command_battery_model5999.json`.
+  Fresh post-fix 64-env/5-iteration smoke plus ONNX shape proof, followed by a
+  newly justified strict checkpoint and the fixed six-case battery. The root
+  cause artifact is `.cache/isaaclab-assets/velocity_flat_action_boundary_unclipped_model5999_4x50.json`.
 stop_condition: >-
-  Do not start VelStand or another long run while the final trained-policy
-  battery failure has no documented semantic root cause. Old long runs are
-  diagnostic only and never a strict baseline; do not tune reward/PPO to hide
-  behavior differences.
+  Do not start VelStand. The next strict run is permitted only after the
+  corrected action boundary passes the fresh smoke and ONNX shape gates. The
+  prior model_5999.pt is diagnostic only and never a strict baseline; do not
+  tune reward/PPO to hide behavior differences.
 no_touch_scope: existing mjlab behavior, uv.lock, production runtime, old long-run artifacts
 parked_todos: >-
   MuJoCo/PhysX solver behavior and unavailable same-step solved external-load

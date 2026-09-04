@@ -81,11 +81,10 @@ def test_velocity_flat_uses_bam_asset_and_canonical_home() -> None:
     assert "offset={name: float(value)" in source
 
 
-def test_velocity_flat_keeps_raw_clip_at_rl_wrapper_boundary() -> None:
+def test_velocity_flat_keeps_mjlab_unclipped_action_path() -> None:
     source = _source(TASK)
     assert "clip=None" in source
-    assert "def clip_actions_for_training(" in source
-    assert "return clip_policy_action(action, limit=1.0)" in source
+    assert "def clip_actions_for_training(" not in source
 
 
 def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
@@ -129,7 +128,7 @@ def test_ppo_runner_matches_mjlab_budget_and_policy_shape() -> None:
     assert "hidden_dims=[512, 256, 128]" in source
     assert 'obs_groups = {"actor": ["policy"], "critic": ["critic"]}' in source
     assert "save_interval = 250" in source
-    assert "clip_actions = 1.0" in source
+    assert "clip_actions = None" in source
 
 
 def test_ppo_runner_keeps_observation_normalization_enabled() -> None:

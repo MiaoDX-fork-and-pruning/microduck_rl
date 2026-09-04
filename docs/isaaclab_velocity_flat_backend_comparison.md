@@ -88,10 +88,12 @@ Concrete mismatches found by the runtime/config audit, with current disposition:
   `dof_frictionloss` and injects its own solver-side budget. Until the PhysX
   friction bridge exists, leaving the USD value active is an additional hidden
   dynamics difference.
-- **Action path:** raw policy actions are clipped at the RSL-RL VecEnv boundary
-  (`clip_actions=1.0`) before the absolute HOME+scale target transform.
-  IsaacLab's action term intentionally has `clip=None`, because its clip field
-  runs after scale+offset and would change the mjlab semantics.
+- **Action path:** the production mjlab runner leaves `clip_actions=None`, so
+  raw policy actions reach the absolute HOME+scale target transform. IsaacLab
+  now follows that boundary and keeps the action term at `clip=None`; its clip
+  field would run after scale+offset and change the mjlab semantics. The
+  earlier strict run used an Isaac-only `clip_actions=1.0` and is therefore
+  diagnostic-invalid.
 - **Corrected HOME transcription:** an earlier IsaacLab-only ABI table put the
   right-hip-pitch HOME value (`0.4579 rad`) in the right-hip-yaw slot. The mjlab
   `HOME_FRAME` sets both hip-yaw joints to `0.0`; the IsaacLab table, spawn pose,
@@ -147,13 +149,11 @@ shape used for the runtime gate (250 control steps per case, 16 environments):
 | lateral `0.20` | `(-0.011, 0.129) m/s` | `0.112 m/s` | `0` | `1.877 rad` | `72.2` |
 | yaw `0.50` | `(-0.008, 0.006) m/s`, `0.004 rad/s` yaw | `0.088 m/s`, `1.201 rad/s` yaw | `0` | `0.888 rad` | `75.3` |
 
-Raw policy actions are large (p95 absolute action is about 125); the harness
-clips actions before applying them, so this is evidence of a saturated policy,
-not a hardware-ready command magnitude. The run is finite and survives the
-battery, but it does not match the accepted mjlab policy's forward behavior
-(`0.079 m/s` equivalent over its continuous slice) plus low tilt (`0.082 rad`),
-and it fails the commanded-yaw behavior. The correct conclusion is therefore
-“training is reproducible, behavior is not yet equivalent.”
+Raw policy actions in the earlier checkpoint are large (p95 absolute action is
+about 125). That checkpoint was trained with the wrong Isaac-only clip and is
+not a strict-parity baseline; a post-fix raw-action replay becomes non-finite,
+so it cannot be used to infer behavior of the corrected recipe. The run is
+retained only for root-cause diagnosis, not acceptance.
 
 Battery artifact:
 `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_match_5999.json`.
