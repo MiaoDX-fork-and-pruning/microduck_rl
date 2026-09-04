@@ -39,10 +39,15 @@ class BamActuatorCfg(ActuatorBaseCfg):
     effort_limit_sim: float = 1.0e9
     velocity_limit: float = 100.0
     velocity_limit_sim: float = 100.0
-    # BAM firmware command latency is sampled once per environment and held
-    # between resets.  These are control-step lags, not PhysX substeps.
+    # BAM firmware command latency follows mjlab's DelayBuffer: with the
+    # default update period of zero, a per-environment lag is sampled on each
+    # actuator command application. These are simulator callback steps; the
+    # task must call this actuator at the same cadence as the reference path.
     delay_min_lag: int = 3
     delay_max_lag: int = 6
+    delay_hold_prob: float = 0.0
+    delay_update_period: int = 0
+    delay_per_env_phase: bool = True
     vin_drop_gain_range: tuple[float, float] = (0.0, 0.2)
     vin_min: float = 6.0
     action_clip: float = 1.0
@@ -89,21 +94,31 @@ class BamActuator(ActuatorBase):
             min_lag=cfg.delay_min_lag,
             max_lag=cfg.delay_max_lag,
             device=self._device,
-        )
-        self._delay.set_delays(
-            torch.randint(cfg.delay_min_lag, cfg.delay_max_lag + 1, (self._num_envs,), device=self._device)
+            hold_prob=cfg.delay_hold_prob,
+            update_period=cfg.delay_update_period,
+            per_env_phase=cfg.delay_per_env_phase,
+            sample_lag_each_push=True,
         )
         self._delay_initialized = torch.zeros(
             (self._num_envs,), dtype=torch.bool, device=self._device
         )
-        # Keep the most recent absolute target per environment.  mjlab's
-        # delayed actuator history is reset to the episode's initial command,
-        # never to zero; retaining this value lets a partial IsaacLab reset
-        # seed its FIFO without a transient HOME-to-zero command.
+        # Keep the most recent absolute target for runtime diagnostics. The
+        # delay FIFO itself follows mjlab's reset-to-empty then first-command
+        # backfill semantics, so an episode cannot inherit an old target.
         self._last_target = torch.zeros(
             (self._num_envs, num_joints), dtype=torch.float32, device=self._device
         )
+        # Keep the motor-only effort separately from the final articulation
+        # effort.  mjlab's voltage sag uses the previous BAM motor torque;
+        # feedforward effort is an external command and must not contribute to
+        # the battery-load estimate.
+        self._previous_motor_effort = torch.zeros_like(self._last_target)
         self._applied_effort = torch.zeros_like(self._last_target)
+        # Runtime parity probes read this diagnostic to distinguish the raw
+        # absolute target from the target visible after BAM's control-step
+        # FIFO.  It is observational only and never participates in effort
+        # computation.
+        self._delayed_target = torch.zeros_like(self._last_target)
         self._friction_scale = torch.full(
             (self._num_envs, 1), cfg.friction_scale, dtype=torch.float32, device=self._device
         )
@@ -119,11 +134,12 @@ class BamActuator(ActuatorBase):
             ids = torch.as_tensor(env_ids, device=self._device, dtype=torch.long)
         if ids.numel() == 0:
             return
-        self._delay.delay[ids] = torch.randint(
-            self.cfg.delay_min_lag, self.cfg.delay_max_lag + 1, (ids.numel(),), device=self._device
-        )
-        self._delay.reset(ids, self._last_target[ids])
+        # mjlab's DelayBuffer reset clears the episode rows; the next command
+        # append backfills those rows with the first command of the episode.
+        self._delay.reset(ids)
+        self._previous_motor_effort[ids] = 0.0
         self._applied_effort[ids] = 0.0
+        self._delayed_target[ids] = self._last_target[ids]
         self.applied_effort = self._applied_effort
         self._delay_initialized[ids] = False
 
@@ -147,11 +163,12 @@ class BamActuator(ActuatorBase):
             self._last_target[uninitialized] = target_command[uninitialized].detach()
             self._delay_initialized[uninitialized] = True
         target = self._delay.push(target_command)
+        self._delayed_target.copy_(target.detach())
         self._last_target.copy_(target_command.detach())
         # Effective voltage uses the previous solved motor effort.  PhysX does
         # not expose the same-step external load to this callback; that
         # limitation is recorded as BACKEND_DELTA in the parity ledger.
-        previous = getattr(self, "applied_effort", self._applied_effort)
+        previous = self._previous_motor_effort
         supply = effective_supply_voltage(
             self._supply_voltage,
             previous,
@@ -176,6 +193,7 @@ class BamActuator(ActuatorBase):
         # this buffer to the computed inference tensor would make the next
         # episode reset fail when it clears the previous effort in-place.
         with torch.inference_mode(False):
+            self._previous_motor_effort.copy_(motor_effort.detach())
             self._applied_effort.copy_(motor_effort + feedforward)
         self.computed_effort = self._applied_effort
         self.applied_effort = self._applied_effort

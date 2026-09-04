@@ -783,9 +783,11 @@ checkpoint is not a reliable gait. See
   environments per step and reaches about 0.85 rad tilt. Task H is therefore
   not accepted as a walking result. The completed 6000-iteration budget run is
   invalid as the final baseline because its critic architecture was stale and
-  its battery failed. A replacement run requires the parity closure gates, a
-  new manifest, and the same fixed battery; external-load BAM friction parity
-  remains an explicit PhysX limitation.
+  its battery failed. That run predates the strict-parity lock in this plan and
+  was launched under the earlier "close enough" acceptance rule; it is not an
+  execution of the current Task H. A replacement run requires the parity
+  closure gates, a new manifest, and the same fixed battery; external-load BAM
+  friction parity remains an explicit PhysX limitation.
 
 ### Task I — decide whether to continue
 
@@ -880,23 +882,38 @@ After that point, additional tasks, backlash, rollers, generalist training, came
 - [x] **T1 (P1)** — Create and maintain the parity ledger; populate every
   Velocity-Flat surface from the current comparison audit and attach tests or
   benchmark evidence to each row.
-- [ ] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
+- [x] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
   per-environment voltage sag, friction duplication, USD damping, and HOME/limit
-  handling; add actuator and asset regression tests.
-- [ ] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
+  handling; add actuator and asset regression tests. The production mjlab
+  runner's default `clip_actions=None` is now matched; the previous strict
+  checkpoint used an Isaac-only clip and is diagnostic-invalid. Remaining
+  solved external-load timing is the explicit `BACKEND_DELTA`.
+- [x] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
   encoder bias, IMU and observation noise/delay, preserving non-accumulation;
-  add deterministic seeded distribution tests.
-- [ ] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
+  add deterministic seeded distribution tests. Implementation, CPU contracts,
+  and seeded production-runtime distribution evidence are attached in the
+  active parity ledger.
+- [x] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
   Velocity-Flat rewards/terminations, and privileged critic observations while
-  preserving the 61D actor ABI; add pure-function and config tests.
+  preserving the 61D actor ABI; add pure-function and config tests. All terms
+  are wired and finite in the production probes. Foot-site/direct count
+  kernels, seeded commands, rewards, terminations, and the 76D critic are
+  covered; the filtered self-contact view remains intentionally disabled in
+  favor of the concrete raw PhysX view.
 - [x] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
   supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
   and record the result as a software-stack delta.
-- [ ] **T6 (P1)** — Extend the common command battery to identical commands,
-  horizons, seeds, reset rules, and metrics; require finite tensors, real
-  translation, bounded tilt, yaw response, and no unexplained resets.
-- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and only then launch the
-  replacement 4096-env/6000-iteration strict-parity baseline with a new manifest.
+- [x] **T6 (P1)** — Extend the common command battery to identical commands,
+  horizons, seeds, reset rules, and metrics; the harness requires finite
+  tensors and records translation, tilt, yaw response, and resets. Motion
+  quality gates are evaluated on a trained checkpoint, not the 5-iteration
+  integration smoke.
+- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch a replacement
+  4096-env/6000-iteration strict-parity run with a new manifest. The corrected
+  64-env/5-iteration smoke and `[1,61] -> [1,14]` ONNX export now pass in
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-31-53/`.
+  The earlier 6000-iteration run was trained with `clip_actions=1.0` and is
+  invalid; the corrected long run and trained-policy battery remain pending.
 
 ## 26. Failure modes and verification
 

@@ -1,13 +1,17 @@
 # Velocity-Flat Backend Comparison
 
-Status: **strict semantic closure in progress; runtime smoke validated, battery gate pending**
+Status: **strict semantic closure in progress; corrected strict run completed, trained-policy battery blocked**
 
-This compares the current IsaacLab smoke checkpoint with the accepted mjlab
-`velocity_flat` policy. The only directly comparable case is a forward command
-of `0.20 m/s`; the IsaacLab battery also covers zero, lateral, and yaw, while
-the existing mjlab battery uses forward-speed sweeps. The horizons differ
-(IsaacLab: 250 control steps / 5 s; MuJoCo: 300 control steps / 6 s), so the
-comparison is directional evidence, not a parity claim.
+This compares the corrected strict IsaacLab checkpoint with the accepted mjlab
+`velocity_flat` policy. The shared battery covers zero, forward, lateral, yaw,
+and both turn directions at 300 control steps / 6 s per case. It is a behavior
+gate rather than an exact trajectory-equality claim because MuJoCo and PhysX
+solver behavior remains a documented backend delta.
+
+The recorded 6000-iteration IsaacLab run predates the strict-parity plan lock
+(`5f4b206`).  The earlier plan explicitly allowed a useful backend result
+without complete feature parity.  That run is retained as diagnostic history;
+it is not evidence that the current strict Task H was executed or accepted.
 
 The current comparison experiment is `microduck_isaaclab_velocity_flat_mjlab_match`.
 Its 64-environment, 5-iteration IsaacLab smoke completed successfully on
@@ -33,15 +37,13 @@ Strictly aligned for the next cross-backend run:
   `1e-3`, `gamma=0.99`, `lambda=0.95`, adaptive KL schedule, and 6000
   iterations.
 
-Still excluded from a backend-only claim because runtime parity evidence or
-equivalent PhysX data sources are not closed:
+Still excluded from a backend-only claim:
 
-- contact sensors and geom-level foot clearance, air-time, slip, and
-  self-collision semantics;
-- runtime proof for pose/head/body tracking and head-bias curricula;
-- mjlab domain randomization, observation noise/delay, curricula, and its
-  explicit turn-in-place command bucket;
-- privileged critic source closure and the USD/PhysX drive configuration.
+- MuJoCo implicitfast versus PhysX GPU solver behavior;
+- same-step solved external-load friction timing, which PhysX does not expose
+  to the pre-step BAM callback;
+- the trained-policy behavior gate, because the strict checkpoint does not yet
+  produce positive forward/lateral response.
 
 ## Full parity inventory
 
@@ -50,33 +52,33 @@ ordered roughly by expected effect on the learned behavior.
 
 | Area | mjlab Velocity-Flat | IsaacLab status | Impact |
 | --- | --- | --- | --- |
-| Actuator delay | BAM position loop delay `3..6` control steps | per-environment FIFO delay `3..6` | aligned; runtime trace pending |
+| Actuator delay | mjlab `DelayBuffer` position-target delay `3..6`, with lag sampled each actuator call (`update_period=0`) and reset-row first-command backfill | per-environment `ControlStepDelay(sample_lag_each_push=True)` | aligned; seeded backend-neutral fixture matches lag/target step-for-step |
 | BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range plus previous-effort sag and floor | aligned; actuator bench evidence |
 | BAM friction | friction budget written into solver friction/damping using solved external load | friction budget is only a bench helper; PhysX callback cannot see solved load | high / backend limit |
-| BAM gain DR | reset-time `kp`/`kd` and friction-scale hooks | no `kp`/`kd` DR; friction scale is not applied to PhysX | medium-high |
-| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | terms wired; contact terms use real body-level sensors, geom-level filtering is a backend delta | high / contact delta |
-| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | non-zero sampled 4D+6D command block and pose terms wired; curriculum proof pending | medium-high |
-| Turn-in-place | explicit 15% command bucket | explicit held 15% turn bucket | aligned; battery proof pending |
-| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | stateful adapter wired; runtime seeded distribution proof pending | high |
-| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | separate 76D critic group with real contact sensor tensors | aligned; body-level contact delta |
-| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | event terms wired with restore-then-apply adapters; seeded runtime distribution proof pending | high |
+| BAM gain DR | `kp`/`kd` randomization disabled; friction-scale hook enabled | no gain event; friction-scale state is wired but its PhysX dynamics effect is unproven | friction remains high impact |
+| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | all 16 terms are wired; canonical foot-site terms and raw PhysX self-contact are runtime-finite in multiple environments | formula parity closed; solver trajectory remains a backend delta |
+| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | non-zero sampled 4D+6D command block, pose terms, and range curricula are wired and runtime-probed | aligned |
+| Turn-in-place | explicit 15% command bucket | explicit held 15% turn bucket | aligned; 13.11% seeded runtime sample |
+| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | stateful adapter wired and seeded runtime-probed | aligned |
+| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | separate runtime-finite 76D critic group with real contact tensors and MJCF foot-site heights | aligned |
+| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | event terms wired with restore-then-apply adapters and seeded runtime probes | aligned |
 | Termination | timeout, 70-degree orientation, terrain bounds, NaN state | timeout, 70-degree orientation, terrain bounds, NaN state | aligned; runtime smoke |
-| Asset sensors | MJCF IMU/ang-momentum/foot sites are available to mjlab | USD has the articulated geometry but does not import MJCF sensor objects | medium; root IMU terms are approximations |
+| Asset sensors | MJCF IMU/ang-momentum/foot sites are available to mjlab | canonical foot sites are reconstructed from MJCF constants and subtree momentum from rigid-body tensors; actor IMU remains a root-state adapter | runtime-finite; measurement source is an explicit adapter delta |
 | Asset dynamics | MJCF default joint damping `0.053` and BAM solver-side friction path | USD damping is zero and PhysX joint friction is nominal-only; explicit BAM does not close the loop | high |
 | Physics solver | MuJoCo `implicitfast`, 10 iterations / LS 20 | PhysX GPU solver, articulation iterations 4/1 | intentional backend difference |
 | RL implementation | `rsl-rl-lib 5.0.1` | IsaacLab image bundles `rsl-rl-lib 5.4.1` | medium; PPO code path is not byte-identical |
-| Evaluation | mjlab accepted battery is 300 steps, one continuous env, forward sweeps | IsaacLab battery is 250 steps across 16 envs, fixed zero/forward/lateral/yaw | medium; metrics need a common harness |
+| Evaluation | historical accepted battery uses 300-step forward sweeps | shared spec and IsaacLab six-case harness use 300 steps, 16 envs, and deterministic reset instrumentation | harness matched; trained response remains blocked |
 
-Additional concrete mismatches found in the runtime/config audit:
+Concrete mismatches found by the runtime/config audit, with current disposition:
 
-- **Reset distribution:** mjlab samples reset base height in `0.12..0.13 m`,
-  randomizes joint offsets through `reset_robot_joints`, and starts PPO with
-  randomized episode phases. IsaacLab currently resets to one exact HOME pose
-  at `z=0.12 m`; only RSL-RL's episode-length randomization is shared.
-- **Termination boundary:** mjlab's default `fell_over` limit is 70 degrees,
-  plus terrain-bounds and NaN-state terms. IsaacLab's `gravity_xy > 0.75`
-  criterion trips at roughly 49 degrees and has a separate `z < 0.055 m`
-  cutoff. This changes the learning problem before rewards are considered.
+- **Reset distribution (closed):** IsaacLab now samples
+  base height `0.12..0.13 m`, x/y and yaw from the mjlab ranges, restores HOME,
+  and resets actor history. The seeded multi-env parity report closes the
+  distribution row; the explicit BAM reset hook also clears delayed targets
+  and previous effort between episodes.
+- **Termination boundary (corrected):** the early `gravity_xy > 0.75` / root-z
+  rule was removed. The production manager now carries timeout, 70-degree
+  orientation, terrain-bounds, and NaN terms; seeded source proof remains.
 - **Sensor frame:** mjlab actor gyro/gravity use the named IMU sensor and apply
   the same per-environment mounting misalignment, noise, and delay. IsaacLab
   reads root-state tensors directly, so even identically named observations are
@@ -86,14 +88,24 @@ Additional concrete mismatches found in the runtime/config audit:
   `dof_frictionloss` and injects its own solver-side budget. Until the PhysX
   friction bridge exists, leaving the USD value active is an additional hidden
   dynamics difference.
-- **Action path:** raw policy actions are clipped at the RSL-RL VecEnv boundary
-  (`clip_actions=1.0`) before the absolute HOME+scale target transform.
-  IsaacLab's action term intentionally has `clip=None`, because its clip field
-  runs after scale+offset and would change the mjlab semantics.
-- **HOME/limit inconsistency:** the canonical policy HOME uses
-  `right_hip_yaw=0.4579 rad`, while both the MJCF and imported USD cap that joint
-  at `0.4363 rad`. IsaacLab clamps only the spawn value, so its initial policy
-  observation carries a persistent `-0.0219 rad` offset on that joint.
+- **Action path:** the production mjlab runner leaves `clip_actions=None`, so
+  raw policy actions reach the absolute HOME+scale target transform. IsaacLab
+  now follows that boundary and keeps the action term at `clip=None`; its clip
+  field would run after scale+offset and change the mjlab semantics. The
+  earlier strict run used an Isaac-only `clip_actions=1.0` and is therefore
+  diagnostic-invalid.
+- **Corrected HOME transcription:** an earlier IsaacLab-only ABI table put the
+  right-hip-pitch HOME value (`0.4579 rad`) in the right-hip-yaw slot. The mjlab
+  `HOME_FRAME` sets both hip-yaw joints to `0.0`; the IsaacLab table, spawn pose,
+  action offset, golden target, and direct cross-source regression test now use
+  that value. The authored right-hip-yaw limit `[-0.5236, 0.4363] rad` is therefore
+  not a HOME/limit conflict. Checkpoints trained before this correction are not
+  valid strict-parity baselines.
+- **Contact source (closed with explicit source choice):** foot height and
+  velocity use canonical MJCF site offsets, and raw concrete PhysX views now
+  preserve the mjlab three-body, ground-excluding self-collision count in four
+  environments. The filtered ContactSensor path remains disabled because its
+  nested USD expansion is not multi-environment safe.
 - **Software implementation:** the accepted mjlab run uses `rsl-rl-lib 5.0.1`;
   the IsaacLab 3.0.0 image uses `rsl-rl-lib 5.4.1`. Even with matching scalar
   PPO fields, optimizer/distribution implementation details are not byte-level
@@ -104,16 +116,17 @@ MJCF and USD both contain 14 actuated revolute joints and 75 collision
 geometries. The remaining asset concern is dynamics and sensor authoring, not
 the joint-name mapping itself.
 
-The first long run answers whether the matched core recipe learns comparable
-velocity behavior. A second run that ports the remaining reward, DR, and
-curriculum terms is required before attributing any residual gap to simulator
-backend behavior.
+No replacement long run is valid while the corrected strict checkpoint fails
+the trained-policy forward/lateral response gate. The ledger, deterministic
+battery harness, and fresh 64-environment/5-iteration smoke are already
+closed; the next work is diagnosis or a focused semantic proof, not another
+long run.
 
 ## Artifact identity
 
 | Backend | Task | Policy artifact | Artifact hash | Scene/runtime |
 | --- | --- | --- | --- | --- |
-| IsaacLab (mjlab-match final) | `IsaacLab-Velocity-Flat-MicroDuck` | `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_03-03-23/model_5999.pt` | `a60ff567c4849725798870bf383b9443c56b378d8106df9f92d21190dd40ce37` | IsaacLab 3.0.0 / Isaac Sim 6.0.1 |
+| IsaacLab (corrected strict run) | `IsaacLab-Velocity-Flat-MicroDuck` | `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-52-35_strict_unclipped/model_5999.pt` | `db0cbd9cba9c3814c235674910206924b7e6a0bdcc2e0cccb2e8779cb7c52b04` | IsaacLab 3.0.0 / Isaac Sim 6.0.1 |
 | mjlab | `Mjlab-Velocity-Flat-MicroDuck` | `artifacts/specialists/velocity_flat/policy.onnx` | `a092ee993b691fab1fdc96206a7b3eab832d88c14248e205b3cd43f3c9e73317` | MuJoCo `scene.xml` |
 
 The mjlab artifact is the accepted policy from source commit `facd4f4`; its
@@ -123,7 +136,11 @@ The earlier IsaacLab-only smoke checkpoint remains useful for debugging, but
 must not be compared as a matched baseline because it used a different command
 profile, reward kernel, network, and PPO budget.
 
-## Matched final battery
+## Historical battery
+
+The table below is retained as the earlier diagnostic record and is not the
+corrected strict result. The current strict result is recorded immediately
+below it.
 
 The final IsaacLab checkpoint was evaluated with the same fixed command battery
 shape used for the runtime gate (250 control steps per case, 16 environments):
@@ -135,16 +152,55 @@ shape used for the runtime gate (250 control steps per case, 16 environments):
 | lateral `0.20` | `(-0.011, 0.129) m/s` | `0.112 m/s` | `0` | `1.877 rad` | `72.2` |
 | yaw `0.50` | `(-0.008, 0.006) m/s`, `0.004 rad/s` yaw | `0.088 m/s`, `1.201 rad/s` yaw | `0` | `0.888 rad` | `75.3` |
 
-Raw policy actions are large (p95 absolute action is about 125); the harness
-clips actions before applying them, so this is evidence of a saturated policy,
-not a hardware-ready command magnitude. The run is finite and survives the
-battery, but it does not match the accepted mjlab policy's forward behavior
-(`0.079 m/s` equivalent over its continuous slice) plus low tilt (`0.082 rad`),
-and it fails the commanded-yaw behavior. The correct conclusion is therefore
-“training is reproducible, behavior is not yet equivalent.”
+Raw policy actions in the earlier checkpoint are large (p95 absolute action is
+about 125). That checkpoint was trained with the wrong Isaac-only clip and is
+not a strict-parity baseline; a post-fix raw-action replay becomes non-finite,
+so it cannot be used to infer behavior of the corrected recipe. The run is
+retained only for root-cause diagnosis, not acceptance.
 
 Battery artifact:
 `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_match_5999.json`.
+
+## Corrected strict battery
+
+The corrected run uses `clip_actions=None`, seed `2026`, 16 environments, and
+300 steps per case. All tensors are finite and no environment reset occurred.
+Zero, yaw, turn-left, and turn-right pass; forward and lateral fail only the
+minimum command-response gate because the measured mean XY velocity remains
+near zero. This keeps the behavior gate open without treating the failure as a
+reward/PPO tuning request.
+
+Artifact: `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
+Checkpoint SHA256: `db0cbd9cba9c3814c235674910206924b7e6a0bdcc2e0cccb2e8779cb7c52b04`.
+ONNX export: `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-52-35_strict_unclipped/exported/policy.onnx`, checker passed, `[1,61] -> [1,14]`.
+Reset-fix regression battery: `.cache/isaaclab-assets/velocity_flat_command_battery_resetfix_strict.json`.
+Directional trace: `.cache/isaaclab-assets/velocity_flat_directional_trace_resetfix2_4x4.json`.
+
+## P0 policy A/B diagnosis
+
+To separate a strict-checkpoint behavior failure from command/action wiring or
+the PhysX runtime, the accepted mjlab `model_5999.pt` was loaded by the same
+IsaacLab 3.0.0 / rsl-rl-lib 5.4.1 runner and evaluated with the same seed,
+reset protocol, command freeze, 16 environments, and 300-step six-case
+battery. The accepted policy passes every case in IsaacLab, including positive
+forward and lateral response, while the corrected strict IsaacLab checkpoint
+fails only those two response gates. This is a policy/training behavior delta,
+not evidence of a command-slot, action-boundary, or BAM target-path mismatch.
+
+| Checkpoint evaluated in IsaacLab | Battery result | Forward mean XY velocity | Lateral mean XY velocity | Resets | Artifact |
+| --- | --- | ---: | ---: | ---: | --- |
+| accepted mjlab `model_5999.pt` | all six cases pass | `(0.118, 0.011) m/s` | `(-0.040, 0.068) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_policy_p0.json` |
+| corrected strict IsaacLab `model_5999.pt` | forward/lateral blocked | `(-0.011, 0.004) m/s` | `(-0.014, -0.001) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json` |
+
+The bounded intermediate trace independently records exact command tails,
+raw actions, canonical-to-simulator action order, BAM delayed targets and
+efforts, and body-frame velocities for zero/forward/lateral/yaw:
+`.cache/isaaclab-assets/velocity_flat_directional_trace_p0.json`. It reports
+finite tensors, raw-action to action-manager equality, command tails exactly
+`[0.2,0,0]` and `[0,0.2,0]`, and delay lags in `3..6`. Therefore no reward/PPO
+or action-clipping change is justified by this failure. The known PhysX solver
+and same-step external-load friction timing limitation remains separately
+recorded as `BACKEND_DELTA`.
 
 ## Common forward slice
 
@@ -187,9 +243,10 @@ Task H has a reproducible runtime battery, checkpoint manifest, and an
 explicitly matched core recipe. The 6000-iteration run completed normally, but
 it should not be marked accepted as a walking or backend-parity result: the
 final battery shows saturated actions, high tilt, and failed yaw tracking.
-The next engineering step is to close the remaining semantic gaps (especially
-action scaling/actuator semantics, contact rewards, DR, noise/delay, and
-curricula) before attributing the difference to simulator backend behavior;
+The next engineering step is to close the remaining semantic evidence gaps
+(especially PhysX friction effects, seeded DR/noise/delay/command traces, and
+the unified command battery) before attributing any difference to
+simulator backend behavior;
 the remaining model limitation is also explicit: USD `drive_configured=false`
 and BAM external-load friction parity is unavailable.
 
@@ -197,3 +254,19 @@ Raw inputs:
 
 - `.cache/isaaclab-assets/velocity_flat_command_battery.json`
 - `.cache/mjlab_velocity_flat_command_battery/velocity_flat/report.json`
+
+## Fixed-root dynamics proof
+
+The bounded same-state comparison uses the walk MJCF HOME, a fixed root at
+`z=0.5 m`, `dt=0.005 s`, a three-step target delay, `7.5 V` nominal supply,
+and `0.1 V/Nm` previous-motor-effort sag. Task DR is pinned to neutral values.
+It records step and sine target cases for three paths: MuJoCo with BAM's native
+solver friction fields, MuJoCo motor-only, and IsaacLab PhysX. The merged report
+is `.cache/isaaclab-assets/fixed_root_dynamics_parity_1x12.json` (finite,
+SHA256 `009e205e65722a36a67e9c62a7eee7dbd2d1f88b03ea03813ec72f8e3bccdb26`).
+Delayed target start error is at most `2.98e-9`; IsaacLab's trajectory is
+materially closer to MuJoCo motor-only than MuJoCo's BAM-solver trajectory
+(step qdot errors `0.0818` vs `0.4020 rad/s`; sine `0.0060` vs `0.1503
+rad/s`). This is evidence for the explicit `BACKEND_DELTA`: PhysX cannot
+provide the same-step solved external load to the pre-step BAM callback, and
+solver integration is not expected to be byte-identical.

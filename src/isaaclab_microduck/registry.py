@@ -4,7 +4,10 @@ from __future__ import annotations
 
 import importlib.util
 
-TASKS: tuple[str, ...] = ("IsaacLab-Velocity-Flat-MicroDuck",)
+TASKS: tuple[str, ...] = (
+    "IsaacLab-Velocity-Flat-MicroDuck",
+    "IsaacLab-Velocity-Flat-MicroDuck-Adapted",
+)
 
 
 def available_tasks() -> tuple[str, ...]:

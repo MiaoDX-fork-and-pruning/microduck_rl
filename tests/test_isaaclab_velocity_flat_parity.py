@@ -12,14 +12,22 @@ from isaaclab_microduck.tasks.parity import (
     gaussian_tracking,
     policy_action_to_target,
     sample_uniform_with_zero,
+    subtree_angular_momentum,
 )
 
 
-def test_action_clip_and_home_transform_are_mjlab_semantics() -> None:
+def test_action_target_is_unclipped_by_default_like_mjlab_velocity_flat() -> None:
     action = torch.tensor([[-2.0, -0.25, 0.5, 2.0]])
     home = torch.ones(1, 4)
     assert torch.equal(clip_policy_action(action), torch.tensor([[-1.0, -0.25, 0.5, 1.0]]))
-    assert torch.equal(policy_action_to_target(action, home), torch.tensor([[0.0, 0.75, 1.5, 2.0]]))
+    assert torch.equal(policy_action_to_target(action, home), torch.tensor([[-1.0, 0.75, 1.5, 3.0]]))
+    assert torch.equal(policy_action_to_target(action, home, clip=1.0), torch.tensor([[0.0, 0.75, 1.5, 2.0]]))
+
+
+def test_live_mjlab_velocity_runner_does_not_clip_actions() -> None:
+    from mjlab_microduck.tasks.microduck_velocity_env_cfg import MicroduckRlCfg
+
+    assert MicroduckRlCfg.clip_actions is None
 
 
 def test_bam_config_keeps_reference_delay_sag_contract() -> None:
@@ -36,7 +44,7 @@ def test_bam_reset_keeps_startup_voltage_samples() -> None:
     reset_body = source.split("    def reset(", 1)[1].split("    def compute(", 1)[0]
     assert "uniform_" not in reset_body
     assert "_applied_effort[ids] = 0.0" in reset_body
-    assert "self._delay.reset(ids, self._last_target[ids])" in reset_body
+    assert "self._delay.reset(ids)" in reset_body
 
 
 def test_bam_delay_initialization_is_per_environment() -> None:
@@ -54,6 +62,34 @@ def test_bam_delay_is_bounded_and_resettable() -> None:
     assert out[4] == 1.0
     delay.reset(torch.tensor([0]), torch.tensor([[9.0]]))
     assert float(delay.push(torch.tensor([[10.0]]))[0, 0]) == 9.0
+
+
+def test_mjlab_delay_sampling_matches_reference_delay_buffer() -> None:
+    from mjlab.utils.buffers import DelayBuffer
+
+    isaac_generator = torch.Generator().manual_seed(2026)
+    reference_generator = torch.Generator().manual_seed(2026)
+    isaac = ControlStepDelay(
+        2,
+        1,
+        min_lag=3,
+        max_lag=6,
+        generator=isaac_generator,
+        sample_lag_each_push=True,
+    )
+    reference = DelayBuffer(
+        min_lag=3,
+        max_lag=6,
+        batch_size=2,
+        generator=reference_generator,
+    )
+    sequence = [torch.tensor([[float(step)], [float(10 + step)]]) for step in range(10)]
+    for target in sequence:
+        assert torch.equal(isaac.push(target), reference_value := (reference.append(target), reference.compute())[1])
+    isaac.reset(torch.tensor([1]), torch.tensor([[99.0]]))
+    reference.reset(torch.tensor([1]))
+    target = torch.tensor([[20.0], [100.0]])
+    assert torch.equal(isaac.push(target), (reference.append(target), reference.compute())[1])
 
 
 def test_bam_delay_reset_accepts_compact_nonzero_env_subset() -> None:
@@ -100,3 +136,18 @@ def test_zero_bucket_and_reward_kernel() -> None:
                                    generator=torch.Generator().manual_seed(2))
     assert torch.count_nonzero(out) == 0
     assert torch.allclose(gaussian_tracking(torch.zeros(4, 3), 0.5), torch.ones(4))
+
+
+def test_subtree_angular_momentum_includes_orbital_and_spin_terms() -> None:
+    mass = torch.tensor([[1.0, 1.0]])
+    position = torch.tensor([[[-1.0, 0.0, 0.0], [1.0, 0.0, 0.0]]])
+    # Opposed y velocities give +2 z orbital momentum about the aggregate COM.
+    linear_velocity = torch.tensor([[[0.0, -1.0, 0.0], [0.0, 1.0, 0.0]]])
+    angular_velocity = torch.tensor([[[0.0, 0.0, 1.0], [0.0, 0.0, 1.0]]])
+    inertia = torch.tensor([[[1.0, 1.0, 2.0], [1.0, 1.0, 2.0]]])
+    identity = torch.tensor([[[0.0, 0.0, 0.0, 1.0], [0.0, 0.0, 0.0, 1.0]]])
+    momentum = subtree_angular_momentum(
+        mass, position, linear_velocity, angular_velocity, inertia, identity
+    )
+    # Each body's spin contributes +2 z, for total Lz = 2 + 2 + 2 = 6.
+    assert torch.equal(momentum, torch.tensor([[0.0, 0.0, 6.0]]))

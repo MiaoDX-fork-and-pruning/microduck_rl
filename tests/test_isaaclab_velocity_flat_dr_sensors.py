@@ -39,6 +39,12 @@ def test_velocity_flat_wires_reset_and_dr_events() -> None:
         assert name in source
 
 
+def test_reset_velocity_flat_state_resets_explicit_actuator_state() -> None:
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat_dr.py").read_text()
+    assert "actuators.reset(ids)" in source
+    assert "set_joint_position_target_index" in source
+
+
 def test_seeded_uniform_reference_is_repeatable() -> None:
     torch.manual_seed(23)
     first = sample_uniform((16, 3), -0.003, 0.003)
@@ -320,6 +326,26 @@ def test_periodic_sensor_delay_is_control_step_based_and_bounded() -> None:
     assert 0 <= env._gyro_lag.item() <= 1
 
 
+def test_dynamic_sensor_signal_has_exact_zero_or_one_step_lag() -> None:
+    """The actor path must delay a changing signal by control steps, not substeps."""
+
+    def collect(delay: int) -> list[float]:
+        env = SimpleNamespace(num_envs=1, device=torch.device("cpu"))
+        outputs = []
+        for value in range(5):
+            signal = torch.tensor([[float(value)]])
+            outputs.append(
+                sensor_corruption(env, "gyro", signal, noise=0.0, delay=delay)
+                .item()
+            )
+        return outputs
+
+    assert collect(0) == [0.0, 1.0, 2.0, 3.0, 4.0]
+    # DelayBuffer-style initialization backfills the first sample.  Once the
+    # history is warm, every output is exactly the preceding control-step value.
+    assert collect(1) == [0.0, 0.0, 1.0, 2.0, 3.0]
+
+
 def test_sensor_delay_subset_reset_does_not_rewind_other_envs() -> None:
     env = SimpleNamespace(num_envs=2, device=torch.device("cpu"))
     for step in range(4):
@@ -329,6 +355,33 @@ def test_sensor_delay_subset_reset_does_not_rewind_other_envs() -> None:
     reset_actor_sensor_state(env, torch.tensor([0]))
     assert env._gyro_delay_step[0].item() == 0
     assert env._gyro_delay_step[1].item() == before[1].item()
+
+
+def test_sensor_delay_reset_backfills_first_sample_like_mjlab_delay_buffer() -> None:
+    env = SimpleNamespace(num_envs=2, device=torch.device("cpu"))
+    for step in range(4):
+        sensor_corruption(
+            env,
+            "gyro",
+            torch.full((2, 1), float(step)),
+            noise=0.0,
+            delay=1,
+            delay_update_period=64,
+        )
+    reset_actor_sensor_state(env, torch.tensor([1]))
+    out = sensor_corruption(
+        env,
+        "gyro",
+        torch.tensor([[4.0], [9.0]]),
+        noise=0.0,
+        delay=1,
+        delay_update_period=64,
+    )
+    # mjlab DelayBuffer clears a reset row and backfills its first append, so
+    # even when lag=1 the first post-reset value is current (not zero/stale).
+    assert out[1].item() == 9.0
+    assert bool(env._gyro_history_valid[1])
+    assert out[0].item() in (3.0, 4.0)
 
 
 def test_joint_position_actor_noise_matches_mjlab_bound() -> None:

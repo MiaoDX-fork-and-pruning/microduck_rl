@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import torch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,9 +36,117 @@ def test_velocity_flat_command_profile_matches_mjlab_recipe() -> None:
     assert "resampling_time_range=(3.0, 8.0)" in source
     assert "rel_standing_envs=0.02" in source
     assert "rel_turn_in_place_envs=0.15" in source
+    assert "rel_forward_envs=0.2" in source
     assert "lin_vel_x=(-0.4, 0.4)" in source
     assert "lin_vel_y=(-0.3, 0.3)" in source
     assert "ang_vel_z=(-1.0, 1.0)" in source
+    assert "rel_lateral_envs: float = 0.0" in source
+    assert "rel_lateral_envs = 0.25" in source
+    assert "command.rel_forward_envs = 0.0" in source
+
+
+def test_adapted_profile_preserves_known_good_training_manifest() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    assert "class IsaacLabVelocityFlatAdaptedEnvCfg(IsaacLabVelocityFlatEnvCfg)" in source
+    assert "self.rewards.track_lin_vel.weight = 4.0" in source
+    assert "self.rewards.track_ang_vel.weight = 6.0" in source
+    assert "self.rewards.pose.weight = 0.5" in source
+    assert "self.rewards.air_time.weight = 1.0" in source
+    assert '"step": 0, "weight": -0.1' in source
+    assert "self.terminations.root_height = None" in source
+    assert "class MicroduckVelocityFlatAdaptedPPORunnerCfg" in runner_source
+    assert "microduck_isaaclab_velocity_flat_adapted" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-Adapted"' in registry_source
+
+
+def test_velocity_flat_minimum_root_height_matches_mjlab_recipe() -> None:
+    isaac_source = _source(TASK)
+    mjlab_source = _source(ROOT / "src/mjlab_microduck/tasks/microduck_velocity_env_cfg.py")
+    expected = "MIN_ROOT_HEIGHT_M = 0.055"
+    assert expected in isaac_source
+    assert expected in mjlab_source
+    assert "root_height = DoneTerm(" in isaac_source
+    assert 'cfg.terminations["root_height"] = TerminationTermCfg(' in mjlab_source
+
+
+@pytest.mark.parametrize("env_ids", [slice(None), [0, 2], []])
+@pytest.mark.parametrize("forward_fraction", [0.0, 1.0])
+def test_forward_command_bucket_writes_back_only_selected_envs(env_ids, forward_fraction) -> None:
+    # Execute the production sampler without starting Isaac Sim; the base
+    # sampler is replaced with fixed draws to cover negative and small x.
+    class BaseCommand:
+        def _resample_command(self, env_ids):
+            pass
+
+    tree = ast.parse(_source(TASK))
+    nodes = [node for node in tree.body if getattr(node, "name", None) in {
+        "MicroduckVelocityCommand", "_command_env_ids",
+    }]
+    namespace = {
+        "torch": torch,
+        "mdp": SimpleNamespace(UniformVelocityCommand=BaseCommand),
+        "MicroduckVelocityCommandCfg": object,
+    }
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(TASK), "exec"), namespace)
+    term = namespace["MicroduckVelocityCommand"]()
+    term.device, term.num_envs = "cpu", 3
+    term.cfg = SimpleNamespace(
+        rel_forward_envs=forward_fraction,
+        rel_turn_in_place_envs=0.0,
+        rel_lateral_envs=0.0,
+    )
+    term.vel_command_b = torch.tensor([[-0.4, 0.1, 0.2], [0.35, -0.1, 0.3], [0.05, 0.2, -0.4]])
+    expected = term.vel_command_b.clone()
+    ids = namespace["_command_env_ids"](env_ids, term.num_envs, term.device)
+    if forward_fraction:
+        expected[ids, 0] = expected[ids, 0].abs().clamp(min=0.3)
+        expected[ids, 1:] = 0.0
+    term._resample_command(env_ids)
+    torch.testing.assert_close(term.vel_command_b, expected)
+
+
+@pytest.mark.parametrize("env_ids", [slice(None), [0, 2], []])
+def test_lateral_command_bucket_writes_back_only_selected_envs(env_ids) -> None:
+    class BaseCommand:
+        def _resample_command(self, env_ids):
+            pass
+
+    tree = ast.parse(_source(TASK))
+    nodes = [node for node in tree.body if getattr(node, "name", None) in {
+        "MicroduckVelocityCommand", "_command_env_ids",
+    }]
+    namespace = {
+        "torch": torch,
+        "mdp": SimpleNamespace(UniformVelocityCommand=BaseCommand),
+        "MicroduckVelocityCommandCfg": object,
+    }
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(TASK), "exec"), namespace)
+    term = namespace["MicroduckVelocityCommand"]()
+    term.device, term.num_envs = "cpu", 3
+    term.cfg = SimpleNamespace(
+        rel_forward_envs=0.0,
+        rel_turn_in_place_envs=0.0,
+        rel_lateral_envs=1.0,
+        ranges=SimpleNamespace(lin_vel_y=(-0.3, 0.3)),
+    )
+    term.vel_command_b = torch.tensor([[-0.4, 0.1, 0.2], [0.35, -0.1, 0.3], [0.05, 0.2, -0.4]])
+    term.is_standing_env = torch.ones(3, dtype=torch.bool)
+    original = term.vel_command_b.clone()
+    ids = namespace["_command_env_ids"](env_ids, term.num_envs, term.device)
+
+    term._resample_command(env_ids)
+
+    selected = torch.zeros(term.num_envs, dtype=torch.bool)
+    selected[ids] = True
+    torch.testing.assert_close(term.vel_command_b[~selected], original[~selected])
+    torch.testing.assert_close(term.vel_command_b[selected, 0], torch.zeros(len(ids)))
+    torch.testing.assert_close(term.vel_command_b[selected, 2], original[selected, 2])
+    assert bool((term.vel_command_b[selected, 1].abs() >= 0.15).all())
+    assert bool((term.vel_command_b[selected, 1].abs() <= 0.3).all())
+    assert not bool(term.is_standing_env[selected].any())
+    assert bool(term.is_standing_env[~selected].all())
 
 
 def test_pose_commands_are_held_manager_terms_with_mjlab_ranges() -> None:
@@ -72,21 +184,24 @@ def test_velocity_flat_keeps_mjlab_air_time_reward_window() -> None:
     assert "weight=3.0" in source
 
 
-def test_velocity_flat_uses_bam_asset_and_home_override() -> None:
+def test_velocity_flat_uses_bam_asset_and_canonical_home() -> None:
     source = _source(TASK)
     assert "from isaaclab_microduck.assets.microduck import MICRODUCK_CFG" in source
     assert "return MICRODUCK_CFG.replace(" in source
     assert "joint_pos=home" in source
-    assert 'home["right_hip_yaw"] = 0.436' in source
-    assert "policy observations and action offsets stay canonical" in source
+    assert 'home["right_hip_yaw"]' not in source
     assert "offset={name: float(value)" in source
 
 
-def test_velocity_flat_keeps_raw_clip_at_rl_wrapper_boundary() -> None:
+def test_velocity_flat_keeps_mjlab_unclipped_action_path() -> None:
     source = _source(TASK)
     assert "clip=None" in source
-    assert "def clip_actions_for_training(" in source
-    assert "return clip_policy_action(action, limit=1.0)" in source
+    assert "def clip_actions_for_training(" not in source
+
+
+def test_velocity_command_disables_unused_heading_bucket_like_mjlab() -> None:
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat.py").read_text()
+    assert "rel_heading_envs=0.0" in source
 
 
 def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
@@ -102,6 +217,9 @@ def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     assert "contact_body_count" in source
     assert "contact_forces_finite" in source
     assert "contact_body_names" in source
+    assert '"default_home_max_abs_error"' in source
+    assert '"default_home_right_hip_yaw"' in source
+    assert "articulation default HOME differs from policy HOME" in source
 
 
 def test_ground_is_injected_at_the_prestartup_hook() -> None:
@@ -127,7 +245,7 @@ def test_ppo_runner_matches_mjlab_budget_and_policy_shape() -> None:
     assert "hidden_dims=[512, 256, 128]" in source
     assert 'obs_groups = {"actor": ["policy"], "critic": ["critic"]}' in source
     assert "save_interval = 250" in source
-    assert "clip_actions = 1.0" in source
+    assert "clip_actions = None" in source
 
 
 def test_ppo_runner_keeps_observation_normalization_enabled() -> None:

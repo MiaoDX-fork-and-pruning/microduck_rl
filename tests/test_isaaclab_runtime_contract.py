@@ -88,9 +88,11 @@ def test_rl_launcher_registers_tasks_before_official_dispatch() -> None:
     source = RL_LAUNCHER.read_text()
 
     assert 'args[0] not in {"train", "play"}' in source
+    assert "_backend_args(backend_args)" in source
+    assert 'argument != "--headless"' in source
     assert "register_tasks()" in source
-    assert "run_train_cli(backend_args)" in source
-    assert "run_play_cli(backend_args)" in source
+    assert "run_train_cli(forwarded_args)" in source
+    assert "run_play_cli(forwarded_args)" in source
 
 
 def test_ppo_smoke_uses_repository_rl_launcher() -> None:
@@ -120,8 +122,9 @@ def test_command_battery_has_fixed_required_scenarios() -> None:
     assert "friction_bridge" in source
     assert "mean_actual_vel_xy_m_s" in source
     assert "mean_actual_vel_yaw_rad_s" in source
-    assert "RslRlVecEnvWrapper(env, clip_actions=1.0)" in source
+    assert "RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)" in source
     assert "clip_actions=True" not in source
+    assert '"clip_actions": agent_cfg.clip_actions' in source
     assert "handle_deprecated_rsl_rl_cfg(agent_cfg, \"5.4.1\")" in source
     assert "from velocity_flat_battery_spec import" in source
 

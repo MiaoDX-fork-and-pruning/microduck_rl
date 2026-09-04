@@ -125,12 +125,30 @@ def sensor_corruption(
             history = torch.empty((delay + 1, *value.shape), device=value.device, dtype=value.dtype)
             history.copy_(value.unsqueeze(0))
         setattr(env, key, history)
+        valid_key = f"_{name}_history_valid"
+        valid = _writable_zeros((value.shape[0],), device=value.device, dtype=torch.bool)
+        setattr(env, valid_key, valid)
     elif history.is_inference():
         history = _writable_clone(history)
         setattr(env, key, history)
+    valid_key = f"_{name}_history_valid"
+    valid = getattr(env, valid_key, None)
+    if valid is None or valid.shape != (value.shape[0],):
+        valid = _writable_zeros((value.shape[0],), device=value.device, dtype=torch.bool)
+        setattr(env, valid_key, valid)
+    elif valid.is_inference():
+        valid = _writable_clone(valid)
+        setattr(env, valid_key, valid)
     with torch.inference_mode(False):
         history[:-1].copy_(history[1:])
         history[-1].copy_(value)
+        # DelayBuffer backfills an empty/reset row on its first append.  Do the
+        # same for subset resets so a sampled lag cannot expose zero padding or
+        # a frame from the previous episode.
+        invalid = ~valid
+        if invalid.any():
+            history[:, invalid] = value[invalid].unsqueeze(0)
+            valid[invalid] = True
 
     if delay_update_period == 0:
         lag = torch.full((value.shape[0],), delay, device=value.device, dtype=torch.long)
@@ -182,6 +200,13 @@ def reset_actor_sensor_state(env, env_ids) -> None:
             value[:, ids] = 0.0
         else:
             value[ids] = 0.0
+    for name in ("gyro", "gravity", "joint_vel"):
+        valid = getattr(env, f"_{name}_history_valid", None)
+        if valid is not None:
+            if valid.is_inference():
+                valid = _writable_clone(valid)
+                setattr(env, f"_{name}_history_valid", valid)
+            valid[ids] = False
     # DelayBuffer semantics reset the sample clock for only the reset subset.
     # The next observation starts with lag zero until its periodic sampler is
     # due again; non-reset environments retain their phase and lag.

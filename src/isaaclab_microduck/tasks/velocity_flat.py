@@ -34,10 +34,8 @@ import isaaclab.sim as sim_utils
 from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 from isaaclab_microduck.policy_abi import HOME_POSITION, POLICY_JOINT_ORDER
 from isaaclab_microduck.tasks.parity import (
-    clip_policy_action,
-    gaussian_tracking,
-    l1_penalty,
     observation_noise,
+    subtree_angular_momentum,
 )
 from isaaclab_microduck.tasks import velocity_flat_contact as contact_mdp
 from isaaclab_microduck.tasks.velocity_flat_dr import (
@@ -59,16 +57,29 @@ from isaaclab_microduck.tasks.velocity_flat_sensors import (
     sensor_corruption,
 )
 
+# IsaacLab 3.0's filtered PhysX contact view is retained as a diagnostic
+# configuration, but its nested USD path expansion is not multi-env safe. The
+# production reward uses concrete raw views instead (see velocity_flat_contact).
+ENABLE_FILTERED_SELF_CONTACT = False
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
 
+NUM_STEPS_PER_ENV = 24
+MIN_ROOT_HEIGHT_M = 0.055
+
+
 @configclass
 class MicroduckVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
-    """mjlab-compatible velocity command with a held turn-in-place bucket."""
+    """Velocity command with optional forward, lateral, and turn buckets."""
 
     class_type: type["MicroduckVelocityCommand"] | str = "isaaclab_microduck.tasks.velocity_flat:MicroduckVelocityCommand"
+    # Strict mode uses the MJLab values. Adapted mode overrides only these
+    # bucket fractions to reproduce the earlier IsaacLab training profile.
     rel_turn_in_place_envs: float = 0.15
+    rel_forward_envs: float = 0.2
+    rel_lateral_envs: float = 0.0
 
 
 class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
@@ -82,25 +93,57 @@ class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
         # once so initial reset and subset reset use the same path.
         ids = _command_env_ids(env_ids, self.num_envs, self.device)
         super()._resample_command(ids)
+        if len(ids) == 0:
+            return
+        # Match mjlab's inherited forward-only bucket: positive x command,
+        # with lateral and yaw targets cleared. Standing envs are still allowed
+        # to overlap and are zeroed by the base command update.
+        forward = torch.rand(len(ids), device=self.device) < max(float(self.cfg.rel_forward_envs), 0.0)
+        forward_ids = ids[forward]
+        if len(forward_ids) > 0:
+            self.vel_command_b[forward_ids, 0] = self.vel_command_b[forward_ids, 0].abs().clamp(min=0.3)
+            self.vel_command_b[forward_ids, 1:] = 0.0
+
         fraction = float(self.cfg.rel_turn_in_place_envs)
-        if fraction <= 0.0 or len(ids) == 0:
-            return
-        select = torch.rand(len(ids), device=self.device) < fraction
+        select = torch.rand(len(ids), device=self.device) < max(fraction, 0.0)
         turn_ids = ids[select]
-        if len(turn_ids) == 0:
+        if len(turn_ids) > 0:
+            self.vel_command_b[turn_ids, :2] = 0.0
+            signs = torch.where(
+                torch.rand(len(turn_ids), device=self.device) < 0.5,
+                -torch.ones(len(turn_ids), device=self.device),
+                torch.ones(len(turn_ids), device=self.device),
+            )
+            lo, hi = self.cfg.ranges.ang_vel_z
+            magnitude = torch.empty(len(turn_ids), device=self.device).uniform_(
+                0.4 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+            )
+            self.vel_command_b[turn_ids, 2] = signs * magnitude
+            self.is_standing_env[turn_ids] = False
+
+        # The adapted profile historically sampled lateral commands from the
+        # non-turn subset and left the base sampler's yaw target untouched.
+        # Keep that exact behavior behind an explicit config field; strict
+        # mode has a zero fraction and therefore no IsaacLab-only bucket.
+        lateral_fraction = float(self.cfg.rel_lateral_envs)
+        remaining = ids[~select]
+        if lateral_fraction <= 0.0 or len(remaining) == 0:
             return
-        self.vel_command_b[turn_ids, :2] = 0.0
-        signs = torch.where(
-            torch.rand(len(turn_ids), device=self.device) < 0.5,
-            -torch.ones(len(turn_ids), device=self.device),
-            torch.ones(len(turn_ids), device=self.device),
-        )
-        lo, hi = self.cfg.ranges.ang_vel_z
-        magnitude = torch.empty(len(turn_ids), device=self.device).uniform_(
-            0.4 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
-        )
-        self.vel_command_b[turn_ids, 2] = signs * magnitude
-        self.is_standing_env[turn_ids] = False
+        lateral = torch.rand(len(remaining), device=self.device) < lateral_fraction
+        lateral_ids = remaining[lateral]
+        if len(lateral_ids) > 0:
+            self.vel_command_b[lateral_ids, 0] = 0.0
+            signs = torch.where(
+                torch.rand(len(lateral_ids), device=self.device) < 0.5,
+                -torch.ones(len(lateral_ids), device=self.device),
+                torch.ones(len(lateral_ids), device=self.device),
+            )
+            lo, hi = self.cfg.ranges.lin_vel_y
+            magnitude = torch.empty(len(lateral_ids), device=self.device).uniform_(
+                0.5 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+            )
+            self.vel_command_b[lateral_ids, 1] = signs * magnitude
+            self.is_standing_env[lateral_ids] = False
 
 
 @configclass
@@ -286,8 +329,13 @@ def pose_tracking(
 
     asset = _asset(env, asset_cfg)
     ids = asset_cfg.joint_ids
-    if ids is None or len(ids) == 0:
+    # Manager resolution uses ``slice(None)`` when no selector was supplied;
+    # that means all simulator joints, not an empty selection.  The mjlab
+    # variable-posture term nevertheless tracks only the ten leg servos.
+    if ids is None or isinstance(ids, slice):
         ids = torch.cat((_policy_indices(asset)[:5], _policy_indices(asset)[9:])).tolist()
+    elif len(ids) == 0:
+        return torch.ones(asset.data.joint_pos.torch.shape[0], device=asset.device)
     ids = torch.as_tensor(ids, device=asset.device, dtype=torch.long)
     names = [asset.joint_names[int(index)] for index in ids]
     standing = _std_vector(names, std_standing or {}, device=asset.device)
@@ -388,17 +436,32 @@ def body_ang_vel_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEnt
 
 
 def angular_momentum_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    """Read the subtree angular-momentum sensor; never substitute angular velocity."""
+    """Match MuJoCo's ``subtreeangmom`` sensor from IsaacLab body tensors.
 
-    sensor = getattr(env.scene, "sensors", {}).get("root_angmom")
-    if sensor is None:
-        raise RuntimeError(
-            "Velocity-Flat angular_momentum requires an IsaacLab subtree-angmom "
-            "sensor; root angular velocity is not an equivalent substitute"
-        )
-    value = sensor.data.output
-    value = getattr(value, "torch", value)
-    return value.square().sum(dim=-1)
+    IsaacLab 3.0 has no manager sensor for MuJoCo's subtree angular momentum,
+    but it exposes the same rigid-body quantities.  The trunk subtree contains
+    every body in this articulation, so compute momentum about its aggregate
+    center of mass: ``sum(r x m*v + R*I*R.T*w)``.  This is deliberately based
+    on COM velocities/inertias and is not a root angular-velocity proxy.
+    """
+
+    del asset_cfg  # trunk_base is the articulation root; its subtree is all bodies.
+    asset = _asset(env, SceneEntityCfg("robot"))
+    data = asset.data
+
+    def tensor(name: str) -> torch.Tensor:
+        value = getattr(data, name)
+        return getattr(value, "torch", value)
+
+    momentum = subtree_angular_momentum(
+        tensor("body_mass"),
+        tensor("body_com_pos_w"),
+        tensor("body_com_lin_vel_w"),
+        tensor("body_com_ang_vel_w"),
+        tensor("body_inertia"),
+        tensor("body_com_quat_w"),
+    )
+    return momentum.square().sum(dim=-1)
 
 
 def joint_pos_limits(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -432,6 +495,18 @@ def fallen_mjlab(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     gravity_xy = asset.data.projected_gravity_b.torch[:, :2]
     # mjlab's fell_over boundary is 70 degrees (not the old 49-degree 0.75 g gate).
     return torch.linalg.norm(gravity_xy, dim=-1) > 0.9396926
+
+
+def root_height_below(
+    env: ManagerBasedEnv,
+    min_height: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Terminate below the shared minimum viable walking height."""
+
+    asset = _asset(env, asset_cfg)
+    height = asset.data.root_link_pos_w.torch[:, 2] - env.scene.env_origins[:, 2]
+    return height < min_height
 
 
 def reset_actor_history(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
@@ -514,13 +589,6 @@ def upright_gaussian(
     return torch.exp(-torch.sum(torch.square(gravity_xy), dim=1) / std**2)
 
 
-def fallen(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    asset = _asset(env, asset_cfg)
-    gravity_xy = asset.data.projected_gravity_b.torch[:, :2]
-    height = asset.data.root_link_pos_w.torch[:, 2]
-    return (torch.linalg.norm(gravity_xy, dim=-1) > 0.75) | (height < 0.055)
-
-
 def spawn_ground_after_clone(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
     """Create the flat plane after USD cloning and before PhysX reset.
 
@@ -586,11 +654,6 @@ def _task_robot_cfg() -> ArticulationCfg:
     """Copy the shared asset and use canonical HOME only for this task."""
 
     home = {name: float(value) for name, value in zip(POLICY_JOINT_ORDER, HOME_POSITION)}
-    # The converted USD has a tighter right-hip-yaw upper limit (0.436 rad)
-    # than the canonical hardware HOME (0.4579 rad). IsaacLab validates
-    # initial state against authored limits, so only the simulator spawn value
-    # is clamped; policy observations and action offsets stay canonical.
-    home["right_hip_yaw"] = 0.436
     init_state = ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.12),
         joint_pos=home,
@@ -626,17 +689,30 @@ class SceneCfg(InteractiveSceneCfg):
         force_threshold=1.0,
         update_period=0.005,
     )
-    self_collision = ContactSensorCfg(
-        # The imported USD exposes the ankle rigid bodies reliably.  PhysX
-        # 3.0 cannot construct a contact view from the mixed joint/body tree
-        # (a broad ``.*/.*`` pattern resolves non-rigid Xforms), so this view
-        # is deliberately limited to the resolved foot bodies.  The resulting
-        # self-collision term is an explicit body-level approximation.
-        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base/.*",
-        history_length=1,
-        force_threshold=10.0,
+    # IsaacLab's filtered ContactSensor currently rewrites nested articulation
+    # roots to ``.../trunk_base/trunk_base`` and cannot initialize the view for
+    # multiple clones.  Keep the reference configurations visible for contract
+    # inspection, but disable them in production; self-collision uses the raw
+    # concrete PhysX view in ``velocity_flat_contact.self_collision_cost``.
+    self_collision_trunk = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+        ],
+        history_length=0,
+        track_contact_points=True,
         update_period=0.005,
-    )
+    ) if ENABLE_FILTERED_SELF_CONTACT else None
+    self_collision_legs = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+        ],
+        history_length=0,
+        track_contact_points=True,
+        update_period=0.005,
+    ) if ENABLE_FILTERED_SELF_CONTACT else None
 
     # Required by IsaacLab for USD-level ``prestartup`` events. The plane is a
     # single global prim, so replication is not useful here anyway.
@@ -655,7 +731,12 @@ class CommandsCfg:
         # Match the mjlab velocity recipe for backend comparison.
         resampling_time_range=(3.0, 8.0),
         rel_standing_envs=0.02,
+        # Match mjlab's explicit ``rel_heading_envs=0.0``.  Heading control is
+        # disabled, but leaving the inherited IsaacLab default (1.0) would make
+        # this latent sampling policy diverge if heading is enabled later.
+        rel_heading_envs=0.0,
         rel_turn_in_place_envs=0.15,
+        rel_forward_envs=0.2,
         heading_command=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.4, 0.4),
@@ -701,18 +782,12 @@ class ActionsCfg:
         scale=1.0,
         offset={name: float(value) for name, value in zip(POLICY_JOINT_ORDER, HOME_POSITION)},
         use_default_offset=False,
-        # Do not clip here: IsaacLab applies this field after scale+offset,
-        # which would clamp absolute joint targets rather than raw policy
-        # actions.  RslRlVecEnvWrapper performs the mjlab-equivalent raw
-        # [-1, 1] clip at the policy boundary.
+        # Do not clip here: the production mjlab Velocity-Flat runner leaves
+        # clip_actions unset and sends the complete raw policy output through
+        # HOME+scale to BAM. IsaacLab's action-term clip would additionally run
+        # after scale+offset, changing that target contract.
         clip=None,
     )
-
-
-def clip_actions_for_training(action: torch.Tensor) -> torch.Tensor:
-    """Training-side raw action clip; VecEnv uses the same bound at runtime."""
-
-    return clip_policy_action(action, limit=1.0)
 
 
 @configclass
@@ -936,8 +1011,7 @@ class RewardsCfg:
         weight=-0.05,
         params={"asset_cfg": SceneEntityCfg("robot", body_names=("trunk_base",))},
     )
-    # IsaacLab 3.0 has no subtree-angmom sensor equivalent.  Do not substitute
-    # root angular velocity; the mjlab term remains a documented parity gap.
+    angular_momentum = RewTerm(func=angular_momentum_cost, weight=-0.02)
     action_rate_l2 = RewTerm(func=action_rate_cost, weight=-0.1)
     dof_pos_limits = RewTerm(
         func=joint_pos_limits,
@@ -964,16 +1038,27 @@ class RewardsCfg:
                 "command_name": "base_velocity", "command_threshold": 0.01,
                 "asset_cfg": SceneEntityCfg("robot", body_names=["ankle_left", "ankle_right"], preserve_order=True)},
     )
-    self_collisions = RewTerm(func=contact_mdp.self_collision_cost, weight=-1.0,
-                               params={"sensor_cfg": SceneEntityCfg("self_collision")})
+    self_collisions = RewTerm(
+        func=contact_mdp.self_collision_cost,
+        weight=-1.0,
+        params={"sensor_names": ("self_collision_trunk", "self_collision_legs")},
+    )
 
 
 @configclass
 class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     fallen = DoneTerm(func=fallen_mjlab, time_out=False)
-    nan_state = DoneTerm(func=contact_mdp.nan_state, time_out=False,
-                         params={"sensor_names": ("feet_ground_contact", "self_collision")})
+    root_height = DoneTerm(
+        func=root_height_below,
+        params={"min_height": MIN_ROOT_HEIGHT_M},
+        time_out=False,
+    )
+    nan_state = DoneTerm(
+        func=contact_mdp.nan_state,
+        time_out=False,
+        params={"sensor_names": ("feet_ground_contact",)},
+    )
     terrain_out_of_bounds = DoneTerm(func=contact_mdp.terrain_out_of_bounds, time_out=False)
 
 
@@ -987,11 +1072,11 @@ class CurriculumCfg:
             "reward_name": "action_rate_l2",
             "weight_stages": [
                 {"step": 0, "weight": -0.1},
-                {"step": 500 * 24, "weight": -0.2},
-                {"step": 750 * 24, "weight": -0.4},
-                {"step": 1000 * 24, "weight": -0.6},
-                {"step": 1250 * 24, "weight": -0.8},
-                {"step": 1500 * 24, "weight": -1.0},
+                {"step": 500 * NUM_STEPS_PER_ENV, "weight": -0.2},
+                {"step": 750 * NUM_STEPS_PER_ENV, "weight": -0.4},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "weight": -0.6},
+                {"step": 1250 * NUM_STEPS_PER_ENV, "weight": -0.8},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "weight": -1.0},
             ],
         },
     )
@@ -1001,11 +1086,11 @@ class CurriculumCfg:
             "command_name": "base_velocity",
             "standing_stages": [
                 {"step": 0, "rel_standing_envs": 0.02},
-                {"step": 500 * 24, "rel_standing_envs": 0.05},
-                {"step": 750 * 24, "rel_standing_envs": 0.10},
-                {"step": 1000 * 24, "rel_standing_envs": 0.15},
-                {"step": 1500 * 24, "rel_standing_envs": 0.20},
-                {"step": 2000 * 24, "rel_standing_envs": 0.25},
+                {"step": 500 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.05},
+                {"step": 750 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.10},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.15},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.20},
+                {"step": 2000 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.25},
             ],
         },
     )
@@ -1015,10 +1100,10 @@ class CurriculumCfg:
             "command_name": "head_pose",
             "range_stages": [
                 {"step": 0, "ranges": ((-0.05, 0.05), (-0.05, 0.05), (-0.07, 0.07), (-0.015, 0.015))},
-                {"step": 500 * 24, "ranges": ((-0.17, 0.17), (-0.17, 0.17), (-0.21, 0.21), (-0.047, 0.047))},
-                {"step": 1000 * 24, "ranges": ((-0.39, 0.39), (-0.39, 0.39), (-0.49, 0.49), (-0.11, 0.11))},
-                {"step": 1500 * 24, "ranges": ((-0.72, 0.72), (-0.72, 0.72), (-0.91, 0.91), (-0.20, 0.20))},
-                {"step": 2000 * 24, "ranges": ((-1.10, 1.10), (-1.10, 1.10), (-1.40, 1.40), (-0.31, 0.31))},
+                {"step": 500 * NUM_STEPS_PER_ENV, "ranges": ((-0.17, 0.17), (-0.17, 0.17), (-0.21, 0.21), (-0.047, 0.047))},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "ranges": ((-0.39, 0.39), (-0.39, 0.39), (-0.49, 0.49), (-0.11, 0.11))},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "ranges": ((-0.72, 0.72), (-0.72, 0.72), (-0.91, 0.91), (-0.20, 0.20))},
+                {"step": 2000 * NUM_STEPS_PER_ENV, "ranges": ((-1.10, 1.10), (-1.10, 1.10), (-1.40, 1.40), (-0.31, 0.31))},
             ],
         },
     )
@@ -1035,9 +1120,9 @@ class CurriculumCfg:
             "event_name": "randomize_com",
             "range_stages": [
                 {"step": 0, "range": 0.003},
-                {"step": 500 * 24, "range": 0.005},
-                {"step": 1000 * 24, "range": 0.01},
-                {"step": 1500 * 24, "range": 0.015},
+                {"step": 500 * NUM_STEPS_PER_ENV, "range": 0.005},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "range": 0.01},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "range": 0.015},
             ],
         },
     )
@@ -1047,8 +1132,8 @@ class CurriculumCfg:
             "event_name": "randomize_head_com",
             "range_stages": [
                 {"step": 0, "range": 0.003},
-                {"step": 500 * 24, "range": 0.005},
-                {"step": 1000 * 24, "range": 0.01},
+                {"step": 500 * NUM_STEPS_PER_ENV, "range": 0.005},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "range": 0.01},
             ],
         },
     )
@@ -1058,9 +1143,9 @@ class CurriculumCfg:
             "reward_name": "head_pose_bias",
             "weight_stages": [
                 {"step": 0, "weight": 0.0},
-                {"step": 600 * 24, "weight": 1.0},
-                {"step": 1000 * 24, "weight": 2.0},
-                {"step": 1500 * 24, "weight": 3.0},
+                {"step": 600 * NUM_STEPS_PER_ENV, "weight": 1.0},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "weight": 2.0},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "weight": 3.0},
             ],
         },
     )
@@ -1093,8 +1178,54 @@ class IsaacLabVelocityFlatEnvCfg_PLAY(IsaacLabVelocityFlatEnvCfg):
         self.observations.policy.enable_corruption = False
 
 
+@configclass
+class IsaacLabVelocityFlatAdaptedEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """Historical IsaacLab profile that produced the earlier walking policy.
+
+    This profile is intentionally separate from strict MJLab parity. It keeps
+    the same robot, ABI, actuator, DR, terminations, and PPO architecture while
+    restoring the reward balance, command bucket, and action-rate schedule
+    captured in the known-good ``2026-09-05_15-16-03`` manifest.
+    """
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        # The historical IsaacLab run predates the strict profile's separate
+        # low-height guard.  Keep its orientation-only termination so a new
+        # run has the same failure boundary as the known-good checkpoint.
+        self.terminations.root_height = None
+        command = self.commands.base_velocity
+        command.rel_forward_envs = 0.0
+        command.rel_lateral_envs = 0.25
+        self.rewards.track_lin_vel.weight = 4.0
+        self.rewards.track_ang_vel.weight = 6.0
+        self.rewards.pose.weight = 0.5
+        self.rewards.air_time.weight = 1.0
+        self.curriculum.action_rate_weight.params["weight_stages"] = [
+            {"step": 0, "weight": -0.1},
+        ]
+
+
+@configclass
+class IsaacLabVelocityFlatAdaptedEnvCfg_PLAY(IsaacLabVelocityFlatAdaptedEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
 def make_velocity_flat_env_cfg(*, play: bool = False, num_envs: int = 1):
     cfg = IsaacLabVelocityFlatEnvCfg_PLAY() if play else IsaacLabVelocityFlatEnvCfg()
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_adapted_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatAdaptedEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatAdaptedEnvCfg()
+    )
     cfg.scene.num_envs = num_envs
     return cfg
 
@@ -1102,7 +1233,10 @@ def make_velocity_flat_env_cfg(*, play: bool = False, num_envs: int = 1):
 __all__ = [
     "IsaacLabVelocityFlatEnvCfg",
     "IsaacLabVelocityFlatEnvCfg_PLAY",
+    "IsaacLabVelocityFlatAdaptedEnvCfg",
+    "IsaacLabVelocityFlatAdaptedEnvCfg_PLAY",
     "make_velocity_flat_env_cfg",
+    "make_velocity_flat_adapted_env_cfg",
     "policy_command_block",
     "policy_gyro",
     "policy_joint_pos",

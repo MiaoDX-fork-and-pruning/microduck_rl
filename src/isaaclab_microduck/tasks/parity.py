@@ -26,13 +26,21 @@ def policy_action_to_target(
     home: torch.Tensor,
     *,
     scale: float = 1.0,
-    clip: float = 1.0,
+    clip: float | None = None,
 ) -> torch.Tensor:
-    """Map clipped raw actions to absolute servo targets around HOME."""
+    """Map policy actions to absolute servo targets around HOME.
+
+    The production mjlab Velocity-Flat runner leaves ``clip_actions`` unset,
+    so its BAM target receives the complete policy output.  ``clip`` remains
+    available for backend-neutral probes, but is opt-in rather than part of
+    the task's action contract.
+    """
 
     if action.shape[-1] != home.shape[-1]:
         raise ValueError(f"action/home dimension mismatch: {action.shape[-1]} != {home.shape[-1]}")
-    return home + float(scale) * clip_policy_action(action, clip)
+    if clip is not None:
+        action = clip_policy_action(action, clip)
+    return home + float(scale) * action
 
 
 def effective_supply_voltage(
@@ -50,19 +58,57 @@ def effective_supply_voltage(
 
 
 class ControlStepDelay:
-    """Per-environment FIFO for BAM's 3..6 control-step target delay.
+    """Per-environment FIFO for BAM's target delay.
 
     ``push`` returns the target that is visible to the actuator this control
-    step.  The queue is intentionally resettable by env id, preventing stale
+    step.  With ``sample_lag_each_push=True`` it follows mjlab's
+    :class:`DelayBuffer` semantics (lag sampling, hold/update policy, and
+    reset-row backfill); the default fixed-lag mode remains available for
+    lightweight callers. The queue is resettable by env id, preventing stale
     actions from leaking across episode boundaries.
     """
 
-    def __init__(self, num_envs: int, width: int, *, min_lag: int = 3, max_lag: int = 6, device=None):
+    def __init__(
+        self,
+        num_envs: int,
+        width: int,
+        *,
+        min_lag: int = 3,
+        max_lag: int = 6,
+        device=None,
+        hold_prob: float = 0.0,
+        update_period: int = 0,
+        per_env_phase: bool = True,
+        generator: torch.Generator | None = None,
+        sample_lag_each_push: bool = False,
+    ):
         if min_lag < 0 or max_lag < min_lag:
             raise ValueError("invalid delay range")
+        if not 0.0 <= hold_prob <= 1.0:
+            raise ValueError("hold_prob must be in [0, 1]")
+        if update_period < 0:
+            raise ValueError("update_period must be non-negative")
         self.min_lag = int(min_lag)
         self.max_lag = int(max_lag)
+        self.hold_prob = float(hold_prob)
+        self.update_period = int(update_period)
+        self.per_env_phase = bool(per_env_phase)
+        self.generator = generator
+        self.sample_lag_each_push = bool(sample_lag_each_push)
         self.delay = torch.full((num_envs,), self.max_lag, dtype=torch.long, device=device)
+        self._step_count = torch.zeros(num_envs, dtype=torch.long, device=device)
+        self._num_pushes = torch.zeros(num_envs, dtype=torch.long, device=device)
+        if self.update_period > 0 and self.per_env_phase:
+            self._phase_offsets = torch.randint(
+                0,
+                self.update_period,
+                (num_envs,),
+                dtype=torch.long,
+                device=device,
+                generator=self.generator,
+            )
+        else:
+            self._phase_offsets = torch.zeros(num_envs, dtype=torch.long, device=device)
         self._history = deque(maxlen=self.max_lag + 1)
         for _ in range(self.max_lag + 1):
             self._history.append(torch.zeros(num_envs, width, device=device))
@@ -93,10 +139,45 @@ class ControlStepDelay:
         self.delay.copy_(delays.to(device=self.delay.device, dtype=torch.long).clamp(self.min_lag, self.max_lag))
 
     def push(self, target: torch.Tensor) -> torch.Tensor:
-        self._history.append(self._copy_to_writable_storage(target))
+        stored = self._copy_to_writable_storage(target)
+        self._history.append(stored)
+        first_push = self._num_pushes == 0
+        if self.sample_lag_each_push and first_push.any():
+            for item in self._history:
+                item[first_push] = stored[first_push]
+        self._num_pushes += 1
+        if self.sample_lag_each_push:
+            if self.update_period > 0:
+                should_update = (self._step_count + self._phase_offsets) % self.update_period == 0
+            else:
+                should_update = torch.ones_like(self._num_pushes, dtype=torch.bool)
+            candidate = torch.randint(
+                self.min_lag,
+                self.max_lag + 1,
+                self.delay.shape,
+                dtype=torch.long,
+                device=self.delay.device,
+                generator=self.generator,
+            )
+            if self.hold_prob > 0.0:
+                sample = torch.rand(
+                    self.delay.shape,
+                    device=self.delay.device,
+                    generator=self.generator,
+                ) >= self.hold_prob
+                should_update = should_update & sample
+            self.delay.copy_(torch.where(should_update, candidate, self.delay))
+            self._step_count += 1
         stack = torch.stack(tuple(self._history), dim=0)
         # History is oldest -> newest.  A lag of zero reads the newest target.
-        offsets = self.max_lag - self.delay
+        if self.sample_lag_each_push:
+            valid_lag = torch.minimum(
+                self.delay,
+                (self._num_pushes - 1).clamp_min(0),
+            )
+            offsets = self.max_lag - valid_lag
+        else:
+            offsets = self.max_lag - self.delay
         env = torch.arange(target.shape[0], device=target.device)
         return stack[offsets, env]
 
@@ -115,6 +196,20 @@ class ControlStepDelay:
                 item[ids] = fill
             else:
                 item[ids] = fill[ids]
+        if self.sample_lag_each_push:
+            self._num_pushes[ids] = 0
+            self._step_count[ids] = 0
+            self.delay[ids] = 0
+            if self.update_period > 0 and self.per_env_phase:
+                phases = torch.randint(
+                    0,
+                    self.update_period,
+                    (ids.numel(),),
+                    dtype=torch.long,
+                    device=self.delay.device,
+                    generator=self.generator,
+                )
+                self._phase_offsets[ids] = phases
 
 
 def sample_uniform_with_zero(
@@ -176,8 +271,59 @@ def observation_noise(value: torch.Tensor, amplitude: float, *, generator: torch
     return value + torch.empty_like(value).uniform_(-amplitude, amplitude, generator=generator)
 
 
+def _quat_xyzw_to_matrix(quat: torch.Tensor) -> torch.Tensor:
+    """Convert scalar-last quaternions to rotation matrices."""
+
+    x, y, z, w = quat.unbind(dim=-1)
+    return torch.stack(
+        (
+            1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w),
+            2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w),
+            2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y),
+        ),
+        dim=-1,
+    ).reshape(*quat.shape[:-1], 3, 3)
+
+
+def subtree_angular_momentum(
+    mass: torch.Tensor,
+    com_pos_w: torch.Tensor,
+    com_lin_vel_w: torch.Tensor,
+    com_ang_vel_w: torch.Tensor,
+    inertia_principal: torch.Tensor,
+    inertia_quat_w: torch.Tensor,
+) -> torch.Tensor:
+    """Compute rigid-body subtree angular momentum about its aggregate COM.
+
+    All body tensors use ``(env, body, ...)`` layout. ``inertia_principal``
+    accepts either diagonal values, flattened matrices, or 3x3 matrices.
+    The returned vector is expressed in world coordinates.
+    """
+
+    if mass.ndim == 3 and mass.shape[-1] == 1:
+        mass = mass.squeeze(-1)
+    if inertia_principal.shape[-1] == 9:
+        inertia_principal = inertia_principal.reshape(*inertia_principal.shape[:-1], 3, 3)
+    elif inertia_principal.shape[-2:] == (3, 3):
+        pass
+    elif inertia_principal.shape[-1] == 3:
+        inertia_principal = torch.diag_embed(inertia_principal)
+    else:
+        raise ValueError(f"unexpected body inertia shape: {tuple(inertia_principal.shape)}")
+
+    total_mass = mass.sum(dim=1, keepdim=True).clamp_min(torch.finfo(mass.dtype).eps)
+    subtree_com = (mass.unsqueeze(-1) * com_pos_w).sum(dim=1, keepdim=True) / total_mass.unsqueeze(-1)
+    relative = com_pos_w - subtree_com
+    orbital = torch.cross(relative, mass.unsqueeze(-1) * com_lin_vel_w, dim=-1)
+    rotation = _quat_xyzw_to_matrix(inertia_quat_w)
+    world_inertia = rotation @ inertia_principal @ rotation.transpose(-1, -2)
+    spin = torch.matmul(world_inertia, com_ang_vel_w.unsqueeze(-1)).squeeze(-1)
+    return (orbital + spin).sum(dim=1)
+
+
 __all__ = [
     "ControlStepDelay", "clip_policy_action", "effective_supply_voltage",
     "force_turn_in_place", "gaussian_tracking", "l1_penalty",
     "observation_noise", "policy_action_to_target", "sample_uniform_with_zero",
+    "subtree_angular_momentum",
 ]

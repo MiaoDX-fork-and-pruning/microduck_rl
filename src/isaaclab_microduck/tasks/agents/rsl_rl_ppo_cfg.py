@@ -12,9 +12,11 @@ from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPp
 @configclass
 class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     num_steps_per_env = 24
-    # Match mjlab's RSL-RL VecEnv boundary: clip raw policy actions before the
-    # position target transform, never absolute joint targets in the action term.
-    clip_actions = 1.0
+    # Match the production mjlab Velocity-Flat runner exactly: its inherited
+    # default is None, so raw policy actions are not clipped at the VecEnv
+    # boundary. BAM torque saturation and the command-side limit penalty own
+    # the physical/action constraints.
+    clip_actions = None
     # Match the accepted mjlab Velocity-Flat PPO recipe. CLI smoke tests still
     # override max_iterations to 5 explicitly.
     max_iterations = 6000
@@ -53,4 +55,14 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
-__all__ = ["MicroduckVelocityFlatPPORunnerCfg"]
+@configclass
+class MicroduckVelocityFlatAdaptedPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """Runner for the historical IsaacLab-specific adapted profile."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_adapted"
+
+
+__all__ = [
+    "MicroduckVelocityFlatPPORunnerCfg",
+    "MicroduckVelocityFlatAdaptedPPORunnerCfg",
+]

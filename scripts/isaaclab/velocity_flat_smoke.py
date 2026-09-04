@@ -15,6 +15,7 @@ from isaaclab.app import AppLauncher
 def main() -> None:
     print("ISAACLAB_VELOCITY_FLAT_SMOKE:main:start", flush=True)
     parser = argparse.ArgumentParser()
+    parser.add_argument("--task", default="IsaacLab-Velocity-Flat-MicroDuck")
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--output", type=Path)
@@ -28,19 +29,39 @@ def main() -> None:
         import gymnasium as gym
 
         from isaaclab_microduck.tasks import register_tasks
-        from isaaclab_microduck.policy_abi import ACTION_SIZE, OBSERVATION_SIZE
+        from isaaclab_microduck.policy_abi import (
+            ACTION_SIZE,
+            HOME_POSITION,
+            OBSERVATION_SIZE,
+            POLICY_JOINT_ORDER,
+        )
 
         register_tasks()
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:tasks_registered", flush=True)
-        env = gym.make(
-            "IsaacLab-Velocity-Flat-MicroDuck",
-            cfg=__import__(
-                "isaaclab_microduck.tasks.velocity_flat",
-                fromlist=["make_velocity_flat_env_cfg"],
-            ).make_velocity_flat_env_cfg(num_envs=args.num_envs),
-        )
+        task_module = __import__("isaaclab_microduck.tasks.velocity_flat", fromlist=[
+            "make_velocity_flat_env_cfg", "make_velocity_flat_adapted_env_cfg"
+        ])
+        factories = {
+            "IsaacLab-Velocity-Flat-MicroDuck": task_module.make_velocity_flat_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-Adapted": task_module.make_velocity_flat_adapted_env_cfg,
+        }
+        try:
+            make_env_cfg = factories[args.task]
+        except KeyError as exc:
+            raise ValueError(f"unknown IsaacLab smoke task: {args.task!r}") from exc
+        env = gym.make(args.task, cfg=make_env_cfg(num_envs=args.num_envs))
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:env_made", flush=True)
         base_env = env.unwrapped
+        robot = base_env.scene["robot"]
+        joint_index = {name: index for index, name in enumerate(robot.joint_names)}
+        policy_joint_ids = torch.as_tensor(
+            [joint_index[name] for name in POLICY_JOINT_ORDER],
+            device=base_env.device,
+            dtype=torch.long,
+        )
+        actual_home = robot.data.default_joint_pos.torch[0, policy_joint_ids]
+        expected_home = torch.as_tensor(HOME_POSITION, device=base_env.device)
+        home_error = torch.max(torch.abs(actual_home - expected_home)).item()
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:ground_event_ready", flush=True)
         stage = base_env.sim.stage
         contact_reporter_count = sum(
@@ -59,6 +80,8 @@ def main() -> None:
             "observation_shape": list(policy_obs.shape),
             "observation_dim": int(policy_obs.shape[-1]),
             "action_dim": int(base_env.action_manager.total_action_dim),
+            "default_home_max_abs_error": float(home_error),
+            "default_home_right_hip_yaw": float(actual_home[9].item()),
             "finite_reset": bool(torch.isfinite(policy_obs).all().item()),
             "steps": args.steps,
             "contact_reporter_count": contact_reporter_count,
@@ -67,6 +90,8 @@ def main() -> None:
             raise RuntimeError(f"expected {OBSERVATION_SIZE}D policy observation, got {policy_obs.shape}")
         if checks["action_dim"] != ACTION_SIZE:
             raise RuntimeError(f"expected {ACTION_SIZE}D action, got {checks['action_dim']}")
+        if home_error > 1.0e-6:
+            raise RuntimeError(f"articulation default HOME differs from policy HOME by {home_error}")
         finite_steps = True
         terminated_count = 0
         for _ in range(args.steps):

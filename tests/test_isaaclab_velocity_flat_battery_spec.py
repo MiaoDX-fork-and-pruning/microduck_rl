@@ -1,5 +1,11 @@
 from __future__ import annotations
 
+import sys
+import types
+from types import SimpleNamespace
+
+import torch
+
 from scripts.isaaclab.velocity_flat_battery_spec import CASES, SEED, STEPS_PER_CASE, evaluate_case
 
 
@@ -37,3 +43,69 @@ def test_common_battery_passes_bounded_directional_response() -> None:
     )
     assert passed
     assert failures == []
+
+
+def test_battery_freezes_complete_command_block_after_reset() -> None:
+    # The executable harness imports IsaacLab's AppLauncher at module import
+    # time.  Stub only that boundary so this test can exercise the deterministic
+    # command writer on CPU without launching Isaac Sim.
+    app_module = types.ModuleType("isaaclab.app")
+    app_module.AppLauncher = object
+    isaaclab_module = types.ModuleType("isaaclab")
+    previous = {name: sys.modules.get(name) for name in ("isaaclab", "isaaclab.app")}
+    sys.modules["isaaclab"] = isaaclab_module
+    sys.modules["isaaclab.app"] = app_module
+    try:
+        import importlib
+
+        battery = importlib.import_module("scripts.isaaclab.velocity_flat_command_battery")
+        terms = {}
+        for name, dim in (("base_velocity", 3), ("head_pose", 4), ("body_pose", 6)):
+            terms[name] = SimpleNamespace(
+                command=torch.full((2, dim), 9.0),
+                time_left=torch.zeros(2),
+                is_standing_env=torch.ones(2, dtype=torch.bool),
+            )
+        manager = SimpleNamespace(get_term=lambda name: terms[name])
+        env = SimpleNamespace(command_manager=manager)
+
+        battery._set_command(env, (0.2, 0.0, -0.7))
+
+        assert torch.equal(terms["base_velocity"].command[0], torch.tensor([0.2, 0.0, -0.7]))
+        assert torch.equal(terms["head_pose"].command, torch.zeros(2, 4))
+        assert torch.equal(terms["body_pose"].command, torch.zeros(2, 6))
+        for term in terms.values():
+            assert torch.isinf(term.time_left).all()
+        assert not terms["base_velocity"].is_standing_env.any()
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = value
+
+
+def test_battery_tilt_metric_ignores_yaw_but_measures_roll() -> None:
+    # Stub AppLauncher so the battery helper can be imported without Isaac Sim.
+    app_module = types.ModuleType("isaaclab.app")
+    app_module.AppLauncher = object
+    isaaclab_module = types.ModuleType("isaaclab")
+    previous = {name: sys.modules.get(name) for name in ("isaaclab", "isaaclab.app")}
+    sys.modules["isaaclab"] = isaaclab_module
+    sys.modules["isaaclab.app"] = app_module
+    try:
+        import importlib
+
+        battery = importlib.import_module("scripts.isaaclab.velocity_flat_command_battery")
+        yaw_quat = torch.tensor([[0.0, 0.0, 2.0**-0.5, 2.0**-0.5]])
+        roll_angle = torch.tensor(0.35)
+        roll_quat = torch.tensor([[torch.sin(roll_angle / 2), 0.0, 0.0, torch.cos(roll_angle / 2)]])
+
+        assert torch.allclose(battery._tilt_rad(yaw_quat), torch.zeros(1), atol=1e-6)
+        assert torch.allclose(battery._tilt_rad(roll_quat), roll_angle.reshape(1), atol=1e-6)
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                sys.modules.pop(name, None)
+            else:
+                sys.modules[name] = value

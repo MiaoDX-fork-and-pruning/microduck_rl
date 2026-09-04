@@ -29,7 +29,9 @@ except ModuleNotFoundError:  # direct ``python scripts/isaaclab/...py`` entry
     from velocity_flat_battery_spec import CASES, NUM_ENVS, SEED, STEPS_PER_CASE, evaluate_case
 
 
-TASK = "IsaacLab-Velocity-Flat-MicroDuck"
+DEFAULT_TASK = "IsaacLab-Velocity-Flat-MicroDuck"
+# Backward-compatible module constant for callers that imported ``TASK``.
+TASK = DEFAULT_TASK
 # Keep the required scenarios visible at this executable boundary.  The case
 # definitions remain centralized in ``velocity_flat_battery_spec`` so the
 # MuJoCo and IsaacLab harnesses cannot silently drift apart.
@@ -40,8 +42,18 @@ if not all(name in COMMANDS for name in REQUIRED_CASE_NAMES):
 
 
 def _tilt_rad(quat_xyzw: torch.Tensor) -> torch.Tensor:
-    scalar = torch.clamp(torch.abs(quat_xyzw[..., 3]), max=1.0)
-    return 2.0 * torch.acos(scalar)
+    """Return the body-up tilt, excluding heading/yaw rotation.
+
+    The previous ``2*acos(abs(qw))`` metric measured total orientation, so a
+    pure yaw turn was incorrectly reported as a near-\u03c0 tilt.  Normalize the
+    quaternion and rotate the body z-axis implicitly via its world z component;
+    this is the roll/pitch angle used by the fallen termination.
+    """
+
+    quat = quat_xyzw / torch.linalg.vector_norm(quat_xyzw, dim=-1, keepdim=True).clamp_min(1e-8)
+    x, y, z, w = quat.unbind(dim=-1)
+    body_up_world_z = 1.0 - 2.0 * (x.square() + y.square())
+    return torch.acos(torch.clamp(body_up_world_z, min=-1.0, max=1.0))
 
 
 def _sha256(path: Path) -> str:
@@ -52,17 +64,46 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
-def _set_command(term, value: tuple[float, float, float]) -> None:
-    term.command[:] = torch.as_tensor(value, device=term.command.device).reshape(1, 3)
-    term.is_standing_env[:] = False
+def _freeze_command_term(term, value: torch.Tensor) -> None:
+    """Hold a command term fixed for the whole deterministic battery case."""
+
+    term.command[:] = value.reshape(1, -1)
+    # CommandManager normally resamples on reset and whenever this timer
+    # expires.  Infinity keeps the fixed battery value stable between the
+    # explicit case writes below, including the pose slots.
     term.time_left[:] = float("inf")
+
+
+def _set_command(base_env, value: tuple[float, float, float]) -> None:
+    """Set the complete 13D command block used by the policy observation."""
+
+    velocity = base_env.command_manager.get_term("base_velocity")
+    _freeze_command_term(
+        velocity,
+        torch.as_tensor(value, device=velocity.command.device, dtype=velocity.command.dtype),
+    )
+    velocity.is_standing_env[:] = False
+    # Velocity-Flat's common battery commands only the twist.  Pose commands
+    # are nevertheless part of the actor ABI, so make their neutral values
+    # explicit instead of inheriting random values from reset/resampling.
+    for name, dim in (("head_pose", 4), ("body_pose", 6)):
+        term = base_env.command_manager.get_term(name)
+        _freeze_command_term(term, torch.zeros(dim, device=term.command.device, dtype=term.command.dtype))
+
+
+def _refresh_fixed_command_observation(base_env):
+    """Recompute obs after a reset so command slots match the forced values."""
+
+    base_env.obs_buf = base_env.observation_manager.compute(update_history=False)
 
 
 def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], steps: int) -> tuple[dict, object]:
     base_env = env.unwrapped
     robot = base_env.scene["robot"]
+    _set_command(base_env, value)
+    _refresh_fixed_command_observation(base_env)
+    obs = env.get_observations()
     command_term = base_env.command_manager.get_term("base_velocity")
-    _set_command(command_term, value)
 
     errors_xy: list[torch.Tensor] = []
     errors_yaw: list[torch.Tensor] = []
@@ -77,7 +118,9 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         with torch.inference_mode():
             action = policy(obs)
             obs, _, dones, _ = env.step(action)
-        _set_command(command_term, value)
+        _set_command(base_env, value)
+        _refresh_fixed_command_observation(base_env)
+        obs = env.get_observations()
         desired = command_term.command
         actual_xy = robot.data.root_lin_vel_b.torch[:, :2]
         actual_yaw = robot.data.root_ang_vel_b.torch[:, 2]
@@ -136,6 +179,7 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--task", default=DEFAULT_TASK)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--num-envs", type=int, default=NUM_ENVS)
     parser.add_argument("--steps", type=int, default=STEPS_PER_CASE)
@@ -154,21 +198,39 @@ def main() -> None:
         from rsl_rl.runners import OnPolicyRunner
 
         from isaaclab_microduck.tasks import register_tasks
-        from isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg import MicroduckVelocityFlatPPORunnerCfg
-        from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+        from isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg import (
+            MicroduckVelocityFlatAdaptedPPORunnerCfg,
+            MicroduckVelocityFlatPPORunnerCfg,
+        )
+        from isaaclab_microduck.tasks.velocity_flat import (
+            make_velocity_flat_adapted_env_cfg,
+            make_velocity_flat_env_cfg,
+        )
 
         register_tasks()
         print("ISAACLAB_VELOCITY_BATTERY:tasks_registered", flush=True)
-        env_cfg = make_velocity_flat_env_cfg(play=True, num_envs=args.num_envs)
+        profiles = {
+            DEFAULT_TASK: (make_velocity_flat_env_cfg, MicroduckVelocityFlatPPORunnerCfg),
+            "IsaacLab-Velocity-Flat-MicroDuck-Adapted": (
+                make_velocity_flat_adapted_env_cfg,
+                MicroduckVelocityFlatAdaptedPPORunnerCfg,
+            ),
+        }
+        try:
+            make_env_cfg, runner_cfg_type = profiles[args.task]
+        except KeyError as exc:
+            raise ValueError(f"unknown IsaacLab battery task: {args.task!r}") from exc
+        env_cfg = make_env_cfg(play=True, num_envs=args.num_envs)
         env_cfg.seed = args.seed
         env_cfg.commands.base_velocity.resampling_time_range = (1.0e9, 1.0e9)
-        env = gym.make(TASK, cfg=env_cfg)
+        env = gym.make(args.task, cfg=env_cfg)
         print("ISAACLAB_VELOCITY_BATTERY:env_made", flush=True)
-        # IsaacLab's wrapper forwards this value to gymnasium.Box(high=...),
-        # which requires a numeric bound rather than a boolean.
-        vec_env = RslRlVecEnvWrapper(env, clip_actions=1.0)
+        agent_cfg = runner_cfg_type()
+        # Use the same action boundary as training and the production mjlab
+        # recipe. In particular, do not silently make evaluation safer by
+        # clipping raw policy output here.
+        vec_env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
         print("ISAACLAB_VELOCITY_BATTERY:wrapper_made", flush=True)
-        agent_cfg = MicroduckVelocityFlatPPORunnerCfg()
         # The official IsaacLab entrypoint migrates legacy model fields before
         # handing the config to rsl-rl. Keep this standalone harness on the
         # same compatibility path.
@@ -190,7 +252,7 @@ def main() -> None:
             print(f"ISAACLAB_VELOCITY_BATTERY:case:{name}:done", flush=True)
 
         report = {
-            "task": TASK,
+            "task": args.task,
             "backend": "isaaclab",
             "isaaclab_version": "3.0.0",
             "isaacsim_version": "6.0.1",
@@ -200,6 +262,7 @@ def main() -> None:
             "checkpoint": str(args.checkpoint),
             "checkpoint_sha256": _sha256(args.checkpoint),
             "actuator": "BamActuator",
+            "clip_actions": agent_cfg.clip_actions,
             "friction_bridge": "motor_only_external_effort_unavailable",
             "passed": all(case["passed"] for case in cases),
             "cases": cases,
