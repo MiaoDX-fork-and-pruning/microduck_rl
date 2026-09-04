@@ -171,8 +171,13 @@ class BamActuator(ActuatorBase):
         feedforward = control_action.joint_efforts
         if feedforward is None:
             feedforward = torch.zeros_like(motor_effort)
-        self.computed_effort = motor_effort + feedforward
-        self._applied_effort = self.computed_effort
+        # Keep actuator-owned state as ordinary writable tensors.  Policy
+        # replay is commonly wrapped in ``torch.inference_mode``; rebinding
+        # this buffer to the computed inference tensor would make the next
+        # episode reset fail when it clears the previous effort in-place.
+        with torch.inference_mode(False):
+            self._applied_effort.copy_(motor_effort + feedforward)
+        self.computed_effort = self._applied_effort
         self.applied_effort = self._applied_effort
         control_action.joint_efforts = self.applied_effort
         control_action.joint_positions = None
