@@ -1,10 +1,21 @@
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import torch
 
 from isaaclab_microduck.tasks import velocity_flat_contact as c
+
+
+def test_velocity_flat_config_has_no_contact_zero_placeholders():
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat.py").read_text()
+    assert "func=zero_reward" not in source
+    assert "func=contact_mdp.feet_clearance" in source
+    assert "func=contact_mdp.feet_swing_height" in source
+    assert "func=contact_mdp.feet_slip" in source
+    assert "func=contact_mdp.self_collision_cost" in source
+    assert "func=contact_mdp.foot_contact_forces" in source
 
 
 class _Proxy:
