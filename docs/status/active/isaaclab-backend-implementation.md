@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: HOME/action corrected; multi-env self-contact and seeded runtime parity closure next
+current_slice: HOME/action corrected; multi-env self-contact adapter and seeded runtime parity closure next
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 multi-env contact, asset-friction, reset/DR, actor-sensor, and command evidence remains open
+blocker_fingerprint: P0 multi-env contact adapter, asset-friction, reset/DR, actor-sensor, and command evidence remains open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -14,7 +14,9 @@ last_proven_evidence: >-
   16 finite reward terms, and finite termination terms. A direct mjlab-kernel
   regression proves equal self-contact point-count semantics, but a four-env
   probe fails filtered-view initialization (`expected 8, found 4`), so contact
-  is not production-proven.
+  is not production-proven. One-to-one filter splitting, a combined glob filter,
+  and a temporary asset-root articulation layout were probed; none makes the
+  nested USD filtered view initialize correctly for four environments.
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -30,11 +32,12 @@ completed: >-
   filtered self-contact sensors exclude ground force in one environment but are
   not yet usable in the multi-environment training scene.
 next_action: >-
-  Replace the filtered self-contact source with a multi-env-safe source and
-  prove its three-body, ground-excluding count semantics. Then run seeded
-  IsaacLab reset/DR/noise/delay/command probes and update each ledger row only
-  when its runtime observable matches. After all P0 rows close, run the unified
-  command battery and a fresh 64-env/5-iteration PPO smoke.
+  Implement or locate a multi-env-safe raw PhysX contact source (or an asset
+  conversion repair) that preserves three-body, ground-excluding point-count
+  semantics. Then run seeded IsaacLab reset/DR/noise/delay/command probes and
+  update each ledger row only when its runtime observable matches. After all P0
+  rows close, run the unified command battery and a fresh 64-env/5-iteration PPO
+  smoke.
 next_proof: >-
   A seeded runtime parity report following the completed focused CPU/contact
   runtime contracts. The final training gate is the unified
