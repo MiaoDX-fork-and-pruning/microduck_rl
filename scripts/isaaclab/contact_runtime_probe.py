@@ -38,6 +38,12 @@ def main() -> None:
     parser.add_argument("--filtered-self-collision", action="store_true")
     parser.add_argument("--raw-self-contact", action="store_true")
     parser.add_argument(
+        "--numerical-fixture",
+        action="store_true",
+        help="run a deterministic multi-env contact/reward numerical fixture",
+    )
+    parser.add_argument("--fixture-case-steps", type=int, default=4)
+    parser.add_argument(
         "--forced-self-contact",
         action="store_true",
         help="compare concrete raw contact counts before and after a deterministic MJCF-valid pose",
@@ -76,9 +82,11 @@ def main() -> None:
             reorder_policy_joints,
         )
         print("CONTACT_PROBE:import_policy_done", flush=True)
+        from isaaclab_microduck.tasks import velocity_flat_contact as contact_mdp
         from isaaclab_microduck.tasks.velocity_flat_contact import self_collision_cost
         print("CONTACT_PROBE:import_contact_done", flush=True)
         from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+        from isaaclab_microduck.tasks.velocity_flat import air_time_reward
         print("CONTACT_PROBE:import_cfg_done", flush=True)
 
         print("CONTACT_PROBE:imports_done", flush=True)
@@ -121,6 +129,149 @@ def main() -> None:
             "contact_view_paths": list(sensor.body_physx_view.prim_paths),
             "contact_sensor_count": int(sensor.num_sensors),
         }
+        if args.numerical_fixture:
+            if args.num_envs < 4:
+                raise ValueError("--numerical-fixture requires at least 4 environments")
+            if args.fixture_case_steps < 2:
+                raise ValueError("--fixture-case-steps must be at least 2")
+
+            def _tensor(value):
+                return getattr(value, "torch", value)
+
+            def _all_manager_terms(manager):
+                names = (
+                    "air_time",
+                    "foot_clearance",
+                    "foot_swing_height",
+                    "foot_slip",
+                    "self_collisions",
+                )
+                per_env = [dict(manager.get_active_iterable_terms(env_id)) for env_id in range(args.num_envs)]
+                return {
+                    name: [float(values.get(name, [float("nan")])[0]) for values in per_env]
+                    for name in names
+                }
+
+            # The manager owns resolved body ids and stateful terms.  These
+            # configs are reused to evaluate stateless kernels on the exact
+            # tensors captured after each complete control step.
+            air_cfg = base_env.reward_manager.get_term_cfg("air_time")
+            clearance_cfg = base_env.reward_manager.get_term_cfg("foot_clearance")
+            slip_cfg = base_env.reward_manager.get_term_cfg("foot_slip")
+            foot_sensor_cfg = air_cfg.params["sensor_cfg"]
+            foot_asset_cfg = clearance_cfg.params["asset_cfg"]
+
+            def _write_height(offset: float) -> None:
+                pose = robot.data.default_root_pose.torch.clone()
+                pose[:, 2] += offset
+                robot.write_root_pose_to_sim_index(root_pose=pose)
+                robot.write_root_velocity_to_sim_index(
+                    root_velocity=torch.zeros_like(robot.data.default_root_vel.torch)
+                )
+                robot.reset()
+
+            def _snapshot(step: int, case: str) -> dict:
+                force = contact_mdp._select(
+                    contact_mdp._contact_force(sensor), foot_sensor_cfg
+                ).detach().float()
+                current_air = contact_mdp.foot_air_time(base_env, foot_sensor_cfg).detach().float()
+                contact = contact_mdp.foot_contact(base_env, foot_sensor_cfg).detach().float()
+                site_pos, site_vel = contact_mdp._foot_site_state(base_env, foot_asset_cfg)
+                site_pos = site_pos.detach().float()
+                site_vel = site_vel.detach().float()
+                terms = _all_manager_terms(base_env.reward_manager)
+                weights = {
+                    name: float(base_env.reward_manager.get_term_cfg(name).weight)
+                    for name in terms
+                }
+                # These are stateless and therefore safe to evaluate once on
+                # the captured state.  Stateful swing height is intentionally
+                # compared only through the manager output/history below.
+                raw = {
+                    "air_time": air_time_reward(base_env, **air_cfg.params).detach().float(),
+                    "foot_clearance": contact_mdp.feet_clearance(base_env, **clearance_cfg.params).detach().float(),
+                    "foot_slip": contact_mdp.feet_slip(base_env, **slip_cfg.params).detach().float(),
+                }
+                raw["self_collisions"] = getattr(
+                    base_env,
+                    "_velocity_flat_last_raw_self_contact_counts",
+                    torch.full((args.num_envs,), float("nan"), device=base_env.device),
+                ).detach().float()
+                formula = {}
+                for name in raw:
+                    expected = raw[name] * weights[name]
+                    observed = torch.as_tensor(terms[name], device=expected.device)
+                    error = torch.abs(observed - expected)
+                    formula[name] = {
+                        "raw": raw[name].cpu().tolist(),
+                        "weight": weights[name],
+                        "weighted_expected": expected.cpu().tolist(),
+                        "manager_weighted": observed.cpu().tolist(),
+                        "max_abs_error": float(error.max().item()),
+                        "within_tolerance": bool(torch.isfinite(error).all().item() and error.max().item() <= 1.0e-5),
+                    }
+                return {
+                    "case": case,
+                    "step": step,
+                    "foot_net_force_w": force.cpu().tolist(),
+                    "current_air_time_s": current_air.cpu().tolist(),
+                    "foot_contact": contact.cpu().tolist(),
+                    "canonical_site_position_w": site_pos.cpu().tolist(),
+                    "canonical_site_height_m": site_pos[..., 2].cpu().tolist(),
+                    "canonical_site_speed_xy_m_s": torch.linalg.norm(site_vel[..., :2], dim=-1).cpu().tolist(),
+                    "manager_weighted_terms": terms,
+                    "formula_comparison": formula,
+                    "swing_height_comparison": {
+                        "manager_weighted": terms["foot_swing_height"],
+                        "classification": "stateful_manager_history; solver trajectory not asserted",
+                    },
+                    "finite": bool(
+                        torch.isfinite(force).all()
+                        and torch.isfinite(current_air).all()
+                        and torch.isfinite(contact).all()
+                        and torch.isfinite(site_pos).all()
+                        and torch.isfinite(site_vel).all()
+                    ),
+                }
+
+            fixture_cases = []
+            # All environments share each case so the report is directly
+            # comparable across env clones.  The second case explicitly holds
+            # the feet above the plane before lowering the root for contact.
+            for case, offsets in (
+                ("ground_contact", [0.0] * args.fixture_case_steps),
+                (
+                    "airborne_to_contact",
+                    [0.14] * max(1, args.fixture_case_steps // 2)
+                    + [0.0] * (args.fixture_case_steps - max(1, args.fixture_case_steps // 2)),
+                ),
+            ):
+                env.reset(seed=2026)
+                rows = []
+                for step, offset in enumerate(offsets):
+                    _write_height(offset)
+                    # Synchronize the forced state, then execute one normal
+                    # manager control step so all rewards share one snapshot.
+                    base_env.sim.step()
+                    base_env.scene.update(base_env.sim.cfg.dt)
+                    env.step(torch.zeros((args.num_envs, ACTION_SIZE), device=base_env.device))
+                    rows.append(_snapshot(step, case))
+                fixture_cases.append({"name": case, "steps": rows})
+            report["numerical_fixture"] = {
+                "num_envs": args.num_envs,
+                "seed": 2026,
+                "dt_s": float(base_env.sim.cfg.dt),
+                "cases": fixture_cases,
+                "tolerances": {"stateless_reward_abs": 1.0e-5},
+                "trajectory_classification": "MuJoCo/PhysX solver trajectories and same-step external-load friction timing are backend limitations; only captured-tensor formula parity is asserted.",
+                "all_finite": all(row["finite"] for case in fixture_cases for row in case["steps"]),
+                "stateless_formula_parity": all(
+                    item["within_tolerance"]
+                    for case in fixture_cases
+                    for row in case["steps"]
+                    for item in row["formula_comparison"].values()
+                ),
+            }
         if args.filtered_self_collision:
             import warp as wp
 

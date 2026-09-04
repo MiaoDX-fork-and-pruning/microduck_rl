@@ -260,3 +260,28 @@ def test_forced_contact_probe_has_direct_state_write_and_target_error():
     assert "write_joint_position_to_sim_index" in source
     assert '"target_error_max"' in source
     assert '"peak_transition_total"' in source
+
+
+def test_numerical_contact_fixture_contract_records_captured_tensors_and_formula_parity():
+    source = (ROOT / "scripts/isaaclab/contact_runtime_probe.py").read_text()
+    for token in (
+        "--numerical-fixture",
+        "ground_contact",
+        "airborne_to_contact",
+        "foot_net_force_w",
+        "current_air_time_s",
+        "foot_contact",
+        "canonical_site_speed_xy_m_s",
+        "manager_weighted_terms",
+        "formula_comparison",
+        "stateless_formula_parity",
+        "MuJoCo/PhysX solver trajectories",
+    ):
+        assert token in source
+
+
+def test_numerical_fixture_requires_four_envs_and_positive_step_count():
+    source = (ROOT / "scripts/isaaclab/contact_runtime_probe.py").read_text()
+    assert '"--fixture-case-steps"' in source
+    assert 'args.num_envs < 4' in source
+    assert 'args.fixture_case_steps < 2' in source
