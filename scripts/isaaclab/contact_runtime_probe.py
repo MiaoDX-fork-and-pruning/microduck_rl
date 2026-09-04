@@ -35,6 +35,7 @@ def main() -> None:
     parser.add_argument("--root-mode", choices=("nested", "asset"), default="nested")
     parser.add_argument("--candidate-ankle-view", action="store_true")
     parser.add_argument("--filtered-self-collision", action="store_true")
+    parser.add_argument("--raw-self-contact", action="store_true")
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument("--replicate-physics", action="store_true")
     parser.add_argument("--steps", type=int, default=4)
@@ -54,6 +55,12 @@ def main() -> None:
 
         register_tasks()
         cfg = make_velocity_flat_env_cfg(num_envs=args.num_envs)
+        if args.raw_self_contact:
+            # The manager ContactSensor filtered view is intentionally removed
+            # for this probe so the underlying PhysX view can be tested against
+            # the exact nested rigid-body paths without its body-path rewrite.
+            cfg.scene.self_collision_trunk = None
+            cfg.scene.self_collision_legs = None
         if args.replicate_physics:
             cfg.scene.replicate_physics = True
         if args.root_mode == "asset":
@@ -135,6 +142,73 @@ def main() -> None:
                     for name in contact_reward_names
                 ),
             }
+        if args.raw_self_contact:
+            # ContactSensor stores the singleton PhysX tensor view after
+            # initialization; SimulationContext does not expose it publicly.
+            sim_view = base_env.scene.sensors["feet_ground_contact"]._physics_sim_view
+            known_paths = list(base_env.scene.sensors["feet_ground_contact"].body_physx_view.prim_paths)
+            raw_cases = {}
+            for name, body_path, filters in (
+                (
+                    "trunk",
+                    "/World/envs/env_*/Robot/Geometry/trunk_base",
+                    [
+                        "/World/envs/env_*/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+                        "/World/envs/env_*/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+                    ],
+                ),
+                (
+                    "left_leg",
+                    "/World/envs/env_*/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+                    [
+                        "/World/envs/env_*/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+                    ],
+                ),
+            ):
+                try:
+                    # Use the tensor view's concrete path spelling when
+                    # available; this avoids guessing whether a nested USD
+                    # body pattern is parent-relative or leaf-relative.
+                    body_candidates = [
+                        p for p in known_paths
+                        if p.endswith("/trunk_base") and name == "trunk"
+                        or p.endswith("/leg") and name == "left_leg"
+                    ]
+                    # Passing one concrete body and one concrete partner per
+                    # environment avoids the PhysX tensor plugin's ambiguity
+                    # with nested USD paths under an env glob.
+                    if body_candidates:
+                        body_patterns = body_candidates
+                        filter_patterns = [
+                            [
+                                f.replace("/World/envs/env_*/", f"/World/envs/{p.split('/')[3]}/")
+                                for f in filters
+                            ]
+                            for p in body_patterns
+                        ]
+                    else:
+                        body_patterns = [body_path]
+                        filter_patterns = [filters]
+                    view = sim_view.create_rigid_contact_view(
+                        body_patterns,
+                        filter_patterns=filter_patterns,
+                        max_contact_data_count=64 * args.num_envs,
+                    )
+                    net = view.get_net_contact_forces(dt=float(base_env.sim.cfg.dt))
+                    _, points, _, _, counts, starts = view.get_contact_data(dt=float(base_env.sim.cfg.dt))
+                    raw_cases[name] = {
+                        "sensor_count": int(view.sensor_count),
+                        "filter_count": int(view.filter_count),
+                        "net_shape": list(net.shape),
+                        "point_shape": list(points.shape),
+                        "count_shape": list(counts.shape),
+                        "start_shape": list(starts.shape),
+                        "counts": torch.as_tensor(counts).tolist(),
+                        "finite": bool(torch.isfinite(torch.as_tensor(net)).all().item()),
+                    }
+                except Exception as exc:  # retain all view diagnostics in the report
+                    raw_cases[name] = {"error": f"{type(exc).__name__}: {exc}"}
+            report["raw_self_contact"] = raw_cases
         if args.candidate_ankle_view:
             ankle_glob = "/World/envs/env_*/Robot/Geometry/trunk_base/*/*/*/*/*"
             print(f"CONTACT_PROBE_CANDIDATE_START:{ankle_glob}", flush=True)

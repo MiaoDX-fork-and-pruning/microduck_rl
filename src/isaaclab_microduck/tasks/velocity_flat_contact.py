@@ -275,7 +275,28 @@ def self_collision_cost(
     env: ManagerBasedEnv,
     sensor_names: tuple[str, ...],
 ) -> torch.Tensor:
-    """Count self-contact points without including external contacts."""
+    """Count self-contact points without including external contacts.
+
+    The normal path uses the two filtered ContactSensors retained by the host
+    tests.  IsaacLab 3.0 cannot construct those filtered views for this nested
+    USD articulation across multiple clones, so production scenes leave them
+    disabled and lazily create concrete per-environment ``RigidContactView``
+    objects from the already-resolved foot sensor body paths.  This keeps the
+    count source at PhysX contact-point granularity and excludes ground by
+    construction.
+    """
+
+    available = getattr(env.scene, "sensors", {})
+    if all(name in available for name in sensor_names):
+        return _filtered_sensor_self_collision_cost(env, sensor_names)
+    return _raw_physx_self_collision_cost(env)
+
+
+def _filtered_sensor_self_collision_cost(
+    env: ManagerBasedEnv,
+    sensor_names: tuple[str, ...],
+) -> torch.Tensor:
+    """Compatibility path for explicit filtered ContactSensor instances."""
 
     cost = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
     for name in sensor_names:
@@ -291,6 +312,82 @@ def self_collision_cost(
             raise RuntimeError(f"unexpected self-collision count shape for {name!r}: {counts.shape}")
         cost += counts.reshape(env.num_envs, -1).sum(dim=1).float()
     return cost
+
+
+def _concrete_env_path(path: str, env_name: str) -> str:
+    """Replace the standard IsaacLab environment glob with one concrete env."""
+
+    marker = "/World/envs/env_*/"
+    if marker in path:
+        return path.replace(marker, f"/World/envs/{env_name}/", 1)
+    return path
+
+
+def _raw_physx_self_collision_cost(env: ManagerBasedEnv) -> torch.Tensor:
+    """Read multi-env raw PhysX contact counts for trunk/leg self contacts.
+
+    The tensor API accepts concrete paths with one sensor body per environment
+    and one-to-many filters.  Passing the paths explicitly avoids its nested
+    USD body-name expansion (which otherwise produces ``body/body`` paths).
+    """
+
+    cache = getattr(env, "_velocity_flat_raw_self_contact_views", None)
+    if cache is None:
+        sensors = getattr(env.scene, "sensors", {})
+        foot_sensor = sensors.get("feet_ground_contact")
+        if foot_sensor is None or getattr(foot_sensor, "body_physx_view", None) is None:
+            raise RuntimeError("raw self-collision view requires feet_ground_contact body paths")
+        sim_view = getattr(foot_sensor, "_physics_sim_view", None)
+        if sim_view is None:
+            raise RuntimeError("raw self-collision view requires an initialized PhysX simulation view")
+        body_paths = [str(path) for path in foot_sensor.body_physx_view.prim_paths]
+        selected: dict[str, list[str]] = {"trunk": [], "left_leg": [], "right_leg": []}
+        for path in body_paths:
+            if path.endswith("/trunk_base"):
+                selected["trunk"].append(path)
+            elif path.endswith("/upper_leg_left/leg"):
+                selected["left_leg"].append(path)
+            elif path.endswith("/upper_leg_right/leg_2"):
+                selected["right_leg"].append(path)
+        if any(len(paths) != env.num_envs for paths in selected.values()):
+            raise RuntimeError(
+                "raw self-collision body paths did not resolve one trunk and two legs per environment: "
+                f"{ {name: len(paths) for name, paths in selected.items()} }"
+            )
+        trunk_filters = [
+            [
+                _concrete_env_path(selected["left_leg"][env_id], selected["trunk"][env_id].split("/")[3]),
+                _concrete_env_path(selected["right_leg"][env_id], selected["trunk"][env_id].split("/")[3]),
+            ]
+            for env_id in range(env.num_envs)
+        ]
+        leg_filters = [
+            [_concrete_env_path(selected["right_leg"][env_id], selected["left_leg"][env_id].split("/")[3])]
+            for env_id in range(env.num_envs)
+        ]
+        try:
+            trunk_view = sim_view.create_rigid_contact_view(
+                selected["trunk"],
+                filter_patterns=trunk_filters,
+                max_contact_data_count=64 * env.num_envs,
+            )
+            leg_view = sim_view.create_rigid_contact_view(
+                selected["left_leg"],
+                filter_patterns=leg_filters,
+                max_contact_data_count=32 * env.num_envs,
+            )
+        except Exception as exc:
+            raise RuntimeError("failed to initialize concrete raw self-collision PhysX views") from exc
+        cache = (trunk_view, leg_view)
+        setattr(env, "_velocity_flat_raw_self_contact_views", cache)
+
+    counts_total = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+    sim_cfg = getattr(getattr(env, "sim", None), "cfg", None)
+    dt = float(getattr(sim_cfg, "dt", getattr(env, "step_dt", 0.005)))
+    for view in cache:
+        _, _, _, _, counts, _ = view.get_contact_data(dt=dt)
+        counts_total += torch.as_tensor(counts, device=env.device).reshape(env.num_envs, -1).sum(dim=1).float()
+    return counts_total
 
 
 def nan_state(

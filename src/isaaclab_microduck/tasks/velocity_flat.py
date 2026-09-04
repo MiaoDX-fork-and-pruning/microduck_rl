@@ -58,6 +58,11 @@ from isaaclab_microduck.tasks.velocity_flat_sensors import (
     sensor_corruption,
 )
 
+# IsaacLab 3.0's filtered PhysX contact view is retained as a diagnostic
+# configuration, but its nested USD path expansion is not multi-env safe. The
+# production reward uses concrete raw views instead (see velocity_flat_contact).
+ENABLE_FILTERED_SELF_CONTACT = False
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
@@ -640,6 +645,11 @@ class SceneCfg(InteractiveSceneCfg):
         force_threshold=1.0,
         update_period=0.005,
     )
+    # IsaacLab's filtered ContactSensor currently rewrites nested articulation
+    # roots to ``.../trunk_base/trunk_base`` and cannot initialize the view for
+    # multiple clones.  Keep the reference configurations visible for contract
+    # inspection, but disable them in production; self-collision uses the raw
+    # concrete PhysX view in ``velocity_flat_contact.self_collision_cost``.
     self_collision_trunk = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base",
         filter_prim_paths_expr=[
@@ -649,7 +659,7 @@ class SceneCfg(InteractiveSceneCfg):
         history_length=0,
         track_contact_points=True,
         update_period=0.005,
-    )
+    ) if ENABLE_FILTERED_SELF_CONTACT else None
     self_collision_legs = ContactSensorCfg(
         prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
         filter_prim_paths_expr=[
@@ -658,7 +668,7 @@ class SceneCfg(InteractiveSceneCfg):
         history_length=0,
         track_contact_points=True,
         update_period=0.005,
-    )
+    ) if ENABLE_FILTERED_SELF_CONTACT else None
 
     # Required by IsaacLab for USD-level ``prestartup`` events. The plane is a
     # single global prim, so replication is not useful here anyway.
