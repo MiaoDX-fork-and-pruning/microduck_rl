@@ -286,8 +286,13 @@ def pose_tracking(
 
     asset = _asset(env, asset_cfg)
     ids = asset_cfg.joint_ids
-    if ids is None or len(ids) == 0:
+    # Manager resolution uses ``slice(None)`` when no selector was supplied;
+    # that means all simulator joints, not an empty selection.  The mjlab
+    # variable-posture term nevertheless tracks only the ten leg servos.
+    if ids is None or isinstance(ids, slice):
         ids = torch.cat((_policy_indices(asset)[:5], _policy_indices(asset)[9:])).tolist()
+    elif len(ids) == 0:
+        return torch.ones(asset.data.joint_pos.torch.shape[0], device=asset.device)
     ids = torch.as_tensor(ids, device=asset.device, dtype=torch.long)
     names = [asset.joint_names[int(index)] for index in ids]
     standing = _std_vector(names, std_standing or {}, device=asset.device)
