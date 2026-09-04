@@ -176,6 +176,32 @@ ONNX export: `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-0
 Reset-fix regression battery: `.cache/isaaclab-assets/velocity_flat_command_battery_resetfix_strict.json`.
 Directional trace: `.cache/isaaclab-assets/velocity_flat_directional_trace_resetfix2_4x4.json`.
 
+## P0 policy A/B diagnosis
+
+To separate a strict-checkpoint behavior failure from command/action wiring or
+the PhysX runtime, the accepted mjlab `model_5999.pt` was loaded by the same
+IsaacLab 3.0.0 / rsl-rl-lib 5.4.1 runner and evaluated with the same seed,
+reset protocol, command freeze, 16 environments, and 300-step six-case
+battery. The accepted policy passes every case in IsaacLab, including positive
+forward and lateral response, while the corrected strict IsaacLab checkpoint
+fails only those two response gates. This is a policy/training behavior delta,
+not evidence of a command-slot, action-boundary, or BAM target-path mismatch.
+
+| Checkpoint evaluated in IsaacLab | Battery result | Forward mean XY velocity | Lateral mean XY velocity | Resets | Artifact |
+| --- | --- | ---: | ---: | ---: | --- |
+| accepted mjlab `model_5999.pt` | all six cases pass | `(0.118, 0.011) m/s` | `(-0.040, 0.068) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_policy_p0.json` |
+| corrected strict IsaacLab `model_5999.pt` | forward/lateral blocked | `(-0.011, 0.004) m/s` | `(-0.014, -0.001) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json` |
+
+The bounded intermediate trace independently records exact command tails,
+raw actions, canonical-to-simulator action order, BAM delayed targets and
+efforts, and body-frame velocities for zero/forward/lateral/yaw:
+`.cache/isaaclab-assets/velocity_flat_directional_trace_p0.json`. It reports
+finite tensors, raw-action to action-manager equality, command tails exactly
+`[0.2,0,0]` and `[0,0.2,0]`, and delay lags in `3..6`. Therefore no reward/PPO
+or action-clipping change is justified by this failure. The known PhysX solver
+and same-step external-load friction timing limitation remains separately
+recorded as `BACKEND_DELTA`.
+
 ## Common forward slice
 
 | Metric | IsaacLab smoke checkpoint | mjlab accepted policy |

@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: fixed-root same-state BAM dynamics proof completed; trained-policy battery still exposes a reproducible forward/lateral response failure without command/action wiring drift
+current_slice: fixed-root same-state BAM dynamics proof and accepted-policy IsaacLab A/B diagnosis completed; strict trained-policy battery still blocks forward/lateral response
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: corrected strict policy is stable but fails forward/lateral command-response gates while yaw/turn cases pass
+blocker_fingerprint: corrected strict policy fails forward/lateral command-response gates while accepted mjlab policy passes the same IsaacLab battery
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -69,6 +69,11 @@ last_proven_evidence: >-
   sine 0.0060 vs 0.1503), confirming the explicit friction timing and solver
   `BACKEND_DELTA` rather than an action/target mismatch
   (`fixed_root_dynamics_parity_1x12.json`).
+  The accepted mjlab `model_5999.pt` was then loaded into the same IsaacLab
+  runner and six-case battery: all cases pass, with forward mean velocity
+  `(0.118,0.011) m/s` and lateral `(-0.040,0.068) m/s`; this separates the
+  remaining strict-checkpoint behavior failure from command/action wiring or
+  BAM target semantics (`velocity_flat_command_battery_mjlab_policy_p0.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -95,14 +100,15 @@ completed: >-
   lateral command response fail while zero/yaw/turn cases pass:
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Keep the remaining forward/lateral trained-policy gate blocked and diagnose
-  only through command/action/locomotion evidence. The fixed-root proof
-  confirms the actuator target path and classifies the remaining dynamics gap;
-  do not tune rewards/PPO or launch another long run.
+  Keep the strict trained-policy forward/lateral gate blocked. Do not tune
+  rewards/PPO or launch another long run; the accepted-policy A/B proves the
+  runtime can express the directional behavior. Any further work must inspect
+  strict-run training provenance or reproduce the accepted policy's training
+  recipe, while retaining solver/friction as explicit backend delta.
 next_proof: >-
-  Completed: fixed-root same-state step/sine comparison in
-  `.cache/isaaclab-assets/fixed_root_dynamics_parity_1x12.json`; retain
-  same-step external-load friction and solver behavior as `BACKEND_DELTA`.
+  Completed: accepted-policy A/B battery in IsaacLab, with finite all-case
+  response and zero resets, in
+  `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_policy_p0.json`.
 stop_condition: >-
   Do not start VelStand. Do not launch another long run while the corrected
   strict policy fails the forward/lateral battery; do not tune reward/PPO to
