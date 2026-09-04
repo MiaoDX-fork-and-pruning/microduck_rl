@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import json
 from pathlib import Path
+import traceback
 
 import torch
 
@@ -23,6 +24,16 @@ def _summary(value: torch.Tensor) -> dict[str, object]:
         "min": float(value.min().item()),
         "max": float(value.max().item()),
         "mean": float(value.mean().item()),
+    }
+
+
+def _difference_summary(reference: torch.Tensor, observed: torch.Tensor) -> dict[str, object]:
+    delta = (_tensor(observed) - _tensor(reference)).detach().float()
+    return {
+        "shape": list(delta.shape),
+        "finite": bool(torch.isfinite(delta).all().item()),
+        "max_abs": float(delta.abs().max().item()),
+        "mean_abs": float(delta.abs().mean().item()),
     }
 
 
@@ -60,6 +71,15 @@ def _assert_runtime_contract(record: dict[str, object], *, num_envs: int) -> Non
     assert record["commands"]["head_pose"]["shape"] == [num_envs, 4]
     assert record["commands"]["body_pose"]["shape"] == [num_envs, 6]
     assert record["actor_obs"]["finite"] and record["joint_pos"]["finite"]
+    assert all(item["finite"] for item in record["sensor_effects"].values())
+    assert record["sensor_effects"]["joint_pos"]["max_abs"] <= 0.016
+    assert record["sensor_effects"]["joint_vel"]["max_abs"] <= 0.25
+    # Gyro/gravity include the episode-stable <=6 degree mounting rotation;
+    # their coordinate-wise delta is therefore larger than the additive noise
+    # bound alone.  The loose bound catches explosions while preserving that
+    # intended corruption source.
+    assert record["sensor_effects"]["gyro"]["max_abs"] <= 0.15
+    assert record["sensor_effects"]["gravity"]["max_abs"] <= 0.15
 
 
 def main() -> None:
@@ -79,7 +99,13 @@ def main() -> None:
 
         from isaaclab_microduck.policy_abi import ACTION_SIZE
         from isaaclab_microduck.tasks import register_tasks
-        from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+        from isaaclab_microduck.tasks.velocity_flat import (
+            make_velocity_flat_env_cfg,
+            policy_gyro,
+            policy_joint_pos,
+            policy_joint_vel,
+            policy_projected_gravity,
+        )
 
         register_tasks()
         cfg = make_velocity_flat_env_cfg(num_envs=args.num_envs)
@@ -124,6 +150,22 @@ def main() -> None:
                 ),
                 "actor_obs": _summary(obs["policy"] if isinstance(obs, dict) else obs),
             }
+            print(f"ISAACLAB_PARITY_PROBE:reset_{reset_index}:sensor_effects_start", flush=True)
+            sensor_pairs = (
+                ("gyro", policy_gyro(base_env, corrupt=False), policy_gyro(base_env, corrupt=True)),
+                (
+                    "gravity",
+                    policy_projected_gravity(base_env, corrupt=False),
+                    policy_projected_gravity(base_env, corrupt=True),
+                ),
+                ("joint_pos", policy_joint_pos(base_env, biased=False), policy_joint_pos(base_env, biased=True)),
+                ("joint_vel", policy_joint_vel(base_env, corrupt=False), policy_joint_vel(base_env, corrupt=True)),
+            )
+            record["sensor_effects"] = {
+                name: _difference_summary(clean, corrupt)
+                for name, clean, corrupt in sensor_pairs
+            }
+            print(f"ISAACLAB_PARITY_PROBE:reset_{reset_index}:sensor_effects_done", flush=True)
             for name in ("_encoder_bias", "_imu_mount_quat", "_gyro_lag", "_gravity_lag", "_joint_vel_history"):
                 value = getattr(base_env, name, None)
                 if value is not None:
@@ -159,6 +201,10 @@ def main() -> None:
             args.output.parent.mkdir(parents=True, exist_ok=True)
             args.output.write_text(encoded)
         print(encoded, end="")
+    except BaseException:
+        print("ISAACLAB_PARITY_PROBE:failure", flush=True)
+        traceback.print_exc()
+        raise
     finally:
         if env is not None:
             env.close()
