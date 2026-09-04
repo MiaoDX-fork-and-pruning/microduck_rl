@@ -67,6 +67,39 @@ ordered roughly by expected effect on the learned behavior.
 | RL implementation | `rsl-rl-lib 5.0.1` | IsaacLab image bundles `rsl-rl-lib 5.4.1` | medium; PPO code path is not byte-identical |
 | Evaluation | mjlab accepted battery is 300 steps, one continuous env, forward sweeps | IsaacLab battery is 250 steps across 16 envs, fixed zero/forward/lateral/yaw | medium; metrics need a common harness |
 
+Additional concrete mismatches found in the runtime/config audit:
+
+- **Reset distribution:** mjlab samples reset base height in `0.12..0.13 m`,
+  randomizes joint offsets through `reset_robot_joints`, and starts PPO with
+  randomized episode phases. IsaacLab currently resets to one exact HOME pose
+  at `z=0.12 m`; only RSL-RL's episode-length randomization is shared.
+- **Termination boundary:** mjlab's default `fell_over` limit is 70 degrees,
+  plus terrain-bounds and NaN-state terms. IsaacLab's `gravity_xy > 0.75`
+  criterion trips at roughly 49 degrees and has a separate `z < 0.055 m`
+  cutoff. This changes the learning problem before rewards are considered.
+- **Sensor frame:** mjlab actor gyro/gravity use the named IMU sensor and apply
+  the same per-environment mounting misalignment, noise, and delay. IsaacLab
+  reads root-state tensors directly, so even identically named observations are
+  not the same measurement.
+- **Friction duplication:** the converted USD report still shows
+  `joint_friction=0.0048` on all 14 joints. mjlab's BAM `edit_spec` zeroes
+  `dof_frictionloss` and injects its own solver-side budget. Until the PhysX
+  friction bridge exists, leaving the USD value active is an additional hidden
+  dynamics difference.
+- **Action path:** mjlab position actuators have a `ctrlrange=(-10, 10)` and
+  `forcerange=(-0.96, 0.96)` around the BAM computation. IsaacLab has no action
+  term clip and sends the absolute target directly to the explicit actuator,
+  whose PWM clamp is the only saturation. The two policies therefore see
+  different behavior when their Gaussian action scale grows.
+- **HOME/limit inconsistency:** the canonical policy HOME uses
+  `right_hip_yaw=0.4579 rad`, while both the MJCF and imported USD cap that joint
+  at `0.4363 rad`. IsaacLab clamps only the spawn value, so its initial policy
+  observation carries a persistent `-0.0219 rad` offset on that joint.
+- **Software implementation:** the accepted mjlab run uses `rsl-rl-lib 5.0.1`;
+  the IsaacLab 3.0.0 image uses `rsl-rl-lib 5.4.1`. Even with matching scalar
+  PPO fields, optimizer/distribution implementation details are not byte-level
+  identical.
+
 Asset geometry and canonical joint limits are currently close: the compiled
 MJCF and USD both contain 14 actuated revolute joints and 75 collision
 geometries. The remaining asset concern is dynamics and sensor authoring, not
