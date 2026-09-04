@@ -67,13 +67,33 @@ class ControlStepDelay:
         for _ in range(self.max_lag + 1):
             self._history.append(torch.zeros(num_envs, width, device=device))
 
+    @staticmethod
+    def _copy_to_writable_storage(value: torch.Tensor) -> torch.Tensor:
+        """Detach an input into storage that remains mutable across resets.
+
+        IsaacLab playback runs policy inference under ``torch.inference_mode``.
+        Tensors created there cannot later be modified in ordinary mode, so a
+        plain ``clone`` is not sufficient for a stateful actuator queue.
+        Explicitly disabling inference mode while allocating and copying keeps
+        the queue's ownership separate from the policy's temporary tensors.
+        """
+
+        with torch.inference_mode(False):
+            stored = torch.empty(
+                value.shape,
+                dtype=value.dtype,
+                device=value.device,
+            )
+            stored.copy_(value.detach())
+        return stored
+
     def set_delays(self, delays: torch.Tensor) -> None:
         if delays.shape != self.delay.shape:
             raise ValueError("delay tensor must have one value per environment")
         self.delay.copy_(delays.to(device=self.delay.device, dtype=torch.long).clamp(self.min_lag, self.max_lag))
 
     def push(self, target: torch.Tensor) -> torch.Tensor:
-        self._history.append(target.clone())
+        self._history.append(self._copy_to_writable_storage(target))
         stack = torch.stack(tuple(self._history), dim=0)
         # History is oldest -> newest.  A lag of zero reads the newest target.
         offsets = self.max_lag - self.delay

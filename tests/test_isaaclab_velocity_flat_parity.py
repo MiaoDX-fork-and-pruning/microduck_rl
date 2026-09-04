@@ -66,6 +66,19 @@ def test_bam_delay_reset_accepts_compact_nonzero_env_subset() -> None:
     assert float(out[3, 0]) == 9.0
 
 
+def test_bam_delay_inference_push_then_normal_reset_is_writable() -> None:
+    delay = ControlStepDelay(2, 1, min_lag=3, max_lag=3)
+    with torch.inference_mode():
+        delay.push(torch.tensor([[1.0], [2.0]]))
+    # The battery runs policy inference in inference_mode but resets between
+    # command cases in ordinary mode.  FIFO storage must support that boundary.
+    delay.reset(torch.tensor([1]), torch.tensor([[9.0]]))
+    target = torch.zeros(2, 1)
+    target[1] = 10.0
+    out = delay.push(target)
+    assert float(out[1, 0]) == 9.0
+
+
 def test_voltage_sag_has_floor_and_depends_on_previous_load() -> None:
     nominal = torch.tensor([[7.5], [7.5]])
     effort = torch.tensor([[1.0, 2.0], [20.0, 20.0]])

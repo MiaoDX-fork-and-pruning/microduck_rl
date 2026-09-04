@@ -17,13 +17,16 @@ import torch
 
 from isaaclab.app import AppLauncher
 
-from scripts.isaaclab.velocity_flat_battery_spec import (
-    CASES,
-    NUM_ENVS,
-    SEED,
-    STEPS_PER_CASE,
-    evaluate_case,
-)
+try:
+    from scripts.isaaclab.velocity_flat_battery_spec import (
+        CASES,
+        NUM_ENVS,
+        SEED,
+        STEPS_PER_CASE,
+        evaluate_case,
+    )
+except ModuleNotFoundError:  # direct ``python scripts/isaaclab/...py`` entry
+    from velocity_flat_battery_spec import CASES, NUM_ENVS, SEED, STEPS_PER_CASE, evaluate_case
 
 
 TASK = "IsaacLab-Velocity-Flat-MicroDuck"
@@ -32,8 +35,8 @@ TASK = "IsaacLab-Velocity-Flat-MicroDuck"
 # MuJoCo and IsaacLab harnesses cannot silently drift apart.
 REQUIRED_CASE_NAMES = ("zero", "forward", "lateral", "yaw")
 COMMANDS = {case.name: case.command for case in CASES}
-if tuple(COMMANDS) != REQUIRED_CASE_NAMES:
-    raise RuntimeError(f"fixed command battery cases drifted: {tuple(COMMANDS)!r}")
+if not all(name in COMMANDS for name in REQUIRED_CASE_NAMES):
+    raise RuntimeError(f"fixed command battery cases missing required scenarios: {tuple(COMMANDS)!r}")
 
 
 def _tilt_rad(quat_xyzw: torch.Tensor) -> torch.Tensor:

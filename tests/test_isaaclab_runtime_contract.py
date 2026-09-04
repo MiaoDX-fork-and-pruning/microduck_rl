@@ -123,6 +123,7 @@ def test_command_battery_has_fixed_required_scenarios() -> None:
     assert "RslRlVecEnvWrapper(env, clip_actions=1.0)" in source
     assert "clip_actions=True" not in source
     assert "handle_deprecated_rsl_rl_cfg(agent_cfg, \"5.4.1\")" in source
+    assert "from velocity_flat_battery_spec import" in source
 
 
 def test_asset_declares_imported_articulation_root_path() -> None:
