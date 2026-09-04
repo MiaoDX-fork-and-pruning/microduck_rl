@@ -103,6 +103,11 @@ class BamActuator(ActuatorBase):
         self._last_target = torch.zeros(
             (self._num_envs, num_joints), dtype=torch.float32, device=self._device
         )
+        # Keep the motor-only effort separately from the final articulation
+        # effort.  mjlab's voltage sag uses the previous BAM motor torque;
+        # feedforward effort is an external command and must not contribute to
+        # the battery-load estimate.
+        self._previous_motor_effort = torch.zeros_like(self._last_target)
         self._applied_effort = torch.zeros_like(self._last_target)
         self._friction_scale = torch.full(
             (self._num_envs, 1), cfg.friction_scale, dtype=torch.float32, device=self._device
@@ -123,6 +128,7 @@ class BamActuator(ActuatorBase):
             self.cfg.delay_min_lag, self.cfg.delay_max_lag + 1, (ids.numel(),), device=self._device
         )
         self._delay.reset(ids, self._last_target[ids])
+        self._previous_motor_effort[ids] = 0.0
         self._applied_effort[ids] = 0.0
         self.applied_effort = self._applied_effort
         self._delay_initialized[ids] = False
@@ -151,7 +157,7 @@ class BamActuator(ActuatorBase):
         # Effective voltage uses the previous solved motor effort.  PhysX does
         # not expose the same-step external load to this callback; that
         # limitation is recorded as BACKEND_DELTA in the parity ledger.
-        previous = getattr(self, "applied_effort", self._applied_effort)
+        previous = self._previous_motor_effort
         supply = effective_supply_voltage(
             self._supply_voltage,
             previous,
@@ -176,6 +182,7 @@ class BamActuator(ActuatorBase):
         # this buffer to the computed inference tensor would make the next
         # episode reset fail when it clears the previous effort in-place.
         with torch.inference_mode(False):
+            self._previous_motor_effort.copy_(motor_effort.detach())
             self._applied_effort.copy_(motor_effort + feedforward)
         self.computed_effort = self._applied_effort
         self.applied_effort = self._applied_effort

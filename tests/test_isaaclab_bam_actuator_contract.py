@@ -38,6 +38,17 @@ def test_bam_wrapper_uses_measured_velocity_for_back_emf() -> None:
     assert "joint_vel - target_vel" not in source
 
 
+def test_bam_voltage_sag_uses_previous_motor_effort_not_feedforward() -> None:
+    source = SCRIPT.read_text()
+    # mjlab's ``_prev_motor_torque`` is motor-only.  Keeping a separate
+    # state buffer prevents ArticulationActions.joint_efforts (feedforward)
+    # from changing the next-step battery sag.
+    assert "self._previous_motor_effort = torch.zeros_like(self._last_target)" in source
+    assert "previous = self._previous_motor_effort" in source
+    assert "self._previous_motor_effort.copy_(motor_effort.detach())" in source
+    assert "self._previous_motor_effort[ids] = 0.0" in source
+
+
 def test_bam_friction_scale_supports_per_environment_domain_randomization() -> None:
     source = SCRIPT.read_text()
     assert "env_ids: Sequence[int] | torch.Tensor | slice | None = None" in source
