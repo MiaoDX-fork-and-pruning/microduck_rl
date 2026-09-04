@@ -103,13 +103,16 @@ completed: >-
   `docs/isaaclab_velocity_flat_long_run_report.md` and
   `.cache/isaaclab-assets/velocity_flat_command_battery_long_3999.json`.
 next_action: >-
-  Do not start VelStand/Task I. Redesign the Velocity-Flat early-balance and
-  crouched/standing local optimum, or run a controlled action/effort semantics
-  benchmark before another long PPO job. The completed long run proves runtime
-  sustainability but fails walking acceptance. Keep the USD
-  `drive_configured=false` finding visible: BAM is explicit effort control, not
-  implicit PhysX PD. PhysX force getters are available, but only as post-step
-  data; a one-step delayed controller would require a new design decision.
+  Do not start VelStand/Task I or another long PPO job. Implement the locked
+  strict-mjlab-semantic parity slice in order: action/BAM/asset semantics;
+  reset/DR and actor sensor corruption; commands and complete rewards;
+  privileged critic observations; then the common fixed battery and 64-env
+  smoke. Launch a replacement 4096-env/6000-iteration run only after those
+  gates pass. The completed long run proves runtime sustainability but fails
+  walking acceptance. Keep the USD `drive_configured=false` finding visible:
+  BAM is explicit effort control, not implicit PhysX PD. PhysX force getters are
+  available, but only as post-step data; same-step external-load friction is an
+  explicit backend limitation, not a reason to alter mjlab semantics.
 next_proof: >-
   `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --with pytest pytest
   tests/test_isaaclab_velocity_flat_contract.py tests/test_isaaclab_velocity_flat_rewards.py
@@ -119,7 +122,8 @@ next_proof: >-
   `.cache/isaaclab-assets/velocity_flat_smoke_64_prestartup.json`, and the
   smoke run under `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/`.
   The container dependency probe is green with `torch==2.10.0+cu128`,
-  `tensordict==0.10.0`, and `rsl_rl==5.0.1`.
+  `tensordict==0.10.0`, and `rsl_rl==5.4.1` (the IsaacLab image; mjlab remains
+  on `rsl-rl-lib 5.0.1`).
 stop_condition: >-
   Do not claim simulator parity or reliable walking, and do not start VelStand/
   Task I, until a revised Velocity-Flat checkpoint passes the fixed command

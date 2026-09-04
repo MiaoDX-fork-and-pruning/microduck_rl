@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — IsaacLab 3.0.0 / Isaac Sim 6.0.1 runtime, fixed command battery, and forward-only comparison complete; long-run decision remains**
+Status: **active execution plan — strict mjlab-semantic parity closure before the next IsaacLab Velocity-Flat long run**
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -11,12 +11,67 @@ This plan is intended for long-running local development with Codex or another c
 
 The goal is to add an IsaacLab/PhysX backend to this repository while preserving the existing mjlab backend as the reference path.
 
-A successful program produces a second backend that implements the same Microduck hardware-facing policy semantics and can independently train deployable policies. It is not necessary to port every task before the work is useful.
+A successful program produces a second backend that implements the same Microduck hardware-facing policy semantics and can independently train deployable policies. The first acceptance target is a strict semantic port of `Velocity-Flat`; other tasks remain later phases.
 
 For this plan, equivalent training means matching the production 61D -> 14D
-policy contract and task semantics closely enough to produce deployable
-behavior. It does not require identical MuJoCo/PhysX trajectories or reward
-curves.
+policy contract, reset/DR distribution, observations, commands, rewards,
+terminations, actuator path, and PPO configuration. It does not require
+identical MuJoCo/PhysX trajectories or reward curves. MuJoCo solver behavior
+and the IsaacLab same-step external-load friction timing limitation are explicit
+backend differences, not reasons to silently change task semantics.
+
+## 1A. Locked parity decision
+
+The implementation standard is:
+
+```text
+mjlab Velocity-Flat semantics
+        |
+        +-- same policy ABI, commands, observations, rewards, resets, DR,
+        |   actuator delay/voltage behavior, and PPO recipe
+        |
+        +-- MuJoCo solver  !=  PhysX solver       (documented backend delta)
+        +-- solved external torque timing differs (documented BAM limitation)
+```
+
+Do not compensate for a semantic mismatch by tuning rewards or PPO. Every
+intentional divergence must be recorded in the parity ledger and covered by a
+focused test or deterministic benchmark.
+
+The next implementation slice is deliberately gated:
+
+1. close action/BAM/asset semantics;
+2. port reset/DR, actor sensor noise/delay/bias, commands, rewards, and
+   privileged critic observations;
+3. run the common fixed command battery and parity benchmarks;
+4. run the 64-env/5-iteration smoke;
+5. only then launch a new 4096-env/6000-iteration run.
+
+The previous long run is diagnostic only: it used the old critic and failed the
+walking battery. It must not be used as the strict-parity baseline.
+
+## 1B. Parity ledger and acceptance rule
+
+The implementation must maintain a machine-readable and human-readable parity
+ledger at `docs/isaaclab_velocity_flat_parity_ledger.md` (with JSON fixtures in
+`.cache/isaaclab-assets/` when measurements are needed). Each row records:
+
+```text
+surface | mjlab source | IsaacLab source | status | tolerance/evidence | owner
+```
+
+`status` is one of `MATCHED`, `BACKEND_DELTA`, `BLOCKED`, or `NOT_STARTED`.
+`BACKEND_DELTA` is reserved for the two locked exceptions above and any solver
+effect demonstrated by a deterministic benchmark. A missing implementation,
+unmeasured difference, or reward/config workaround is not a backend delta.
+The fixed command battery, ABI fixtures, actuator bench, and reward/config
+tests are the evidence columns for closing rows. No long PPO run starts while a
+P0 row is `BLOCKED` or `NOT_STARTED`.
+
+The PPO software stack is part of the semantic comparison. First attempt to run
+the IsaacLab image with the mjlab reference `rsl-rl-lib 5.0.1`; if IsaacLab
+3.0.0 requires `5.4.1`, keep the supported version and mark the implementation
+difference explicitly in the ledger with a controlled optimizer/rollout probe.
 
 ## 2. Working rules
 
@@ -699,9 +754,9 @@ under the ignored `logs/rsl_rl/microduck_isaaclab_velocity_flat_smoke/` path.
 The smoke is an integration gate only; its falling behavior is not evidence of
 a trained gait.
 
-### Task H — first full walking run
+### Task H — strict-parity walking run
 
-Deliver:
+Deliver only after the parity closure gates above pass:
 
 - baseline manifest;
 - training run;
@@ -726,9 +781,11 @@ checkpoint is not a reliable gait. See
   command sets differ; it shows the accepted mjlab rollout staying upright
   while the five-iteration IsaacLab checkpoint resets about 2.1% of
   environments per step and reaches about 0.85 rad tilt. Task H is therefore
-  not accepted as a walking result. A longer IsaacLab run requires a new
-  resource/experiment decision, and external-load BAM friction parity remains
-  unresolved.
+  not accepted as a walking result. The completed 6000-iteration budget run is
+  invalid as the final baseline because its critic architecture was stale and
+  its battery failed. A replacement run requires the parity closure gates, a
+  new manifest, and the same fixed battery; external-load BAM friction parity
+  remains an explicit PhysX limitation.
 
 ### Task I — decide whether to continue
 
@@ -775,16 +832,112 @@ Avoid these shortcuts:
 
 ## 22. Completion criteria for the first IsaacLab program
 
-The first program can be considered successful without complete feature parity if all of the following hold:
+The first program can be considered successful once all of the following hold:
 
 1. one repository supports reproducible mjlab and IsaacLab developer environments;
 2. existing mjlab workflows and tests remain stable;
 3. Microduck USD/model parity is documented and tested;
 4. actor ABI/action semantics are golden-tested across backends;
 5. BAM actuator behavior is numerically and dynamically benchmarked;
-6. Velocity Flat trains successfully in IsaacLab using direct RL;
-7. VelStand or one other contact-rich task demonstrates the backend is not limited to simple walking;
-8. evaluation reports make simulator differences explicit;
-9. a PhysX-trained policy can enter the existing controlled hardware-validation process without runtime API redesign.
+6. Velocity Flat matches mjlab task semantics, including reset/DR, sensor
+   corruption, commands, rewards, terminations, and privileged critic inputs;
+7. Velocity Flat trains successfully in IsaacLab using direct RL and passes the
+   fixed command battery with a new strict-parity manifest;
+8. VelStand or one other contact-rich task demonstrates the backend is not limited to simple walking;
+9. evaluation reports make simulator differences explicit;
+10. a PhysX-trained policy can enter the existing controlled hardware-validation process without runtime API redesign.
 
 After that point, additional tasks, backlash, rollers, generalist training, cameras, navigation, and embodied-AI work can be prioritized based on product/research needs rather than treated as prerequisites.
+
+## 23. What already exists
+
+- `src/isaaclab_microduck/tasks/velocity_flat.py` already provides the 61D
+  actor group, 14D named action mapping, basic commands, rewards, and reset
+  hooks; the parity work extends these paths instead of creating a second task.
+- `src/isaaclab_microduck/actuators/bam_actuator.py` and
+  `src/isaaclab_microduck/actuators/bam_math.py` already provide the vectorized
+  BAM voltage/torque core; delay, voltage sag, and PhysX integration should be
+  added there or at the IsaacLab manager boundary.
+- `scripts/isaaclab/velocity_flat_command_battery.py`, the physics battery, and
+  the existing contract tests are the required evaluation harnesses to extend.
+- `src/mjlab_microduck/tasks/microduck_velocity_env_cfg.py` and
+  `src/mjlab_microduck/tasks/mdp.py` remain the semantic source of truth; do not
+  duplicate their formulas in a new shared abstraction before parity is proven.
+
+## 24. NOT in scope for this slice
+
+- VelStand, SitStand, GroundPick, BallKick, Roulade, backlash, and rollers:
+  deferred until strict Velocity-Flat acceptance prevents parallel task drift.
+- Production runtime or hardware control changes: deployment remains behind the
+  existing ONNX and human-approved hardware gates.
+- A generic simulator abstraction layer: it would hide backend differences before
+  the parity ledger has identified which differences are real.
+- Exact trajectory/reward-curve equality across MuJoCo and PhysX: solver and
+  same-step external-load friction timing are explicitly excluded exceptions.
+
+## 25. Implementation tasks for the next context
+
+- [ ] **T1 (P1)** — Create and maintain the parity ledger; populate every
+  Velocity-Flat surface from the current comparison audit and attach tests or
+  benchmark evidence to each row.
+- [ ] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
+  per-environment voltage sag, friction duplication, USD damping, and HOME/limit
+  handling; add actuator and asset regression tests.
+- [ ] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
+  encoder bias, IMU and observation noise/delay, preserving non-accumulation;
+  add deterministic seeded distribution tests.
+- [ ] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
+  Velocity-Flat rewards/terminations, and privileged critic observations while
+  preserving the 61D actor ABI; add pure-function and config tests.
+- [ ] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
+  supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
+  and record the result as a software-stack delta.
+- [ ] **T6 (P1)** — Extend the common command battery to identical commands,
+  horizons, seeds, reset rules, and metrics; require finite tensors, real
+  translation, bounded tilt, yaw response, and no unexplained resets.
+- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and only then launch the
+  replacement 4096-env/6000-iteration strict-parity baseline with a new manifest.
+
+## 26. Failure modes and verification
+
+```text
+config/DR mismatch -> seeded distribution test -> ledger BLOCKED, no long run
+action/BAM mismatch -> actuator bench + target trace -> no reward retuning
+sensor ABI mismatch -> 61D golden fixture -> export gate fails loudly
+critic/actor mix-up -> group-shape/config test -> trainer startup fails
+PhysX contact/solver delta -> deterministic physics battery -> BACKEND_DELTA
+same-step external torque unavailable -> force timing probe -> BACKEND_DELTA
+long-run regression -> fixed command battery + video -> baseline rejected
+```
+
+Every failure row must state whether it is tested, handled, and visible in the
+report. Silent fallback or reward tuning is a parity failure.
+
+## 27. Worktree execution order
+
+The work has independent lanes until task wiring:
+
+| Lane | Modules | Depends on |
+| --- | --- | --- |
+| A: actuator/asset | `actuators/`, `assets/`, USD inspection | — |
+| B: task semantics | `tasks/`, mjlab source comparison | — |
+| C: evaluation | `scripts/isaaclab/`, `tests/`, parity ledger | A/B contracts |
+| D: training | IsaacLab runner and logs | A + B + C |
+
+Launch A and B in parallel worktrees. Merge them before C; launch D only after
+the ledger, smoke, and battery gates pass. A and B should not edit the same task
+config lines without coordination.
+
+## GSTACK REVIEW REPORT
+
+| Review | Trigger | Why | Runs | Status | Findings |
+|--------|---------|-----|------|--------|----------|
+| CEO Review | `/plan-ceo-review` | Scope & strategy | 0 | — | Not run; user supplied the scope decision |
+| Codex Review | `/codex review` | Independent 2nd opinion | 0 | — | Not run |
+| Eng Review | `/plan-eng-review` | Architecture & tests (required) | 1 | CLEAR (PLAN) | 2 plan gaps fixed: explicit parity ledger/acceptance rule and RSL-RL version probe |
+| Design Review | `/plan-design-review` | UI/UX gaps | 0 | — | Not applicable; backend-only plan |
+| DX Review | `/plan-devex-review` | Developer experience gaps | 0 | — | Not run |
+
+**VERDICT:** ENG CLEARED — ready to implement the strict semantic parity slice.
+
+NO UNRESOLVED DECISIONS
