@@ -60,6 +60,7 @@ def main() -> None:
     print("CONTACT_PROBE:app_ready", flush=True)
     env = None
     try:
+        print("CONTACT_PROBE:imports_start", flush=True)
         import gymnasium as gym
 
         from isaaclab.sim.utils.queries import resolve_matching_prims_from_source
@@ -73,7 +74,9 @@ def main() -> None:
         from isaaclab_microduck.tasks.velocity_flat_contact import self_collision_cost
         from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
 
+        print("CONTACT_PROBE:imports_done", flush=True)
         register_tasks()
+        print("CONTACT_PROBE:tasks_registered", flush=True)
         cfg = make_velocity_flat_env_cfg(num_envs=args.num_envs)
         if args.raw_self_contact:
             # The manager ContactSensor filtered view is intentionally removed
@@ -87,6 +90,7 @@ def main() -> None:
             cfg.scene.robot.articulation_root_prim_path = ""
             cfg.events.activate_contact_reporters.func = _move_articulation_root_to_asset
         env = gym.make("IsaacLab-Velocity-Flat-MicroDuck", cfg=cfg)
+        print("CONTACT_PROBE:env_made", flush=True)
         base_env = env.unwrapped
         stage = base_env.sim.stage
         robot = base_env.scene.articulations["robot"]
