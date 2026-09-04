@@ -39,6 +39,7 @@ def inspect_usd(path: Path) -> dict[str, Any]:
     articulation_roots: list[str] = []
     rigid_bodies = 0
     collision_geometries = 0
+    contact_reporters: list[str] = []
     for prim in stage.Traverse():
         schemas = set(prim.GetAppliedSchemas())
         if "PhysicsArticulationRootAPI" in schemas:
@@ -47,6 +48,8 @@ def inspect_usd(path: Path) -> dict[str, Any]:
             rigid_bodies += 1
         if "PhysicsCollisionAPI" in schemas:
             collision_geometries += 1
+        if "PhysxContactReportAPI" in schemas:
+            contact_reporters.append(str(prim.GetPath()))
         if prim.GetTypeName() != "PhysicsRevoluteJoint":
             continue
         name = prim.GetName()
@@ -77,6 +80,8 @@ def inspect_usd(path: Path) -> dict[str, Any]:
         "articulation_roots": articulation_roots,
         "rigid_body_count": rigid_bodies,
         "collision_geometry_count": collision_geometries,
+        "contact_reporter_count": len(contact_reporters),
+        "contact_reporter_paths": contact_reporters,
         "joint_count": len(joints),
         "actuated_joint_order": list(ACTUATED_ORDER),
         "actuated_joints": ordered,

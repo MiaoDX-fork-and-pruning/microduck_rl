@@ -17,14 +17,26 @@ import torch
 
 from isaaclab.app import AppLauncher
 
+try:
+    from scripts.isaaclab.velocity_flat_battery_spec import (
+        CASES,
+        NUM_ENVS,
+        SEED,
+        STEPS_PER_CASE,
+        evaluate_case,
+    )
+except ModuleNotFoundError:  # direct ``python scripts/isaaclab/...py`` entry
+    from velocity_flat_battery_spec import CASES, NUM_ENVS, SEED, STEPS_PER_CASE, evaluate_case
+
 
 TASK = "IsaacLab-Velocity-Flat-MicroDuck"
-COMMANDS = {
-    "zero": (0.0, 0.0, 0.0),
-    "forward": (0.20, 0.0, 0.0),
-    "lateral": (0.0, 0.20, 0.0),
-    "yaw": (0.0, 0.0, 0.50),
-}
+# Keep the required scenarios visible at this executable boundary.  The case
+# definitions remain centralized in ``velocity_flat_battery_spec`` so the
+# MuJoCo and IsaacLab harnesses cannot silently drift apart.
+REQUIRED_CASE_NAMES = ("zero", "forward", "lateral", "yaw")
+COMMANDS = {case.name: case.command for case in CASES}
+if not all(name in COMMANDS for name in REQUIRED_CASE_NAMES):
+    raise RuntimeError(f"fixed command battery cases missing required scenarios: {tuple(COMMANDS)!r}")
 
 
 def _tilt_rad(quat_xyzw: torch.Tensor) -> torch.Tensor:
@@ -90,7 +102,7 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
     height = torch.cat(heights)
     tilt = torch.cat(tilts)
     action_values = torch.cat(actions)
-    return {
+    result = {
         "name": name,
         "command": list(value),
         "steps": steps,
@@ -109,15 +121,25 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         "max_tilt_rad": float(tilt.max()),
         "mean_abs_action": float(action_values.abs().mean()),
         "p95_abs_action": float(torch.quantile(action_values.abs(), 0.95)),
-    }, obs
+    }
+    case = next(case for case in CASES if case.name == name)
+    result["passed"], result["failures"] = evaluate_case(
+        case,
+        finite=finite,
+        mean_actual_xy=result["mean_actual_vel_xy_m_s"],
+        mean_actual_yaw=result["mean_actual_vel_yaw_rad_s"],
+        max_tilt=result["max_tilt_rad"],
+        reset_fraction=result["reset_fraction_per_env_step"],
+    )
+    return result, obs
 
 
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--checkpoint", type=Path, required=True)
-    parser.add_argument("--num-envs", type=int, default=16)
-    parser.add_argument("--steps", type=int, default=250)
-    parser.add_argument("--seed", type=int, default=2026)
+    parser.add_argument("--num-envs", type=int, default=NUM_ENVS)
+    parser.add_argument("--steps", type=int, default=STEPS_PER_CASE)
+    parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--output", type=Path, required=True)
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
@@ -179,6 +201,7 @@ def main() -> None:
             "checkpoint_sha256": _sha256(args.checkpoint),
             "actuator": "BamActuator",
             "friction_bridge": "motor_only_external_effort_unavailable",
+            "passed": all(case["passed"] for case in cases),
             "cases": cases,
         }
         args.output.parent.mkdir(parents=True, exist_ok=True)

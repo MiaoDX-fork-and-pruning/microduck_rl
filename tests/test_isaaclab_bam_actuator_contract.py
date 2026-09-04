@@ -36,3 +36,9 @@ def test_bam_wrapper_uses_measured_velocity_for_back_emf() -> None:
     assert "# BAM's position controller" in source
     assert "            joint_vel,\n            params=self._params" in source
     assert "joint_vel - target_vel" not in source
+
+
+def test_bam_friction_scale_supports_per_environment_domain_randomization() -> None:
+    source = SCRIPT.read_text()
+    assert "env_ids: Sequence[int] | torch.Tensor | slice | None = None" in source
+    assert "subset friction scale must be scalar" in source

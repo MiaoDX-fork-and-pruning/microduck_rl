@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H long Velocity-Flat run complete; walking battery failed acceptance
+current_slice: strict Velocity-Flat parity slice implemented; deterministic contracts and 64-env smoke pass; P0 gaps remain
 blocker_kind: evaluation_battery
   blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
@@ -103,13 +103,13 @@ completed: >-
   `docs/isaaclab_velocity_flat_long_run_report.md` and
   `.cache/isaaclab-assets/velocity_flat_command_battery_long_3999.json`.
 next_action: >-
-  Do not start VelStand/Task I or another long PPO job. Implement the locked
-  strict-mjlab-semantic parity slice in order: action/BAM/asset semantics;
-  reset/DR and actor sensor corruption; commands and complete rewards;
-  privileged critic observations; then the common fixed battery and 64-env
-  smoke. Launch a replacement 4096-env/6000-iteration run only after those
-  gates pass. The completed long run proves runtime sustainability but fails
-  walking acceptance. Keep the USD `drive_configured=false` finding visible:
+  Do not start VelStand/Task I or another long PPO job. The strict parity slice
+  is wired and the 64-env/5-iteration smoke is finite, but the ledger still has
+  P0 BLOCKED rows for contact sensors/rewards, DR completeness, asset friction,
+  and IMU misalignment. Close those with deterministic probes, then rerun the
+  common battery. Launch a replacement 4096-env/6000-iteration run only after
+  ledger, battery, and smoke gates pass. Keep the USD `drive_configured=false`
+  finding visible:
   BAM is explicit effort control, not implicit PhysX PD. PhysX force getters are
   available, but only as post-step data; same-step external-load friction is an
   explicit backend limitation, not a reason to alter mjlab semantics.

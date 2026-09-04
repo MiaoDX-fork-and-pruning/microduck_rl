@@ -48,9 +48,12 @@ def _weight(name: str) -> float:
 
 
 def test_velocity_tracking_is_strong_enough_to_displace_standing_basin() -> None:
-    assert _weight("alive") <= 0.20
     assert _weight("track_lin_vel") == 2.0
     assert _literal(_term("track_lin_vel"), "params", "std") == 0.31622776601683794
+    source = TASK.read_text()
+    assert "alive = RewTerm" not in source
+    assert "terminating = RewTerm" not in source
+    assert "joint_vel = RewTerm" not in source
 
 
 def test_yaw_tracking_is_tight_enough_for_commanded_turns() -> None:
@@ -64,3 +67,34 @@ def test_core_reward_terms_use_mjlab_equivalent_functions() -> None:
     assert "func=track_angular_velocity" in source
     assert "upright = RewTerm(func=upright_gaussian, weight=2.0)" in source
     assert "flat_orientation = RewTerm" not in source
+
+
+def test_pose_reward_uses_mjlab_variable_posture_stages() -> None:
+    source = TASK.read_text()
+    assert "def pose_tracking(" in source
+    assert "std_standing" in source
+    assert "std_walking" in source
+    assert "std_running" in source
+    assert "walking_threshold" in source
+    assert "running_threshold" in source
+    assert "torch.mean(-error.square() / selected_std.square(), dim=1)" in source
+
+
+def test_velocity_flat_keeps_zero_weight_pose_terms_and_limit_penalty() -> None:
+    source = TASK.read_text()
+    assert "body_pose = RewTerm(" in source
+    assert "func=body_pose_tracking" in source
+    assert "head_pose_bias = RewTerm(" in source
+    assert "func=head_pose_bias_penalty" in source
+    assert "dof_pos_limits = RewTerm(" in source
+    assert "func=joint_pos_limits" in source
+    assert "action_rate_l2 = RewTerm(" in source
+
+
+def test_angular_momentum_does_not_fallback_to_root_angular_velocity() -> None:
+    source = TASK.read_text()
+    start = source.index("def angular_momentum_cost(")
+    end = source.index("\ndef joint_pos_limits(", start)
+    function = source[start:end]
+    assert "root_ang_vel_b" not in function
+    assert "subtree-angmom" in function

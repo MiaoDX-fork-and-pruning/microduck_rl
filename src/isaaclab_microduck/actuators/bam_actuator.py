@@ -20,6 +20,7 @@ from isaaclab.utils.configclass import configclass
 from isaaclab.utils.types import ArticulationActions
 
 from .bam_math import XL330_M6, BamParameters, friction_budget, voltage_torque
+from isaaclab_microduck.tasks.parity import ControlStepDelay, effective_supply_voltage
 
 @configclass
 class BamActuatorCfg(ActuatorBaseCfg):
@@ -38,6 +39,13 @@ class BamActuatorCfg(ActuatorBaseCfg):
     effort_limit_sim: float = 1.0e9
     velocity_limit: float = 100.0
     velocity_limit_sim: float = 100.0
+    # BAM firmware command latency is sampled once per environment and held
+    # between resets.  These are control-step lags, not PhysX substeps.
+    delay_min_lag: int = 3
+    delay_max_lag: int = 6
+    vin_drop_gain_range: tuple[float, float] = (0.0, 0.2)
+    vin_min: float = 6.0
+    action_clip: float = 1.0
 
 
 class BamActuator(ActuatorBase):
@@ -65,13 +73,59 @@ class BamActuator(ActuatorBase):
         )
         if cfg.vin_range is not None:
             self._supply_voltage.uniform_(*cfg.vin_range)
+        self._vin_drop_gain = torch.empty(
+            (self._num_envs, 1), dtype=torch.float32, device=self._device
+        ).uniform_(*cfg.vin_drop_gain_range)
+        resolved_num_joints = getattr(self, "_num_joints", None)
+        if resolved_num_joints is None:
+            indices = getattr(self, "joint_indices", ())
+            resolved_num_joints = len(indices) if not isinstance(indices, slice) else len(self.joint_names)
+        num_joints = int(resolved_num_joints)
+        if num_joints <= 0:
+            raise RuntimeError("BamActuator could not resolve its joint count")
+        self._delay = ControlStepDelay(
+            self._num_envs,
+            num_joints,
+            min_lag=cfg.delay_min_lag,
+            max_lag=cfg.delay_max_lag,
+            device=self._device,
+        )
+        self._delay.set_delays(
+            torch.randint(cfg.delay_min_lag, cfg.delay_max_lag + 1, (self._num_envs,), device=self._device)
+        )
+        self._delay_initialized = torch.zeros(
+            (self._num_envs,), dtype=torch.bool, device=self._device
+        )
+        # Keep the most recent absolute target per environment.  mjlab's
+        # delayed actuator history is reset to the episode's initial command,
+        # never to zero; retaining this value lets a partial IsaacLab reset
+        # seed its FIFO without a transient HOME-to-zero command.
+        self._last_target = torch.zeros(
+            (self._num_envs, num_joints), dtype=torch.float32, device=self._device
+        )
+        self._applied_effort = torch.zeros_like(self._last_target)
         self._friction_scale = torch.full(
             (self._num_envs, 1), cfg.friction_scale, dtype=torch.float32, device=self._device
         )
 
-    def reset(self, env_ids: Sequence[int]):
-        # Voltage and friction scales are episode-stable DR values.
-        del env_ids
+    def reset(self, env_ids: Sequence[int] | slice | None = None):
+        # vin and drop gain are startup-randomized in mjlab and remain stable
+        # across episode resets.  Only dynamic controller state is reset here.
+        if env_ids is None:
+            ids = torch.arange(self._num_envs, device=self._device, dtype=torch.long)
+        elif isinstance(env_ids, slice):
+            ids = torch.arange(self._num_envs, device=self._device, dtype=torch.long)[env_ids]
+        else:
+            ids = torch.as_tensor(env_ids, device=self._device, dtype=torch.long)
+        if ids.numel() == 0:
+            return
+        self._delay.delay[ids] = torch.randint(
+            self.cfg.delay_min_lag, self.cfg.delay_max_lag + 1, (ids.numel(),), device=self._device
+        )
+        self._delay.reset(ids, self._last_target[ids])
+        self._applied_effort[ids] = 0.0
+        self.applied_effort = self._applied_effort
+        self._delay_initialized[ids] = False
 
     def compute(
         self,
@@ -81,21 +135,50 @@ class BamActuator(ActuatorBase):
     ) -> ArticulationActions:
         if control_action.joint_positions is None:
             raise ValueError("BamActuator requires joint position targets")
+        # The RSL-RL/VecEnv boundary clips raw policy actions before the
+        # HOME offset is added.  At this point IsaacLab passes absolute joint
+        # targets, so clipping them again would incorrectly clip HOME itself.
+        target_command = control_action.joint_positions
+        uninitialized = torch.nonzero(~self._delay_initialized, as_tuple=False).flatten()
+        if uninitialized.numel():
+            # Seed each reset environment from its first absolute command. This
+            # preserves the actuator's lag without a spurious zero/HOME jump.
+            self._delay.reset(uninitialized, target_command[uninitialized])
+            self._last_target[uninitialized] = target_command[uninitialized].detach()
+            self._delay_initialized[uninitialized] = True
+        target = self._delay.push(target_command)
+        self._last_target.copy_(target_command.detach())
+        # Effective voltage uses the previous solved motor effort.  PhysX does
+        # not expose the same-step external load to this callback; that
+        # limitation is recorded as BACKEND_DELTA in the parity ledger.
+        previous = getattr(self, "applied_effort", self._applied_effort)
+        supply = effective_supply_voltage(
+            self._supply_voltage,
+            previous,
+            self._vin_drop_gain,
+            minimum=self.cfg.vin_min,
+        )
         voltage, motor_effort = voltage_torque(
-            control_action.joint_positions,
+            target,
             joint_pos,
             # BAM's position controller consumes measured dq for back-EMF;
             # velocity targets are not part of its firmware command.
             joint_vel,
             params=self._params,
-            vin=self._supply_voltage,
+            vin=supply,
         )
         del voltage  # retained by the math bench; PhysX consumes effort here
         feedforward = control_action.joint_efforts
         if feedforward is None:
             feedforward = torch.zeros_like(motor_effort)
-        self.computed_effort = motor_effort + feedforward
-        self.applied_effort = self.computed_effort
+        # Keep actuator-owned state as ordinary writable tensors.  Policy
+        # replay is commonly wrapped in ``torch.inference_mode``; rebinding
+        # this buffer to the computed inference tensor would make the next
+        # episode reset fail when it clears the previous effort in-place.
+        with torch.inference_mode(False):
+            self._applied_effort.copy_(motor_effort + feedforward)
+        self.computed_effort = self._applied_effort
+        self.applied_effort = self._applied_effort
         control_action.joint_efforts = self.applied_effort
         control_action.joint_positions = None
         control_action.joint_velocities = None
@@ -130,8 +213,29 @@ class BamActuator(ActuatorBase):
         value = torch.as_tensor(voltage, dtype=self._supply_voltage.dtype, device=self._device)
         self._supply_voltage.fill_(float(value))
 
-    def set_friction_scale(self, scale: float | torch.Tensor) -> None:
-        """Set the per-environment friction multiplier for an explicit bench."""
+    def set_friction_scale(
+        self,
+        scale: float | torch.Tensor,
+        env_ids: Sequence[int] | torch.Tensor | slice | None = None,
+    ) -> None:
+        """Set friction multipliers globally or for a reset/DR env subset."""
 
         value = torch.as_tensor(scale, dtype=self._friction_scale.dtype, device=self._device)
-        self._friction_scale.fill_(float(value))
+        if env_ids is None:
+            if value.numel() == 1:
+                self._friction_scale.fill_(float(value))
+            elif value.shape == self._friction_scale.shape:
+                self._friction_scale.copy_(value)
+            else:
+                raise ValueError("global friction scale must be scalar or (num_envs, 1)")
+            return
+        if isinstance(env_ids, slice):
+            ids = torch.arange(self._num_envs, device=self._device)[env_ids]
+        else:
+            ids = torch.as_tensor(env_ids, device=self._device, dtype=torch.long)
+        if value.numel() == 1:
+            self._friction_scale[ids] = value
+        elif value.shape == (ids.numel(), 1):
+            self._friction_scale[ids] = value
+        else:
+            raise ValueError("subset friction scale must be scalar or (len(env_ids), 1)")
