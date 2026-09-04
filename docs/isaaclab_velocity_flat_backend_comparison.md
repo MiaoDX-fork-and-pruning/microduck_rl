@@ -228,3 +228,19 @@ Raw inputs:
 
 - `.cache/isaaclab-assets/velocity_flat_command_battery.json`
 - `.cache/mjlab_velocity_flat_command_battery/velocity_flat/report.json`
+
+## Fixed-root dynamics proof
+
+The bounded same-state comparison uses the walk MJCF HOME, a fixed root at
+`z=0.5 m`, `dt=0.005 s`, a three-step target delay, `7.5 V` nominal supply,
+and `0.1 V/Nm` previous-motor-effort sag. Task DR is pinned to neutral values.
+It records step and sine target cases for three paths: MuJoCo with BAM's native
+solver friction fields, MuJoCo motor-only, and IsaacLab PhysX. The merged report
+is `.cache/isaaclab-assets/fixed_root_dynamics_parity_1x12.json` (finite,
+SHA256 `009e205e65722a36a67e9c62a7eee7dbd2d1f88b03ea03813ec72f8e3bccdb26`).
+Delayed target start error is at most `2.98e-9`; IsaacLab's trajectory is
+materially closer to MuJoCo motor-only than MuJoCo's BAM-solver trajectory
+(step qdot errors `0.0818` vs `0.4020 rad/s`; sine `0.0060` vs `0.1503
+rad/s`). This is evidence for the explicit `BACKEND_DELTA`: PhysX cannot
+provide the same-step solved external load to the pre-step BAM callback, and
+solver integration is not expected to be byte-identical.

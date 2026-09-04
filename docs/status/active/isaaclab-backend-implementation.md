@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: backend-neutral BAM target/delay/sag/torque fixture completed; trained-policy battery still exposes a reproducible forward/lateral response failure without command/action wiring drift
+current_slice: fixed-root same-state BAM dynamics proof completed; trained-policy battery still exposes a reproducible forward/lateral response failure without command/action wiring drift
 blocker_kind: implementation_and_parity_evidence
 blocker_fingerprint: corrected strict policy is stable but fails forward/lateral command-response gates while yaw/turn cases pass
 last_proven_evidence: >-
@@ -61,6 +61,14 @@ last_proven_evidence: >-
   4-env sequence with an env-subset reset: target lag is identical step for
   step, target max error is 0, voltage-sag max error is 2.73e-7 V, and motor
   torque max error is 8.61e-8 N-m (`velocity_flat_backend_neutral_fixture_4x10.json`).
+  The fixed-root same-state dynamics proof compares neutralized IsaacLab PhysX
+  against MuJoCo BAM-solver and motor-only references for step and sine targets
+  at dt=0.005, fixed HOME/root, three-step delay, 7.5 V supply, and 0.1 sag
+  gain. It is finite, aligns delayed targets to <=2.98e-9, and shows IsaacLab
+  qdot closer to motor-only than BAM-solver (step 0.0818 vs 0.4020 rad/s;
+  sine 0.0060 vs 0.1503), confirming the explicit friction timing and solver
+  `BACKEND_DELTA` rather than an action/target mismatch
+  (`fixed_root_dynamics_parity_1x12.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -87,15 +95,14 @@ completed: >-
   lateral command response fail while zero/yaw/turn cases pass:
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Use the closed backend-neutral actuator proof to isolate the remaining
-  forward/lateral response gap with the fixed-root PhysX-vs-MuJoCo dynamics
-  battery, especially the explicit external-load friction and solver deltas.
-  Do not tune rewards/PPO or launch another long run.
+  Keep the remaining forward/lateral trained-policy gate blocked and diagnose
+  only through command/action/locomotion evidence. The fixed-root proof
+  confirms the actuator target path and classifies the remaining dynamics gap;
+  do not tune rewards/PPO or launch another long run.
 next_proof: >-
-  Run a fixed-root, same-state dynamics comparison of the existing BAM target
-  step/sine bench against mjlab, and retain the PhysX external-load timing
-  limitation as `BACKEND_DELTA`. Completed actuator proof:
-  `.cache/isaaclab-assets/velocity_flat_backend_neutral_fixture_4x10.json`.
+  Completed: fixed-root same-state step/sine comparison in
+  `.cache/isaaclab-assets/fixed_root_dynamics_parity_1x12.json`; retain
+  same-step external-load friction and solver behavior as `BACKEND_DELTA`.
 stop_condition: >-
   Do not start VelStand. Do not launch another long run while the corrected
   strict policy fails the forward/lateral battery; do not tune reward/PPO to
