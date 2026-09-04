@@ -208,8 +208,29 @@ class BamActuator(ActuatorBase):
         value = torch.as_tensor(voltage, dtype=self._supply_voltage.dtype, device=self._device)
         self._supply_voltage.fill_(float(value))
 
-    def set_friction_scale(self, scale: float | torch.Tensor) -> None:
-        """Set the per-environment friction multiplier for an explicit bench."""
+    def set_friction_scale(
+        self,
+        scale: float | torch.Tensor,
+        env_ids: Sequence[int] | torch.Tensor | slice | None = None,
+    ) -> None:
+        """Set friction multipliers globally or for a reset/DR env subset."""
 
         value = torch.as_tensor(scale, dtype=self._friction_scale.dtype, device=self._device)
-        self._friction_scale.fill_(float(value))
+        if env_ids is None:
+            if value.numel() == 1:
+                self._friction_scale.fill_(float(value))
+            elif value.shape == self._friction_scale.shape:
+                self._friction_scale.copy_(value)
+            else:
+                raise ValueError("global friction scale must be scalar or (num_envs, 1)")
+            return
+        if isinstance(env_ids, slice):
+            ids = torch.arange(self._num_envs, device=self._device)[env_ids]
+        else:
+            ids = torch.as_tensor(env_ids, device=self._device, dtype=torch.long)
+        if value.numel() == 1:
+            self._friction_scale[ids] = value
+        elif value.shape == (ids.numel(), 1):
+            self._friction_scale[ids] = value
+        else:
+            raise ValueError("subset friction scale must be scalar or (len(env_ids), 1)")
