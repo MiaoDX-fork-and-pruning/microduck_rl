@@ -14,8 +14,9 @@ def _ids(env, env_ids):
 def _axis_angle_quat(axis: torch.Tensor, angle: torch.Tensor) -> torch.Tensor:
     half = angle * 0.5
     q = torch.zeros((*angle.shape, 4), device=angle.device, dtype=angle.dtype)
-    q[..., 0] = torch.cos(half)
-    q[..., 1:] = axis * torch.sin(half)[..., None]
+    # IsaacLab math utilities use xyzw quaternion order.
+    q[..., :3] = axis * torch.sin(half)[..., None]
+    q[..., 3] = torch.cos(half)
     return q
 
 
@@ -33,7 +34,7 @@ def reset_imu_mounting(env, env_ids, max_angle_deg: float = 6.0) -> None:
     state = getattr(env, "_imu_mount_quat", None)
     if state is None or state.shape != (env.num_envs, 4):
         state = torch.zeros(env.num_envs, 4, device=env.device)
-        state[:, 0] = 1.0
+        state[:, 3] = 1.0
         env._imu_mount_quat = state
     state[ids] = q
 
@@ -42,7 +43,7 @@ def imu_mount_quat(env) -> torch.Tensor:
     q = getattr(env, "_imu_mount_quat", None)
     if q is None:
         q = torch.zeros(env.num_envs, 4, device=env.device)
-        q[:, 0] = 1.0
+        q[:, 3] = 1.0
         env._imu_mount_quat = q
     return q
 
@@ -50,9 +51,7 @@ def imu_mount_quat(env) -> torch.Tensor:
 def quat_apply(q: torch.Tensor, v: torch.Tensor) -> torch.Tensor:
     """Apply xyzw IsaacLab quaternion(s) to vectors."""
 
-    # IsaacLab stores quaternions as wxyz in manager data despite the public
-    # root pose convention; this helper consumes wxyz to match root sensors.
-    qw, qv = q[..., :1], q[..., 1:]
+    qv, qw = q[..., :3], q[..., 3:4]
     return v + 2.0 * torch.cross(qv, torch.cross(qv, v, dim=-1) + qw * v, dim=-1)
 
 
