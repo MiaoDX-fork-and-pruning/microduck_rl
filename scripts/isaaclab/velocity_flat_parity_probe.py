@@ -31,6 +31,27 @@ def _axis_summary(value: torch.Tensor) -> list[dict[str, object]]:
     return [_summary(value[:, index]) for index in range(value.shape[1])]
 
 
+def _assert_runtime_contract(record: dict[str, object], *, num_envs: int) -> None:
+    """Fail the probe when sampled runtime state leaves the mjlab bounds."""
+
+    relative = record["root_pos_relative"]
+    assert relative["shape"] == [num_envs, 3]
+    assert -0.500001 <= relative["min"] <= 0.500001
+    assert -0.500001 <= relative["max"] <= 0.500001
+    assert 0.1199 <= record["root_pos_relative_axes"][2]["min"] <= 0.1301
+    assert 0.1199 <= record["root_pos_relative_axes"][2]["max"] <= 0.1301
+    assert record["joint_pos"]["shape"] == [num_envs, 14]
+    assert record["actor_obs"]["shape"] == [num_envs, 61]
+    assert 3.0 <= record["_delay"]["min"] <= record["_delay"]["max"] <= 6.0
+    assert 6.5 <= record["_supply_voltage"]["min"] <= record["_supply_voltage"]["max"] <= 8.2
+    assert 0.0 <= record["_vin_drop_gain"]["min"] <= record["_vin_drop_gain"]["max"] <= 0.2
+    assert 0.9 <= record["_friction_scale"]["min"] <= record["_friction_scale"]["max"] <= 1.1
+    assert record["commands"]["base_velocity"]["shape"] == [num_envs, 3]
+    assert record["commands"]["head_pose"]["shape"] == [num_envs, 4]
+    assert record["commands"]["body_pose"]["shape"] == [num_envs, 6]
+    assert record["actor_obs"]["finite"] and record["joint_pos"]["finite"]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--num-envs", type=int, default=16)
@@ -100,6 +121,7 @@ def main() -> None:
                     value = value.delay
                 record[name] = _summary(value)
             records.append(record)
+            _assert_runtime_contract(record, num_envs=args.num_envs)
             for _ in range(args.steps):
                 env.step(torch.zeros((args.num_envs, ACTION_SIZE), device=base_env.device))
         report = {
