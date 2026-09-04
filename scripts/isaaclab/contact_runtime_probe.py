@@ -74,7 +74,9 @@ def main() -> None:
             POLICY_JOINT_ORDER,
             reorder_policy_joints,
         )
+        print("CONTACT_PROBE:import_policy_done", flush=True)
         from isaaclab_microduck.tasks.velocity_flat_contact import self_collision_cost
+        print("CONTACT_PROBE:import_contact_done", flush=True)
         from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
         print("CONTACT_PROBE:import_cfg_done", flush=True)
 
