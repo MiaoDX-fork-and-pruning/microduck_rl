@@ -81,5 +81,31 @@ def test_battery_freezes_complete_command_block_after_reset() -> None:
         for name, value in previous.items():
             if value is None:
                 sys.modules.pop(name, None)
+        else:
+            sys.modules[name] = value
+
+
+def test_battery_tilt_metric_ignores_yaw_but_measures_roll() -> None:
+    # Stub AppLauncher so the battery helper can be imported without Isaac Sim.
+    app_module = types.ModuleType("isaaclab.app")
+    app_module.AppLauncher = object
+    isaaclab_module = types.ModuleType("isaaclab")
+    previous = {name: sys.modules.get(name) for name in ("isaaclab", "isaaclab.app")}
+    sys.modules["isaaclab"] = isaaclab_module
+    sys.modules["isaaclab.app"] = app_module
+    try:
+        import importlib
+
+        battery = importlib.import_module("scripts.isaaclab.velocity_flat_command_battery")
+        yaw_quat = torch.tensor([[0.0, 0.0, 2.0**-0.5, 2.0**-0.5]])
+        roll_angle = torch.tensor(0.35)
+        roll_quat = torch.tensor([[torch.sin(roll_angle / 2), 0.0, 0.0, torch.cos(roll_angle / 2)]])
+
+        assert torch.allclose(battery._tilt_rad(yaw_quat), torch.zeros(1), atol=1e-6)
+        assert torch.allclose(battery._tilt_rad(roll_quat), roll_angle.reshape(1), atol=1e-6)
+    finally:
+        for name, value in previous.items():
+            if value is None:
+                sys.modules.pop(name, None)
             else:
                 sys.modules[name] = value

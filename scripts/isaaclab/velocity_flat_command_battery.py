@@ -40,8 +40,18 @@ if not all(name in COMMANDS for name in REQUIRED_CASE_NAMES):
 
 
 def _tilt_rad(quat_xyzw: torch.Tensor) -> torch.Tensor:
-    scalar = torch.clamp(torch.abs(quat_xyzw[..., 3]), max=1.0)
-    return 2.0 * torch.acos(scalar)
+    """Return the body-up tilt, excluding heading/yaw rotation.
+
+    The previous ``2*acos(abs(qw))`` metric measured total orientation, so a
+    pure yaw turn was incorrectly reported as a near-\u03c0 tilt.  Normalize the
+    quaternion and rotate the body z-axis implicitly via its world z component;
+    this is the roll/pitch angle used by the fallen termination.
+    """
+
+    quat = quat_xyzw / torch.linalg.vector_norm(quat_xyzw, dim=-1, keepdim=True).clamp_min(1e-8)
+    x, y, z, w = quat.unbind(dim=-1)
+    body_up_world_z = 1.0 - 2.0 * (x.square() + y.square())
+    return torch.acos(torch.clamp(body_up_world_z, min=-1.0, max=1.0))
 
 
 def _sha256(path: Path) -> str:
