@@ -65,12 +65,47 @@ class ControlStepDelay:
     actions from leaking across episode boundaries.
     """
 
-    def __init__(self, num_envs: int, width: int, *, min_lag: int = 3, max_lag: int = 6, device=None):
+    def __init__(
+        self,
+        num_envs: int,
+        width: int,
+        *,
+        min_lag: int = 3,
+        max_lag: int = 6,
+        device=None,
+        hold_prob: float = 0.0,
+        update_period: int = 0,
+        per_env_phase: bool = True,
+        generator: torch.Generator | None = None,
+        sample_lag_each_push: bool = False,
+    ):
         if min_lag < 0 or max_lag < min_lag:
             raise ValueError("invalid delay range")
+        if not 0.0 <= hold_prob <= 1.0:
+            raise ValueError("hold_prob must be in [0, 1]")
+        if update_period < 0:
+            raise ValueError("update_period must be non-negative")
         self.min_lag = int(min_lag)
         self.max_lag = int(max_lag)
+        self.hold_prob = float(hold_prob)
+        self.update_period = int(update_period)
+        self.per_env_phase = bool(per_env_phase)
+        self.generator = generator
+        self.sample_lag_each_push = bool(sample_lag_each_push)
         self.delay = torch.full((num_envs,), self.max_lag, dtype=torch.long, device=device)
+        self._step_count = torch.zeros(num_envs, dtype=torch.long, device=device)
+        self._num_pushes = torch.zeros(num_envs, dtype=torch.long, device=device)
+        if self.update_period > 0 and self.per_env_phase:
+            self._phase_offsets = torch.randint(
+                0,
+                self.update_period,
+                (num_envs,),
+                dtype=torch.long,
+                device=device,
+                generator=self.generator,
+            )
+        else:
+            self._phase_offsets = torch.zeros(num_envs, dtype=torch.long, device=device)
         self._history = deque(maxlen=self.max_lag + 1)
         for _ in range(self.max_lag + 1):
             self._history.append(torch.zeros(num_envs, width, device=device))
@@ -101,10 +136,45 @@ class ControlStepDelay:
         self.delay.copy_(delays.to(device=self.delay.device, dtype=torch.long).clamp(self.min_lag, self.max_lag))
 
     def push(self, target: torch.Tensor) -> torch.Tensor:
-        self._history.append(self._copy_to_writable_storage(target))
+        stored = self._copy_to_writable_storage(target)
+        self._history.append(stored)
+        first_push = self._num_pushes == 0
+        if self.sample_lag_each_push and first_push.any():
+            for item in self._history:
+                item[first_push] = stored[first_push]
+        self._num_pushes += 1
+        if self.sample_lag_each_push:
+            if self.update_period > 0:
+                should_update = (self._step_count + self._phase_offsets) % self.update_period == 0
+            else:
+                should_update = torch.ones_like(self._num_pushes, dtype=torch.bool)
+            candidate = torch.randint(
+                self.min_lag,
+                self.max_lag + 1,
+                self.delay.shape,
+                dtype=torch.long,
+                device=self.delay.device,
+                generator=self.generator,
+            )
+            if self.hold_prob > 0.0:
+                sample = torch.rand(
+                    self.delay.shape,
+                    device=self.delay.device,
+                    generator=self.generator,
+                ) >= self.hold_prob
+                should_update = should_update & sample
+            self.delay.copy_(torch.where(should_update, candidate, self.delay))
+            self._step_count += 1
         stack = torch.stack(tuple(self._history), dim=0)
         # History is oldest -> newest.  A lag of zero reads the newest target.
-        offsets = self.max_lag - self.delay
+        if self.sample_lag_each_push:
+            valid_lag = torch.minimum(
+                self.delay,
+                (self._num_pushes - 1).clamp_min(0),
+            )
+            offsets = self.max_lag - valid_lag
+        else:
+            offsets = self.max_lag - self.delay
         env = torch.arange(target.shape[0], device=target.device)
         return stack[offsets, env]
 
@@ -123,6 +193,20 @@ class ControlStepDelay:
                 item[ids] = fill
             else:
                 item[ids] = fill[ids]
+        if self.sample_lag_each_push:
+            self._num_pushes[ids] = 0
+            self._step_count[ids] = 0
+            self.delay[ids] = 0
+            if self.update_period > 0 and self.per_env_phase:
+                phases = torch.randint(
+                    0,
+                    self.update_period,
+                    (ids.numel(),),
+                    dtype=torch.long,
+                    device=self.delay.device,
+                    generator=self.generator,
+                )
+                self._phase_offsets[ids] = phases
 
 
 def sample_uniform_with_zero(

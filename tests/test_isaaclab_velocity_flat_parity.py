@@ -44,7 +44,7 @@ def test_bam_reset_keeps_startup_voltage_samples() -> None:
     reset_body = source.split("    def reset(", 1)[1].split("    def compute(", 1)[0]
     assert "uniform_" not in reset_body
     assert "_applied_effort[ids] = 0.0" in reset_body
-    assert "self._delay.reset(ids, self._last_target[ids])" in reset_body
+    assert "self._delay.reset(ids)" in reset_body
 
 
 def test_bam_delay_initialization_is_per_environment() -> None:
@@ -62,6 +62,34 @@ def test_bam_delay_is_bounded_and_resettable() -> None:
     assert out[4] == 1.0
     delay.reset(torch.tensor([0]), torch.tensor([[9.0]]))
     assert float(delay.push(torch.tensor([[10.0]]))[0, 0]) == 9.0
+
+
+def test_mjlab_delay_sampling_matches_reference_delay_buffer() -> None:
+    from mjlab.utils.buffers import DelayBuffer
+
+    isaac_generator = torch.Generator().manual_seed(2026)
+    reference_generator = torch.Generator().manual_seed(2026)
+    isaac = ControlStepDelay(
+        2,
+        1,
+        min_lag=3,
+        max_lag=6,
+        generator=isaac_generator,
+        sample_lag_each_push=True,
+    )
+    reference = DelayBuffer(
+        min_lag=3,
+        max_lag=6,
+        batch_size=2,
+        generator=reference_generator,
+    )
+    sequence = [torch.tensor([[float(step)], [float(10 + step)]]) for step in range(10)]
+    for target in sequence:
+        assert torch.equal(isaac.push(target), reference_value := (reference.append(target), reference.compute())[1])
+    isaac.reset(torch.tensor([1]), torch.tensor([[99.0]]))
+    reference.reset(torch.tensor([1]))
+    target = torch.tensor([[20.0], [100.0]])
+    assert torch.equal(isaac.push(target), (reference.append(target), reference.compute())[1])
 
 
 def test_bam_delay_reset_accepts_compact_nonzero_env_subset() -> None:

@@ -52,7 +52,7 @@ ordered roughly by expected effect on the learned behavior.
 
 | Area | mjlab Velocity-Flat | IsaacLab status | Impact |
 | --- | --- | --- | --- |
-| Actuator delay | BAM position loop delay `3..6` control steps | per-environment FIFO delay `3..6` | aligned; reset-safe runtime trace |
+| Actuator delay | mjlab `DelayBuffer` position-target delay `3..6`, with lag sampled each actuator call (`update_period=0`) and reset-row first-command backfill | per-environment `ControlStepDelay(sample_lag_each_push=True)` | aligned; seeded backend-neutral fixture matches lag/target step-for-step |
 | BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range plus previous-effort sag and floor | aligned; actuator bench evidence |
 | BAM friction | friction budget written into solver friction/damping using solved external load | friction budget is only a bench helper; PhysX callback cannot see solved load | high / backend limit |
 | BAM gain DR | `kp`/`kd` randomization disabled; friction-scale hook enabled | no gain event; friction-scale state is wired but its PhysX dynamics effect is unproven | friction remains high impact |

@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: directional trace completed; trained-policy battery exposes a reproducible forward/lateral response failure without command/action wiring drift
+current_slice: backend-neutral BAM target/delay/sag/torque fixture completed; trained-policy battery still exposes a reproducible forward/lateral response failure without command/action wiring drift
 blocker_kind: implementation_and_parity_evidence
 blocker_fingerprint: corrected strict policy is stable but fails forward/lateral command-response gates while yaw/turn cases pass
 last_proven_evidence: >-
@@ -56,6 +56,11 @@ last_proven_evidence: >-
   behavior failure under the current PhysX/BAM dynamics path.
   The reset-fix regression battery remains finite with zero resets and the
   same forward/lateral-only response failures (`velocity_flat_command_battery_resetfix_strict.json`).
+  The backend-neutral fixture now compares the IsaacLab primitives directly
+  with mjlab's `DelayBuffer` and BAM TorchBackend over a seeded 10-step,
+  4-env sequence with an env-subset reset: target lag is identical step for
+  step, target max error is 0, voltage-sag max error is 2.73e-7 V, and motor
+  torque max error is 8.61e-8 N-m (`velocity_flat_backend_neutral_fixture_4x10.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -82,17 +87,15 @@ completed: >-
   lateral command response fail while zero/yaw/turn cases pass:
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Compare the directional trace against a same-reset, backend-neutral
-  command/action fixture and the mjlab reference path; classify the remaining
-  gap as dynamics/backend delta or policy behavior before any new run. Do not
-  tune rewards/PPO or launch another long run.
+  Use the closed backend-neutral actuator proof to isolate the remaining
+  forward/lateral response gap with the fixed-root PhysX-vs-MuJoCo dynamics
+  battery, especially the explicit external-load friction and solver deltas.
+  Do not tune rewards/PPO or launch another long run.
 next_proof: >-
-  Run the smallest deterministic backend-neutral command/action fixture with
-  identical reset state and fixed raw actions, then compare its target/delay/
-  effort output to the reset-safe directional trace. The command/action path
-  and BAM episode reset are now proven; remaining proof is a same-state
-  dynamics comparison against mjlab. Trace artifact:
-  `.cache/isaaclab-assets/velocity_flat_directional_trace_resetfix2_4x4.json`.
+  Run a fixed-root, same-state dynamics comparison of the existing BAM target
+  step/sine bench against mjlab, and retain the PhysX external-load timing
+  limitation as `BACKEND_DELTA`. Completed actuator proof:
+  `.cache/isaaclab-assets/velocity_flat_backend_neutral_fixture_4x10.json`.
 stop_condition: >-
   Do not start VelStand. Do not launch another long run while the corrected
   strict policy fails the forward/lateral battery; do not tune reward/PPO to

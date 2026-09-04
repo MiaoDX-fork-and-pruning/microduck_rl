@@ -10,7 +10,7 @@ any P0 row is `NOT_STARTED` or `BLOCKED`.
 | Actor ABI 61D / action 14D | `microduck_velocity_env_cfg.py`, policy ABI | `tasks/velocity_flat.py`, `policy_abi.py` | MATCHED | ABI fixture and shape smoke | task |
 | HOME + action scale | mjlab `HOME_FRAME`, JointPositionActionCfg | `policy_abi.HOME_POSITION`, `ActionsCfg` | MATCHED | direct cross-source HOME test, raw target fixture, and `velocity_flat_home_smoke_1.json` (`max_abs_error=0`) | actuator |
 | Action clipping | `RslRlVecEnvWrapper` default `clip_actions=None`; no env-side clip | `RslRlVecEnvWrapper(..., clip_actions=None)`, action term `clip=None` | MATCHED | live mjlab cfg/source proof plus opt-in clip helper fixture; prior `model_5999.pt` was trained with an Isaac-only clip and is diagnostic-invalid | actuator |
-| BAM target delay | `delay_min_lag=3`, `delay_max_lag=6` | `BamActuator` FIFO | MATCHED | deterministic queue test | actuator |
+| BAM target delay | `DelayBuffer(min_lag=3, max_lag=6, update_period=0)`: per-env lag sampled on each actuator command, reset rows cleared and first command backfilled | `BamActuator` + `ControlStepDelay(sample_lag_each_push=True)` | MATCHED | `.cache/isaaclab-assets/velocity_flat_backend_neutral_fixture_4x10.json`: seeded 10-step target/lags match mjlab step-for-step (`max_target_error=0`), including env-1 subset reset at step 5; CPU contract test covers reference `DelayBuffer` | actuator |
 | BAM voltage DR | `vin_range=(6.5,8.2)` | `BamActuator` per-env supply | MATCHED | seeded range/floor test | actuator |
 | BAM voltage sag | `vin_drop_gain_range=(0,0.2)`, `vin_min=6.0` | `effective_supply_voltage` | MATCHED | pure math fixture | actuator |
 | BAM friction scale | `randomize_bam_friction`, friction budget | `randomize_bam_friction` reset event + actuator scale hook | MATCHED | seeded range evidence plus `friction_sweep_contract.json`: scale 0.5/1.0/1.5 writes finite PhysX coefficients and changes velocity response monotonically; external-load torque remains explicit delta | actuator |
@@ -50,7 +50,9 @@ matched and the version difference is kept visible in every run manifest.
 
 ## Gate order
 
-1. Close P0 action/BAM/asset and reset/DR rows with CPU fixtures.
+1. Close P0 action/BAM/asset and reset/DR rows with CPU fixtures. The
+   backend-neutral BAM fixture now closes target delay, sag, and motor torque;
+   solved external-load friction timing remains the explicit PhysX delta.
 2. Run the common fixed command battery harness and deterministic parity tests;
    defer motion-quality gates until a trained strict-parity checkpoint exists.
 3. Run `64` environments for `5` iterations and export/shape-check the policy.

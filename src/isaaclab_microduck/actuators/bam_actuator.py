@@ -39,10 +39,15 @@ class BamActuatorCfg(ActuatorBaseCfg):
     effort_limit_sim: float = 1.0e9
     velocity_limit: float = 100.0
     velocity_limit_sim: float = 100.0
-    # BAM firmware command latency is sampled once per environment and held
-    # between resets.  These are control-step lags, not PhysX substeps.
+    # BAM firmware command latency follows mjlab's DelayBuffer: with the
+    # default update period of zero, a per-environment lag is sampled on each
+    # actuator command application. These are simulator callback steps; the
+    # task must call this actuator at the same cadence as the reference path.
     delay_min_lag: int = 3
     delay_max_lag: int = 6
+    delay_hold_prob: float = 0.0
+    delay_update_period: int = 0
+    delay_per_env_phase: bool = True
     vin_drop_gain_range: tuple[float, float] = (0.0, 0.2)
     vin_min: float = 6.0
     action_clip: float = 1.0
@@ -89,9 +94,10 @@ class BamActuator(ActuatorBase):
             min_lag=cfg.delay_min_lag,
             max_lag=cfg.delay_max_lag,
             device=self._device,
-        )
-        self._delay.set_delays(
-            torch.randint(cfg.delay_min_lag, cfg.delay_max_lag + 1, (self._num_envs,), device=self._device)
+            hold_prob=cfg.delay_hold_prob,
+            update_period=cfg.delay_update_period,
+            per_env_phase=cfg.delay_per_env_phase,
+            sample_lag_each_push=True,
         )
         self._delay_initialized = torch.zeros(
             (self._num_envs,), dtype=torch.bool, device=self._device
@@ -129,10 +135,9 @@ class BamActuator(ActuatorBase):
             ids = torch.as_tensor(env_ids, device=self._device, dtype=torch.long)
         if ids.numel() == 0:
             return
-        self._delay.delay[ids] = torch.randint(
-            self.cfg.delay_min_lag, self.cfg.delay_max_lag + 1, (ids.numel(),), device=self._device
-        )
-        self._delay.reset(ids, self._last_target[ids])
+        # mjlab's DelayBuffer reset clears the episode rows; the next command
+        # append backfills those rows with the first command of the episode.
+        self._delay.reset(ids)
         self._previous_motor_effort[ids] = 0.0
         self._applied_effort[ids] = 0.0
         self._delayed_target[ids] = self._last_target[ids]
