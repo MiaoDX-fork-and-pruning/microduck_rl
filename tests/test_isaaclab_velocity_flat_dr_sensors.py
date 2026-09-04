@@ -331,6 +331,33 @@ def test_sensor_delay_subset_reset_does_not_rewind_other_envs() -> None:
     assert env._gyro_delay_step[1].item() == before[1].item()
 
 
+def test_sensor_delay_reset_backfills_first_sample_like_mjlab_delay_buffer() -> None:
+    env = SimpleNamespace(num_envs=2, device=torch.device("cpu"))
+    for step in range(4):
+        sensor_corruption(
+            env,
+            "gyro",
+            torch.full((2, 1), float(step)),
+            noise=0.0,
+            delay=1,
+            delay_update_period=64,
+        )
+    reset_actor_sensor_state(env, torch.tensor([1]))
+    out = sensor_corruption(
+        env,
+        "gyro",
+        torch.tensor([[4.0], [9.0]]),
+        noise=0.0,
+        delay=1,
+        delay_update_period=64,
+    )
+    # mjlab DelayBuffer clears a reset row and backfills its first append, so
+    # even when lag=1 the first post-reset value is current (not zero/stale).
+    assert out[1].item() == 9.0
+    assert bool(env._gyro_history_valid[1])
+    assert out[0].item() in (3.0, 4.0)
+
+
 def test_joint_position_actor_noise_matches_mjlab_bound() -> None:
     value = torch.zeros(128, 14)
     torch.manual_seed(123)
