@@ -252,3 +252,11 @@ def test_raw_self_collision_adapter_preserves_multi_env_count_shape():
         scene=SimpleNamespace(sensors={"feet_ground_contact": _Foot()}),
     )
     assert torch.equal(c.self_collision_cost(env, ("missing",)), torch.tensor([6.0, 5.0]))
+
+
+def test_forced_contact_probe_has_direct_state_write_and_target_error():
+    source = (ROOT / "scripts/isaaclab/contact_runtime_probe.py").read_text()
+    assert "--forced-self-contact-direct" in source
+    assert "write_joint_position_to_sim_index" in source
+    assert '"target_error_max"' in source
+    assert '"peak_transition_total"' in source

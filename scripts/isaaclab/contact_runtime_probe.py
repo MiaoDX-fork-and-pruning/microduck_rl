@@ -297,6 +297,7 @@ def main() -> None:
                     sim_q = forced_policy_q[..., torch.as_tensor(
                         reorder_policy_joints(torch.arange(ACTION_SIZE), robot.joint_names),
                         device=base_env.device,
+                        dtype=torch.long,
                     )]
                     robot.write_joint_position_to_sim_index(position=sim_q)
                     robot.write_joint_velocity_to_sim_index(velocity=zero_dq)
@@ -333,6 +334,7 @@ def main() -> None:
                 target_sim_q = forced_policy_q[..., torch.as_tensor(
                     reorder_policy_joints(torch.arange(ACTION_SIZE), robot.joint_names),
                     device=base_env.device,
+                    dtype=torch.long,
                 )]
                 report["forced_self_contact"] = {
                     "pose_source": "robot_walk.xml_mujoco_collision_search_seed_2026",
