@@ -142,7 +142,7 @@ def test_reset_composes_world_yaw_after_authored_default_orientation() -> None:
 
         def __init__(self):
             self.data = SimpleNamespace(
-                default_root_pose=torch.tensor([[0.0, 0.0, 0.4, 0.0, 0.0, 0.70710677, 0.70710677]]),
+                default_root_pose=torch.tensor([[0.0, 0.0, 0.4, 0.70710677, 0.0, 0.0, 0.70710677]]),
                 default_root_vel=torch.zeros(1, 6),
                 default_joint_pos=torch.tensor([[0.2]]),
                 default_joint_vel=torch.zeros(1, 1),
@@ -176,10 +176,11 @@ def test_reset_composes_world_yaw_after_authored_default_orientation() -> None:
         torch.tensor([0]),
         z_range=(0.12, 0.12),
         xy_range=(0.0, 0.0),
-        yaw_range=(0.0, 0.0),
+        yaw_range=(torch.pi / 2, torch.pi / 2),
         asset_cfg=SimpleNamespace(name="robot", joint_ids=torch.tensor([0])),
     )
-    assert torch.allclose(env.scene["robot"].root_pose[:, 3:], env.scene["robot"].data.default_root_pose[:, 3:])
+    expected = torch.tensor([[0.5, -0.5, 0.5, 0.5]])
+    assert torch.allclose(env.scene["robot"].root_pose[:, 3:], expected, atol=1e-6)
 
 
 def test_imu_mounting_is_episode_stable_and_resettable() -> None:
