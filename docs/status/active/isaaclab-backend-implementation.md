@@ -2,9 +2,9 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: contact numerical fixture and production foot-material readback complete; seeded push effect and fixed command battery remain open
+current_slice: contact, foot-material, and push reset-subset proofs complete; fixed command battery remains open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 push reset-subset effect and fixed command battery remain open
+blocker_fingerprint: fixed command battery behavior gate remains open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -45,6 +45,9 @@ last_proven_evidence: >-
   PhysX material writes/readback for both ankle bodies are finite, in-range,
   selective, and differ across fixed low/high cases
   (`foot_material_runtime_probe.json`).
+  The production push event proof covers a fixed-seed selected subset, finite
+  exact velocity deltas, untouched environments, and reset non-accumulation
+  (`push_runtime_probe.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -61,14 +64,13 @@ completed: >-
   finite; direct and historical probe startup failures were traced to incomplete
   PYTHONPATH rather than simulator semantics.
 next_action: >-
-  Complete the seeded push reset-subset effect proof; then run the fixed
-  command battery and deterministic parity tests.
+  Run the fixed command battery and deterministic parity tests; do not treat
+  behavior-gate failures as permission to tune rewards or PPO.
   Do not start the unified command battery until those rows are closed; then
   run the fresh 64-env/5-iteration PPO smoke.
 next_proof: >-
-  Production push effect report followed by the fixed command battery. The
-  final training gate is the unified command battery followed by a fresh
-  64-env/5-iteration smoke.
+  Fixed command battery followed by a fresh 64-env/5-iteration smoke and ONNX
+  shape/export gate.
 stop_condition: >-
   Do not start VelStand or a new 4096-env/6000-iteration run while any P0 ledger
   row is BLOCKED/NOT_STARTED, or before the unified battery and subsequent smoke
