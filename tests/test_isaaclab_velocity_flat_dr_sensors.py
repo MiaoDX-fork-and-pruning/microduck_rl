@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+from pathlib import Path
 
 import torch
 
@@ -12,6 +13,20 @@ from isaaclab_microduck.tasks.velocity_flat_sensors import (
     misaligned_imu,
     reset_imu_mounting,
 )
+
+
+def test_velocity_flat_wires_reset_and_dr_events() -> None:
+    source = (Path(__file__).parents[1] / "src/isaaclab_microduck/tasks/velocity_flat.py").read_text()
+    for name in (
+        "reset_velocity_flat_state",
+        "randomize_com_offsets",
+        "randomize_mass_inertia",
+        "randomize_armature",
+        "push_velocity",
+        "randomize_foot_material",
+        "reset_actor_sensor_state_event",
+    ):
+        assert name in source
 
 
 def test_seeded_uniform_reference_is_repeatable() -> None:
