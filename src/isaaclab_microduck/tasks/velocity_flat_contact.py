@@ -1,12 +1,11 @@
 """Contact-backed Velocity-Flat MDP terms.
 
-The mjlab recipe reads contact sensors and terrain-height sensors for all foot
-terms.  IsaacLab's PhysX contact sensor is body based (USD shape filtering is
-not available in this backend), so this module keeps the same tensors and
-mathematical kernels while resolving the imported USD's ankle bodies.  The
-functions deliberately return finite tensors: contact sensors can contain a
-non-finite impulse for one frame after a solver failure, and ``nan_state`` then
-terminates that environment.
+The walk asset has exactly one collidable shape on each ankle body, so PhysX's
+body-level ankle contact view is equivalent to mjlab's named foot-geom view.
+Foot height and velocity are evaluated at the original MJCF sites, not at the
+ankle body origins. Self-collision uses separate one-to-many filtered views for
+the three bodies carrying ``self_collision_only`` shapes, which excludes ground
+contacts and avoids PhysX's unsupported many-to-many filter.
 """
 
 from __future__ import annotations
@@ -42,10 +41,23 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv, ManagerBasedRLEnv
 
 
+FOOT_SITE_OFFSETS_B = (
+    (0.0, -0.0238146, -0.0140852),
+    (0.0, -0.0238146, -0.0140852),
+)
+
+
 def _tensor(value: object) -> torch.Tensor:
     """Unwrap IsaacLab's backend proxy while also accepting plain tensors in tests."""
 
-    return getattr(value, "torch", value)
+    if isinstance(value, torch.Tensor):
+        return value
+    proxy_tensor = getattr(value, "torch", None)
+    if proxy_tensor is not None:
+        return proxy_tensor
+    import warp as wp
+
+    return wp.to_torch(value)
 
 
 def _scene_sensor(env: ManagerBasedEnv, cfg: SceneEntityCfg):
@@ -92,6 +104,36 @@ def _select(value: torch.Tensor, cfg: SceneEntityCfg) -> torch.Tensor:
     return value[:, ids]
 
 
+def _quat_apply_xyzw(quat: torch.Tensor, vector: torch.Tensor) -> torch.Tensor:
+    imaginary = quat[..., :3]
+    real = quat[..., 3:4]
+    return vector + 2.0 * (
+        real * torch.linalg.cross(imaginary, vector)
+        + torch.linalg.cross(imaginary, torch.linalg.cross(imaginary, vector))
+    )
+
+
+def _foot_site_state(
+    env: ManagerBasedEnv,
+    asset_cfg: SceneEntityCfg,
+    site_offsets_b: tuple[tuple[float, float, float], ...] = FOOT_SITE_OFFSETS_B,
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Return world position and linear velocity at the canonical MJCF foot sites."""
+
+    asset = env.scene[asset_cfg.name]
+    body_pos = _select(_tensor(asset.data.body_pos_w), asset_cfg)
+    body_quat = _select(_tensor(asset.data.body_quat_w), asset_cfg)
+    body_lin_vel = _select(_tensor(asset.data.body_lin_vel_w), asset_cfg)
+    body_ang_vel = _select(_tensor(asset.data.body_ang_vel_w), asset_cfg)
+    offsets = torch.as_tensor(site_offsets_b, dtype=body_pos.dtype, device=body_pos.device)
+    if offsets.shape != body_pos.shape[1:]:
+        raise ValueError(f"expected one foot-site offset per selected body, got {offsets.shape}")
+    offset_w = _quat_apply_xyzw(body_quat, offsets.unsqueeze(0).expand_as(body_pos))
+    site_pos = body_pos + offset_w
+    site_lin_vel = body_lin_vel + torch.linalg.cross(body_ang_vel, offset_w)
+    return site_pos, site_lin_vel
+
+
 def foot_contact_forces(
     env: ManagerBasedEnv,
     sensor_cfg: SceneEntityCfg = SceneEntityCfg("feet_ground_contact"),
@@ -136,10 +178,9 @@ def foot_height(
     sensor and remains valid for every PhysX scene clone.
     """
 
-    asset = env.scene[asset_cfg.name]
-    pos = _tensor(asset.data.body_pos_w)
-    value = _select(pos, asset_cfg)[..., 2]
-    origins = _tensor(getattr(env.scene, "env_origins", torch.zeros_like(pos[:, 0])))
+    site_pos, _ = _foot_site_state(env, asset_cfg)
+    value = site_pos[..., 2]
+    origins = _tensor(getattr(env.scene, "env_origins", torch.zeros_like(site_pos[:, 0])))
     if origins.ndim == 2:
         value = value - origins[:, 2].unsqueeze(-1)
     return torch.nan_to_num(value, nan=0.0, posinf=0.0, neginf=0.0)
@@ -176,8 +217,8 @@ def feet_clearance(
     """Velocity-weighted clearance error from mjlab's sensor-backed term."""
 
     heights = foot_height(env, asset_cfg)
-    asset = env.scene[asset_cfg.name]
-    velocity = _select(_tensor(asset.data.body_lin_vel_w), asset_cfg)[..., :2]
+    _, velocity = _foot_site_state(env, asset_cfg)
+    velocity = velocity[..., :2]
     cost = torch.abs(heights - target_height).mul(torch.linalg.norm(velocity, dim=-1)).sum(dim=1)
     return cost * _command_active(env, command_name, command_threshold).float()
 
@@ -223,8 +264,8 @@ def feet_slip(
 
     sensor = _scene_sensor(env, sensor_cfg)
     contact = _select(_contact_mask(sensor), sensor_cfg).float()
-    asset = env.scene[asset_cfg.name]
-    vel = _select(_tensor(asset.data.body_lin_vel_w), asset_cfg)[..., :2]
+    _, vel = _foot_site_state(env, asset_cfg)
+    vel = vel[..., :2]
     return torch.square(torch.linalg.norm(vel, dim=-1)).mul(contact).sum(dim=1) * _command_active(
         env, command_name, command_threshold
     ).float()
@@ -232,13 +273,24 @@ def feet_slip(
 
 def self_collision_cost(
     env: ManagerBasedEnv,
-    sensor_cfg: SceneEntityCfg,
-    force_threshold: float = 10.0,
+    sensor_names: tuple[str, ...],
 ) -> torch.Tensor:
-    """Count selected-body contact-force violations (the PhysX body sensor view)."""
+    """Count self-contact points without including external contacts."""
 
-    forces = _select(_contact_force(_scene_sensor(env, sensor_cfg), filtered=True), sensor_cfg)
-    return (torch.linalg.norm(forces, dim=-1) > force_threshold).sum(dim=1).float()
+    cost = torch.zeros(env.num_envs, dtype=torch.float32, device=env.device)
+    for name in sensor_names:
+        sensor = env.scene.sensors[name]
+        matrix = getattr(sensor.data, "force_matrix_w", None)
+        if matrix is None:
+            raise RuntimeError(f"self-collision sensor {name!r} must use filtered partner paths")
+        counts = getattr(sensor, "_contact_counts", None)
+        if counts is None:
+            raise RuntimeError(f"self-collision sensor {name!r} must track contact points")
+        counts = _tensor(counts)
+        if counts.numel() % env.num_envs != 0:
+            raise RuntimeError(f"unexpected self-collision count shape for {name!r}: {counts.shape}")
+        cost += counts.reshape(env.num_envs, -1).sum(dim=1).float()
+    return cost
 
 
 def nan_state(

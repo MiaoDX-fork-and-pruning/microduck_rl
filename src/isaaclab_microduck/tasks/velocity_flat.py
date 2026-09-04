@@ -640,15 +640,23 @@ class SceneCfg(InteractiveSceneCfg):
         force_threshold=1.0,
         update_period=0.005,
     )
-    self_collision = ContactSensorCfg(
-        # The imported USD exposes the ankle rigid bodies reliably.  PhysX
-        # 3.0 cannot construct a contact view from the mixed joint/body tree
-        # (a broad ``.*/.*`` pattern resolves non-rigid Xforms), so this view
-        # is deliberately limited to the resolved foot bodies.  The resulting
-        # self-collision term is an explicit body-level approximation.
-        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base/.*",
-        history_length=1,
-        force_threshold=10.0,
+    self_collision_trunk = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+        ],
+        history_length=0,
+        track_contact_points=True,
+        update_period=0.005,
+    )
+    self_collision_legs = ContactSensorCfg(
+        prim_path="{ENV_REGEX_NS}/Robot/Geometry/trunk_base/yaw2roll/hip_l/upper_leg_left/leg",
+        filter_prim_paths_expr=[
+            "{ENV_REGEX_NS}/Robot/Geometry/trunk_base/bearing_roll/hip_l_2/upper_leg_right/leg_2",
+        ],
+        history_length=0,
+        track_contact_points=True,
         update_period=0.005,
     )
 
@@ -977,16 +985,22 @@ class RewardsCfg:
                 "command_name": "base_velocity", "command_threshold": 0.01,
                 "asset_cfg": SceneEntityCfg("robot", body_names=["ankle_left", "ankle_right"], preserve_order=True)},
     )
-    self_collisions = RewTerm(func=contact_mdp.self_collision_cost, weight=-1.0,
-                               params={"sensor_cfg": SceneEntityCfg("self_collision")})
+    self_collisions = RewTerm(
+        func=contact_mdp.self_collision_cost,
+        weight=-1.0,
+        params={"sensor_names": ("self_collision_trunk", "self_collision_legs")},
+    )
 
 
 @configclass
 class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     fallen = DoneTerm(func=fallen_mjlab, time_out=False)
-    nan_state = DoneTerm(func=contact_mdp.nan_state, time_out=False,
-                         params={"sensor_names": ("feet_ground_contact", "self_collision")})
+    nan_state = DoneTerm(
+        func=contact_mdp.nan_state,
+        time_out=False,
+        params={"sensor_names": ("feet_ground_contact",)},
+    )
     terrain_out_of_bounds = DoneTerm(func=contact_mdp.terrain_out_of_bounds, time_out=False)
 
 

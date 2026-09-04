@@ -783,9 +783,11 @@ checkpoint is not a reliable gait. See
   environments per step and reaches about 0.85 rad tilt. Task H is therefore
   not accepted as a walking result. The completed 6000-iteration budget run is
   invalid as the final baseline because its critic architecture was stale and
-  its battery failed. A replacement run requires the parity closure gates, a
-  new manifest, and the same fixed battery; external-load BAM friction parity
-  remains an explicit PhysX limitation.
+  its battery failed. That run predates the strict-parity lock in this plan and
+  was launched under the earlier "close enough" acceptance rule; it is not an
+  execution of the current Task H. A replacement run requires the parity
+  closure gates, a new manifest, and the same fixed battery; external-load BAM
+  friction parity remains an explicit PhysX limitation.
 
 ### Task I — decide whether to continue
 
@@ -882,13 +884,18 @@ After that point, additional tasks, backlash, rollers, generalist training, came
   benchmark evidence to each row.
 - [ ] **T2 (P1)** — Align action clipping/target scaling, BAM control-step delay,
   per-environment voltage sag, friction duplication, USD damping, and HOME/limit
-  handling; add actuator and asset regression tests.
+  handling; add actuator and asset regression tests. Action, delay, sag, and
+  HOME are closed; PhysX friction/damping application remains open.
 - [ ] **T3 (P1)** — Port reset distribution, CoM/mass/armature/friction/push DR,
   encoder bias, IMU and observation noise/delay, preserving non-accumulation;
-  add deterministic seeded distribution tests.
+  add deterministic seeded distribution tests. The implementation and CPU
+  contracts exist; seeded production-runtime distribution evidence remains.
 - [ ] **T4 (P1)** — Port head/body commands, turn-in-place sampling, complete
   Velocity-Flat rewards/terminations, and privileged critic observations while
-  preserving the 61D actor ABI; add pure-function and config tests.
+  preserving the 61D actor ABI; add pure-function and config tests. All terms
+  are wired and finite in the one-environment production probe. Foot-site and
+  direct count kernels are covered, but the filtered self-contact view fails
+  multi-environment initialization; seeded command/source parity also remains.
 - [x] **T5 (P1)** — Attempt `rsl-rl-lib 5.0.1` in the IsaacLab image; if the
   supported stack must remain `5.4.1`, run a controlled optimizer/rollout probe
   and record the result as a software-stack delta.

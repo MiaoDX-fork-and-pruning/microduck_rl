@@ -2,17 +2,19 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: HOME/action ABI corrected and runtime-proven; contact and seeded runtime parity closure next
-blocker_kind: parity_evidence
-blocker_fingerprint: P0 contact, asset-friction, reset/DR, and actor-sensor runtime evidence remains open
+current_slice: HOME/action corrected; multi-env self-contact and seeded runtime parity closure next
+blocker_kind: implementation_and_parity_evidence
+blocker_fingerprint: P0 multi-env contact, asset-friction, reset/DR, actor-sensor, and command evidence remains open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
   right_hip_yaw is 0.0, actor/action shapes are 61D/14D, critic wiring is 76D,
-  and all 15 contact-body tensors are finite. Focused HOME/action/asset tests
-  pass (22 tests). The repeated nested-prim contact warnings are PhysX tensor
-  traversal probes, not evidence that the correctly bound 15-body contact view
-  is empty; geom-level contact semantics remain unresolved.
+  and all 15 contact-body tensors are finite. The one-environment contact report
+  proves finite filtered self-contact matrices, nonzero foot-ground force, all
+  16 finite reward terms, and finite termination terms. A direct mjlab-kernel
+  regression proves equal self-contact point-count semantics, but a four-env
+  probe fails filtered-view initialization (`expected 8, found 4`), so contact
+  is not production-proven.
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -24,15 +26,18 @@ completed: >-
   incompatible with the IsaacLab 3.0 entrypoint; the supported 5.4.1 stack is
   recorded as a delta. The incorrect IsaacLab-only right-hip-yaw HOME value and
   simulator clamp are removed and protected by a direct mjlab-source test.
+  Foot height/slip/clearance now use the canonical MJCF sites. The intended
+  filtered self-contact sensors exclude ground force in one environment but are
+  not yet usable in the multi-environment training scene.
 next_action: >-
-  Turn the contact probe evidence into a committed deterministic contract,
-  classify geom-level filtering separately from the false nested-prim warning,
-  then run seeded IsaacLab reset/DR/noise/delay/command probes and update each
-  ledger row only when its runtime observable matches. After all P0 rows close,
-  run the unified command battery and a fresh 64-env/5-iteration PPO smoke.
+  Replace the filtered self-contact source with a multi-env-safe source and
+  prove its three-body, ground-excluding count semantics. Then run seeded
+  IsaacLab reset/DR/noise/delay/command probes and update each ledger row only
+  when its runtime observable matches. After all P0 rows close, run the unified
+  command battery and a fresh 64-env/5-iteration PPO smoke.
 next_proof: >-
-  Focused CPU contract suite plus `scripts/isaaclab/contact_runtime_probe.py`
-  and a seeded runtime parity report. The final training gate is the unified
+  A seeded runtime parity report following the completed focused CPU/contact
+  runtime contracts. The final training gate is the unified
   command battery followed by a fresh 64-env/5-iteration smoke.
 stop_condition: >-
   Do not start VelStand or a new 4096-env/6000-iteration run while any P0 ledger
