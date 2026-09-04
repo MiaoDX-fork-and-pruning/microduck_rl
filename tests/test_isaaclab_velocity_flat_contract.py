@@ -72,13 +72,12 @@ def test_velocity_flat_keeps_mjlab_air_time_reward_window() -> None:
     assert "weight=3.0" in source
 
 
-def test_velocity_flat_uses_bam_asset_and_home_override() -> None:
+def test_velocity_flat_uses_bam_asset_and_canonical_home() -> None:
     source = _source(TASK)
     assert "from isaaclab_microduck.assets.microduck import MICRODUCK_CFG" in source
     assert "return MICRODUCK_CFG.replace(" in source
     assert "joint_pos=home" in source
-    assert 'home["right_hip_yaw"] = 0.436' in source
-    assert "policy observations and action offsets stay canonical" in source
+    assert 'home["right_hip_yaw"]' not in source
     assert "offset={name: float(value)" in source
 
 
@@ -102,6 +101,9 @@ def test_velocity_flat_smoke_checks_observation_and_action_dimensions() -> None:
     assert "contact_body_count" in source
     assert "contact_forces_finite" in source
     assert "contact_body_names" in source
+    assert '"default_home_max_abs_error"' in source
+    assert '"default_home_right_hip_yaw"' in source
+    assert "articulation default HOME differs from policy HOME" in source
 
 
 def test_ground_is_injected_at_the_prestartup_hook() -> None:

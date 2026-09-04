@@ -35,8 +35,6 @@ from isaaclab_microduck.assets.microduck import MICRODUCK_CFG
 from isaaclab_microduck.policy_abi import HOME_POSITION, POLICY_JOINT_ORDER
 from isaaclab_microduck.tasks.parity import (
     clip_policy_action,
-    gaussian_tracking,
-    l1_penalty,
     observation_noise,
     subtree_angular_momentum,
 )
@@ -607,11 +605,6 @@ def _task_robot_cfg() -> ArticulationCfg:
     """Copy the shared asset and use canonical HOME only for this task."""
 
     home = {name: float(value) for name, value in zip(POLICY_JOINT_ORDER, HOME_POSITION)}
-    # The converted USD has a tighter right-hip-yaw upper limit (0.436 rad)
-    # than the canonical hardware HOME (0.4579 rad). IsaacLab validates
-    # initial state against authored limits, so only the simulator spawn value
-    # is clamped; policy observations and action offsets stay canonical.
-    home["right_hip_yaw"] = 0.436
     init_state = ArticulationCfg.InitialStateCfg(
         pos=(0.0, 0.0, 0.12),
         joint_pos=home,

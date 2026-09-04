@@ -90,10 +90,13 @@ Additional concrete mismatches found in the runtime/config audit:
   (`clip_actions=1.0`) before the absolute HOME+scale target transform.
   IsaacLab's action term intentionally has `clip=None`, because its clip field
   runs after scale+offset and would change the mjlab semantics.
-- **HOME/limit inconsistency:** the canonical policy HOME uses
-  `right_hip_yaw=0.4579 rad`, while both the MJCF and imported USD cap that joint
-  at `0.4363 rad`. IsaacLab clamps only the spawn value, so its initial policy
-  observation carries a persistent `-0.0219 rad` offset on that joint.
+- **Corrected HOME transcription:** an earlier IsaacLab-only ABI table put the
+  right-hip-pitch HOME value (`0.4579 rad`) in the right-hip-yaw slot. The mjlab
+  `HOME_FRAME` sets both hip-yaw joints to `0.0`; the IsaacLab table, spawn pose,
+  action offset, golden target, and direct cross-source regression test now use
+  that value. The authored right-hip-yaw limit `[-0.5236, 0.4363] rad` is therefore
+  not a HOME/limit conflict. Checkpoints trained before this correction are not
+  valid strict-parity baselines.
 - **Software implementation:** the accepted mjlab run uses `rsl-rl-lib 5.0.1`;
   the IsaacLab 3.0.0 image uses `rsl-rl-lib 5.4.1`. Even with matching scalar
   PPO fields, optimizer/distribution implementation details are not byte-level

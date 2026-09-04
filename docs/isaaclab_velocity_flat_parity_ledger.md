@@ -8,14 +8,14 @@ any P0 row is `NOT_STARTED` or `BLOCKED`.
 | Surface | mjlab source | IsaacLab source | Status | Tolerance / evidence | Owner |
 | --- | --- | --- | --- | --- | --- |
 | Actor ABI 61D / action 14D | `microduck_velocity_env_cfg.py`, policy ABI | `tasks/velocity_flat.py`, `policy_abi.py` | MATCHED | ABI fixture and shape smoke | task |
-| HOME + action scale | mjlab JointPositionActionCfg | `parity.policy_action_to_target`, `ActionsCfg` | MATCHED | raw action clip/target unit tests | actuator |
+| HOME + action scale | mjlab `HOME_FRAME`, JointPositionActionCfg | `policy_abi.HOME_POSITION`, `ActionsCfg` | MATCHED | direct cross-source HOME test, raw target fixture, and `velocity_flat_home_smoke_1.json` (`max_abs_error=0`) | actuator |
 | Action clipping | RSL-RL wrapper clip=1.0 | `parity.clip_policy_action`, battery wrapper | MATCHED | exact `[-1,1]` fixture; runtime training wrapper proof still required | actuator |
 | BAM target delay | `delay_min_lag=3`, `delay_max_lag=6` | `BamActuator` FIFO | MATCHED | deterministic queue test | actuator |
 | BAM voltage DR | `vin_range=(6.5,8.2)` | `BamActuator` per-env supply | MATCHED | seeded range/floor test | actuator |
 | BAM voltage sag | `vin_drop_gain_range=(0,0.2)`, `vin_min=6.0` | `effective_supply_voltage` | MATCHED | pure math fixture | actuator |
 | BAM friction scale | `randomize_bam_friction`, friction budget | `randomize_bam_friction` reset event + actuator scale hook | BLOCKED | reset-time per-env sampling and absolute replacement are wired and CPU-tested; PhysX dynamics write and runtime effect proof remain missing | actuator |
 | External-load friction timing | same-step solved torque in MuJoCo | PhysX force getters refresh post-step | BACKEND_DELTA | `force_timing_probe.json`; motor-only bridge explicit | backend |
-| Asset joint order / limits | walk MJCF | converted `microduck_walk.usd` | BLOCKED | names/order are mapped, but USD right-hip-yaw limit `0.436` conflicts with canonical HOME `0.4579`; strict runtime handling remains unresolved | asset |
+| Asset joint order / limits | walk MJCF | converted `microduck_walk.usd` | MATCHED | MJCF and `microduck_walk.usd.report.json` agree on 14 names/order and limits; runtime HOME is within all limits | asset |
 | Asset damping/friction | MJCF damping 0.053; BAM zeroes dof friction | USD import + explicit BAM metadata | BLOCKED | runtime USD still carries nominal joint friction; same-step BAM external-load bridge unavailable | asset |
 | Reset height / HOME | reset z 0.12..0.13, x/y ±0.5, yaw ±3.14, joint offsets (0,0) | `reset_velocity_flat_state`, `EventsCfg` | BLOCKED | reset distribution and exact-default joint writes are implemented and CPU-tested; manager reset path is runtime-smoked, but seeded distribution proof remains pending | task |
 | CoM/head CoM DR | `dr.body_ipos` add, non-accumulating | reset event + `curriculum_event_range` live manager update | BLOCKED | restore-then-apply reset hook and stage schedule are wired and CPU-tested; seeded runtime distribution proof pending | task |
