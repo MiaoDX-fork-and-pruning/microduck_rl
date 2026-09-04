@@ -6,6 +6,7 @@ from pathlib import Path
 import torch
 
 from isaaclab_microduck.tasks.velocity_flat_dr import (
+    randomize_bam_friction,
     randomize_mass_inertia,
     reset_velocity_flat_state,
     sample_uniform,
@@ -26,6 +27,7 @@ def test_velocity_flat_wires_reset_and_dr_events() -> None:
         "randomize_com_offsets",
         "randomize_mass_inertia",
         "randomize_armature",
+        "randomize_bam_friction",
         "push_velocity",
         "randomize_foot_material",
         "reset_actor_sensor_state_event",
@@ -75,6 +77,41 @@ def test_mass_inertia_scale_is_coupled_and_restored_before_new_sample() -> None:
     randomize_mass_inertia(env, torch.tensor([0, 1]), (0.0, 0.0), cfg)
     assert torch.allclose(env.scene["robot"].mass_writes[-1], torch.ones(2, 1))
     assert torch.allclose(env.scene["robot"].inertia_writes[-1], torch.ones(2, 1, 9))
+
+
+def test_bam_friction_randomization_targets_actuator_and_only_reset_subset() -> None:
+    class Actuator:
+        def __init__(self):
+            self.scale = torch.ones(4, 1)
+
+        def set_friction_scale(self, value, *, env_ids):
+            self.scale[env_ids] = value
+
+    actuator = Actuator()
+
+    class Asset:
+        device = torch.device("cpu")
+
+        def __init__(self):
+            self.actuators = {"servos": actuator}
+
+    class Env:
+        num_envs = 4
+        device = torch.device("cpu")
+
+        def __init__(self):
+            self.scene = {"robot": Asset()}
+
+    env = Env()
+    torch.manual_seed(11)
+    randomize_bam_friction(env, torch.tensor([1, 3]), (0.9, 1.1), SimpleNamespace(name="robot"))
+    assert torch.equal(actuator.scale[[0, 2]], torch.ones(2, 1))
+    assert bool(((actuator.scale[[1, 3]] >= 0.9) & (actuator.scale[[1, 3]] <= 1.1)).all())
+    before = actuator.scale.clone()
+    torch.manual_seed(12)
+    randomize_bam_friction(env, torch.tensor([1]), (1.0, 1.0), SimpleNamespace(name="robot"))
+    assert torch.equal(actuator.scale[[0, 2, 3]], before[[0, 2, 3]])
+    assert torch.equal(actuator.scale[1], torch.ones(1))
 
 
 def test_reset_matches_mjlab_root_randomization_and_exact_home_joints() -> None:

@@ -13,14 +13,14 @@ any P0 row is `NOT_STARTED` or `BLOCKED`.
 | BAM target delay | `delay_min_lag=3`, `delay_max_lag=6` | `BamActuator` FIFO | MATCHED | deterministic queue test | actuator |
 | BAM voltage DR | `vin_range=(6.5,8.2)` | `BamActuator` per-env supply | MATCHED | seeded range/floor test | actuator |
 | BAM voltage sag | `vin_drop_gain_range=(0,0.2)`, `vin_min=6.0` | `effective_supply_voltage` | MATCHED | pure math fixture | actuator |
-| BAM friction scale | `randomize_bam_friction`, friction budget | actuator scale hook / asset contract | BLOCKED | `set_friction_scale` exists, but Velocity-Flat reset wiring and PhysX dynamics write proof are still missing | actuator |
+| BAM friction scale | `randomize_bam_friction`, friction budget | `randomize_bam_friction` reset event + actuator scale hook | BLOCKED | reset-time per-env sampling and absolute replacement are wired and CPU-tested; PhysX dynamics write and runtime effect proof remain missing | actuator |
 | External-load friction timing | same-step solved torque in MuJoCo | PhysX force getters refresh post-step | BACKEND_DELTA | `force_timing_probe.json`; motor-only bridge explicit | backend |
 | Asset joint order / limits | walk MJCF | converted `microduck_walk.usd` | BLOCKED | names/order are mapped, but USD right-hip-yaw limit `0.436` conflicts with canonical HOME `0.4579`; strict runtime handling remains unresolved | asset |
 | Asset damping/friction | MJCF damping 0.053; BAM zeroes dof friction | USD import + explicit BAM metadata | BLOCKED | runtime USD still carries nominal joint friction; same-step BAM external-load bridge unavailable | asset |
 | Reset height / HOME | reset z 0.12..0.13, x/y ±0.5, yaw ±3.14, joint offsets (0,0) | `reset_velocity_flat_state`, `EventsCfg` | BLOCKED | reset distribution and exact-default joint writes are implemented and CPU-tested; IsaacLab runtime distribution proof pending | task |
 | CoM/head CoM DR | `dr.body_ipos` add, non-accumulating | `velocity_flat_dr.randomize_com_offsets` | BLOCKED | reset hook and restore-then-apply code exist; seeded runtime distribution proof pending | task |
 | Mass/inertia DR | `dr.pseudo_inertia` startup | `velocity_flat_dr.randomize_mass_inertia` | BLOCKED | startup hook and coupled scaling exist; asset tensor mutation benchmark pending | task |
-| Armature/friction DR | `dr.joint_armature`, BAM friction scale | actuator/asset hooks | BLOCKED | armature reset hook and friction scale exist; PhysX dynamics write proof pending | actuator |
+| Armature/friction DR | `dr.joint_armature`, BAM friction scale | actuator/asset hooks | BLOCKED | armature and reset-time friction-scale hooks are wired; PhysX dynamics write proof pending | actuator |
 | Push / foot friction DR | interval pushes + foot material range | IsaacLab event terms | BLOCKED | push/material terms wired; OVPhysX material effect and seeded runtime proof pending | task |
 | Encoder bias | actor-only `biased=True`, +/-0.015 | `policy_joint_pos` | MATCHED | actor/critic separation and reset-state tests | task |
 | IMU noise/misalignment | actor noise + random mounting rotation | root-state adapter corruption | BLOCKED | control path and episode-stable state are implemented; runtime distribution and sensor-source proof pending | task |

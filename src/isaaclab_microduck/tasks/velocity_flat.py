@@ -42,6 +42,7 @@ from isaaclab_microduck.tasks import velocity_flat_contact as contact_mdp
 from isaaclab_microduck.tasks.velocity_flat_dr import (
     push_velocity,
     randomize_armature,
+    randomize_bam_friction,
     randomize_com_offsets,
     randomize_foot_material,
     randomize_mass_inertia,
@@ -813,6 +814,14 @@ class EventsCfg:
         params={
             "ranges": (0.9, 1.1),
             "asset_cfg": SceneEntityCfg("robot", joint_names=(r"^(?!passive_).*",)),
+        },
+    )
+    randomize_bam_friction = EventTerm(
+        func=randomize_bam_friction,
+        mode="reset",
+        params={
+            "scale_range": (0.9, 1.1),
+            "asset_cfg": SceneEntityCfg("robot"),
         },
     )
     push_robot = EventTerm(

@@ -190,6 +190,46 @@ def randomize_armature(
     writer(armature=values, joint_ids=joints, env_ids=ids)
 
 
+def randomize_bam_friction(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    scale_range: tuple[float, float] = (0.9, 1.1),
+    asset_cfg: Any | None = None,
+) -> None:
+    """Sample an absolute BAM friction multiplier for a reset subset.
+
+    BAM owns this randomization in mjlab because its actuator computes the
+    friction budget.  The IsaacLab port therefore updates explicit actuator
+    state rather than randomizing the USD joint-friction field.  Each sample
+    is drawn around nominal 1.0 and replaces the previous value, so resets do
+    not accumulate.
+    """
+
+    lo, hi = float(scale_range[0]), float(scale_range[1])
+    if hi < lo:
+        raise ValueError("scale_range upper bound must be >= lower bound")
+    asset = env.scene[asset_cfg.name if asset_cfg is not None else "robot"]
+    ids = _ids(env, env_ids)
+    scale = torch.empty((ids.numel(), 1), device=_device(env, asset)).uniform_(lo, hi)
+
+    actuators = getattr(asset, "actuators", None)
+    if actuators is None:
+        raise RuntimeError("Velocity-Flat BAM friction DR requires articulation actuators")
+    if hasattr(actuators, "values"):
+        actuators = actuators.values()
+    elif not isinstance(actuators, (tuple, list)):
+        actuators = (actuators,)
+    matched = False
+    for actuator in actuators:
+        setter = getattr(actuator, "set_friction_scale", None)
+        if setter is None:
+            continue
+        setter(scale, env_ids=ids)
+        matched = True
+    if not matched:
+        raise RuntimeError("Velocity-Flat BAM friction DR found no friction-scale actuator")
+
+
 def push_velocity(
     env: Any,
     env_ids: torch.Tensor | None,
@@ -260,6 +300,7 @@ def randomize_foot_material(
 __all__ = [
     "push_velocity",
     "randomize_armature",
+    "randomize_bam_friction",
     "randomize_com_offsets",
     "randomize_foot_material",
     "randomize_mass_inertia",
