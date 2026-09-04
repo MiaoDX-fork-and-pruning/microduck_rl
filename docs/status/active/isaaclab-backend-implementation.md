@@ -4,7 +4,7 @@ control_plane: /root
 latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
 current_slice: forced self-contact runtime proof and seeded reset/DR/command contracts complete; remaining P0 dynamics/source rows open
 blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: P0 asset damping/foot-material boundaries, command resampling, full reward/termination/critic fixtures remain open
+blocker_fingerprint: P0 asset damping/foot-material boundaries, full reward/termination/critic fixtures remain open
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -28,6 +28,10 @@ last_proven_evidence: >-
   The asset dynamics probe also observes finite reset-time armature/CoM
   changes, stable startup mass/inertia, and zero runtime joint friction across
   four environments (`asset_dynamics_runtime_probe_4.json`).
+  The command runtime probe observes the configured 2..5 s pose-command and
+  3..8 s velocity-command intervals over 64 environments, plus a 13.11%
+  turn-in-place sample fraction with zero linear velocity and bounded yaw
+  (`command_runtime_probe_64.json`).
 completed: >-
   Isolated IsaacLab 3.0.0 runtime and launchers; generated walk USD and asset
   reports; named 61D actor / 76D privileged critic / 14D action contracts;
@@ -44,13 +48,13 @@ completed: >-
   finite; direct and historical probe startup failures were traced to incomplete
   PYTHONPATH rather than simulator semantics.
 next_action: >-
-  Complete P0 source/effect fixtures for the remaining asset boundaries,
-  command resampling, and reward/termination/critic values.
+  Complete P0 source/effect fixtures for the remaining asset boundaries and
+  reward/termination/critic values.
   Do not start the unified command battery until those rows are closed; then
   run the fresh 64-env/5-iteration PPO smoke.
 next_proof: >-
   Seeded runtime effect reports for the remaining asset boundaries, followed by
-  command-resampling statistics and numerical
+  numerical
   reward/termination/critic fixtures. The final training gate is the unified
   command battery followed by a fresh 64-env/5-iteration smoke.
 stop_condition: >-
