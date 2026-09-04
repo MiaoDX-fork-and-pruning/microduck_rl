@@ -9,6 +9,7 @@ cannot leak into the hardware-facing policy ABI.
 from __future__ import annotations
 
 import math
+import re
 from typing import TYPE_CHECKING
 
 import torch
@@ -249,11 +250,58 @@ def policy_base_lin_vel(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneE
     return _asset(env, asset_cfg).data.root_lin_vel_b.torch
 
 
-def pose_tracking(env: ManagerBasedEnv, std: float = 0.3, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+def _std_vector(
+    joint_names: list[str] | tuple[str, ...],
+    values: dict[str, float],
+    *,
+    default: float = 0.3,
+    device: torch.device,
+) -> torch.Tensor:
+    """Resolve mjlab's regex keyed posture tolerances in joint order."""
+
+    out = []
+    for name in joint_names:
+        match = next((value for pattern, value in values.items() if re.match(pattern, name)), default)
+        out.append(float(match))
+    return torch.as_tensor(out, dtype=torch.float32, device=device)
+
+
+def pose_tracking(
+    env: ManagerBasedEnv,
+    std_standing: dict[str, float] | None = None,
+    std_walking: dict[str, float] | None = None,
+    std_running: dict[str, float] | None = None,
+    walking_threshold: float = 0.01,
+    running_threshold: float = 1.5,
+    command_name: str = "base_velocity",
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Match mjlab ``variable_posture`` including speed-dependent tolerances."""
+
     asset = _asset(env, asset_cfg)
-    ids = _policy_indices(asset)
-    legs = torch.cat((ids[:5], ids[9:]))
-    return gaussian_tracking(asset.data.joint_pos.torch[:, legs] - _home(asset)[legs], std)
+    ids = asset_cfg.joint_ids
+    if ids is None or len(ids) == 0:
+        ids = torch.cat((_policy_indices(asset)[:5], _policy_indices(asset)[9:])).tolist()
+    ids = torch.as_tensor(ids, device=asset.device, dtype=torch.long)
+    names = [asset.joint_names[int(index)] for index in ids]
+    standing = _std_vector(names, std_standing or {}, device=asset.device)
+    walking = _std_vector(names, std_walking or {}, device=asset.device)
+    running = _std_vector(names, std_running or {}, device=asset.device)
+
+    command = env.command_manager.get_command(command_name)
+    total_speed = torch.linalg.norm(command[:, :2], dim=1) + command[:, 2].abs()
+    standing_mask = (total_speed < walking_threshold).to(asset.data.joint_pos.torch.dtype)
+    walking_mask = ((total_speed >= walking_threshold) & (total_speed < running_threshold)).to(
+        asset.data.joint_pos.torch.dtype
+    )
+    running_mask = (total_speed >= running_threshold).to(asset.data.joint_pos.torch.dtype)
+    selected_std = (
+        standing.unsqueeze(0) * standing_mask.unsqueeze(1)
+        + walking.unsqueeze(0) * walking_mask.unsqueeze(1)
+        + running.unsqueeze(0) * running_mask.unsqueeze(1)
+    )
+    error = asset.data.joint_pos.torch[:, ids] - asset.data.default_joint_pos.torch[:, ids]
+    return torch.exp(torch.mean(-error.square() / selected_std.square(), dim=1))
 
 
 def head_pose_tracking(env: ManagerBasedEnv, std: float = 0.5, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
@@ -263,12 +311,99 @@ def head_pose_tracking(env: ManagerBasedEnv, std: float = 0.5, asset_cfg: SceneE
     return torch.exp(-((asset.data.joint_pos.torch[:, ids] - _home(asset)[ids] - head).square()) / (std * std)).mean(dim=-1)
 
 
+def body_pose_tracking(
+    env: ManagerBasedEnv,
+    command_name: str = "body_pose",
+    nominal_height: float = 0.095,
+    xy_std: float = 0.05,
+    z_std: float = 0.02,
+    angle_std: float = math.radians(15.0),
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Match mjlab's six-axis ``body_pose_tracking_6d`` kernel."""
+
+    asset = _asset(env, asset_cfg)
+    command = env.command_manager.get_command(command_name)
+    origin = getattr(env.scene, "env_origins", None)
+    if origin is None:
+        origin = getattr(getattr(env.scene, "terrain", None), "env_origins", None)
+    if origin is None:
+        origin = torch.zeros_like(asset.data.root_link_pos_w.torch)
+    rel = torch.nan_to_num(asset.data.root_link_pos_w.torch - origin, nan=0.0)
+    errors = [
+        rel[:, 0] - command[:, 0],
+        rel[:, 1] - command[:, 1],
+        rel[:, 2] - (nominal_height + command[:, 2]),
+    ]
+    quat = asset.data.root_link_quat_w.torch
+    qw, qx, qy, qz = quat.unbind(dim=-1)
+    roll = torch.atan2(2.0 * (qw * qx + qy * qz), 1.0 - 2.0 * (qx.square() + qy.square()))
+    pitch = torch.asin(torch.clamp(2.0 * (qw * qy - qz * qx), -1.0, 1.0))
+    yaw = torch.atan2(2.0 * (qw * qz + qx * qy), 1.0 - 2.0 * (qy.square() + qz.square()))
+    angle_error = torch.stack((roll - command[:, 3], pitch - command[:, 4], yaw - command[:, 5]), dim=-1)
+    angle_error[:, 2] = torch.remainder(angle_error[:, 2] + math.pi, 2.0 * math.pi) - math.pi
+    pos_error = torch.stack(errors, dim=-1)
+    scaled = torch.cat((pos_error[:, :2] / xy_std, pos_error[:, 2:3] / z_std, angle_error / angle_std), dim=-1)
+    return torch.exp(-scaled.square()).mean(dim=-1)
+
+
+def head_pose_bias_penalty(
+    env: ManagerBasedEnv,
+    command_name: str = "head_pose",
+    tau_s: float = 1.0,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Penalize the 1-second EMA of head-pose error, as in mjlab."""
+
+    asset = _asset(env, asset_cfg)
+    ids = _policy_indices(asset)[5:9]
+    command = env.command_manager.get_command(command_name)
+    error = asset.data.joint_pos.torch[:, ids] - _home(asset)[ids] - command
+    ema = getattr(env, "_head_bias_ema", None)
+    if ema is None or ema.shape != error.shape:
+        ema = torch.zeros_like(error)
+        env._head_bias_ema = ema
+    fresh = env.episode_length_buf <= 1
+    ema[fresh] = 0.0
+    alpha = min(1.0, float(env.step_dt) / max(float(tau_s), 1.0e-6))
+    env._head_bias_ema = (1.0 - alpha) * ema + alpha * error
+    return -env._head_bias_ema.abs().mean(dim=-1)
+
+
 def body_ang_vel_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    return _asset(env, asset_cfg).data.root_ang_vel_b.torch[:, :2].square().sum(dim=-1)
+    asset = _asset(env, asset_cfg)
+    # mjlab selects the trunk body link and reads world-frame angular velocity.
+    # IsaacLab exposes the same quantity through body_link_ang_vel_w; root
+    # angular velocity in body frame is not equivalent for a moving trunk.
+    body_vel = asset.data.body_link_ang_vel_w.torch[:, asset_cfg.body_ids, :]
+    body_vel = body_vel.squeeze(1)
+    return body_vel[:, :2].square().sum(dim=-1)
 
 
 def angular_momentum_cost(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    return _asset(env, asset_cfg).data.root_ang_vel_b.torch.square().sum(dim=-1)
+    """Read the subtree angular-momentum sensor; never substitute angular velocity."""
+
+    sensor = getattr(env.scene, "sensors", {}).get("root_angmom")
+    if sensor is None:
+        raise RuntimeError(
+            "Velocity-Flat angular_momentum requires an IsaacLab subtree-angmom "
+            "sensor; root angular velocity is not an equivalent substitute"
+        )
+    value = sensor.data.output
+    value = getattr(value, "torch", value)
+    return value.square().sum(dim=-1)
+
+
+def joint_pos_limits(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
+    """Match mjlab/IsaacLab soft joint-position limit penalty."""
+
+    asset = _asset(env, asset_cfg)
+    ids = torch.as_tensor(asset_cfg.joint_ids, device=asset.device, dtype=torch.long)
+    q = asset.data.joint_pos.torch[:, ids]
+    limits = asset.data.soft_joint_pos_limits.torch[:, ids]
+    below = (limits[..., 0] - q).clamp_min(0.0)
+    above = (q - limits[..., 1]).clamp_min(0.0)
+    return (below + above).sum(dim=-1)
 
 
 def action_rate_cost(env: ManagerBasedEnv) -> torch.Tensor:
@@ -289,7 +424,7 @@ def fallen_mjlab(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     asset = _asset(env, asset_cfg)
     gravity_xy = asset.data.projected_gravity_b.torch[:, :2]
     # mjlab's fell_over boundary is 70 degrees (not the old 49-degree 0.75 g gate).
-    return (torch.linalg.norm(gravity_xy, dim=-1) > 0.9396926) | (asset.data.root_link_pos_w.torch[:, 2] < 0.055)
+    return torch.linalg.norm(gravity_xy, dim=-1) > 0.9396926
 
 
 def reset_actor_history(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
@@ -708,10 +843,6 @@ class EventsCfg:
 
 @configclass
 class RewardsCfg:
-    # Keep survival useful but small enough that standing still cannot dominate
-    # a commanded velocity error.
-    alive = RewTerm(func=mdp.is_alive, weight=0.20)
-    terminating = RewTerm(func=mdp.is_terminated, weight=-2.0)
     track_lin_vel = RewTerm(
         func=track_linear_velocity,
         weight=2.0,
@@ -723,8 +854,53 @@ class RewardsCfg:
         params={"std": 0.7071067811865476, "command_name": "base_velocity"},
     )
     upright = RewTerm(func=upright_gaussian, weight=2.0)
-    pose = RewTerm(func=pose_tracking, weight=1.0, params={"std": 0.3})
+    pose = RewTerm(
+        func=pose_tracking,
+        weight=1.0,
+        params={
+            "std_standing": {
+                r".*hip_yaw.*": 0.1,
+                r".*hip_roll.*": 0.05,
+                r".*hip_pitch.*": 0.15,
+                r".*knee.*": 0.15,
+                r".*ankle.*": 0.1,
+            },
+            "std_walking": {
+                r".*hip_yaw.*": 0.3,
+                r".*hip_roll.*": 0.05,
+                r".*hip_pitch.*": 0.4,
+                r".*knee.*": 0.4,
+                r".*ankle.*": 0.25,
+            },
+            "std_running": {
+                r".*hip_yaw.*": 0.3,
+                r".*hip_roll.*": 0.05,
+                r".*hip_pitch.*": 0.4,
+                r".*knee.*": 0.4,
+                r".*ankle.*": 0.25,
+            },
+            "walking_threshold": 0.01,
+            "running_threshold": 1.5,
+            "command_name": "base_velocity",
+        },
+    )
     head_pose = RewTerm(func=head_pose_tracking, weight=2.0, params={"std": 0.5})
+    body_pose = RewTerm(
+        func=body_pose_tracking,
+        weight=0.0,
+        params={
+            "command_name": "body_pose",
+            "nominal_height": 0.095,
+            "xy_std": 0.05,
+            "z_std": 0.02,
+            "angle_std": math.radians(15.0),
+        },
+    )
+    head_pose_bias = RewTerm(
+        func=head_pose_bias_penalty,
+        weight=0.0,
+        params={"command_name": "head_pose", "tau_s": 1.0},
+    )
     air_time = RewTerm(
         func=air_time_reward,
         weight=3.0,
@@ -740,11 +916,19 @@ class RewardsCfg:
             "threshold_max": 0.300,
         },
     )
-    body_ang_vel = RewTerm(func=body_ang_vel_cost, weight=-0.05)
-    angular_momentum = RewTerm(func=angular_momentum_cost, weight=-0.02)
-    action_rate = RewTerm(func=action_rate_cost, weight=-0.1)
-    joint_vel = RewTerm(func=mdp.joint_vel_l1, weight=-0.005,
-                        params={"asset_cfg": SceneEntityCfg("robot", joint_names=["^(?!passive_).*"])})
+    body_ang_vel = RewTerm(
+        func=body_ang_vel_cost,
+        weight=-0.05,
+        params={"asset_cfg": SceneEntityCfg("robot", body_names=("trunk_base",))},
+    )
+    # IsaacLab 3.0 has no subtree-angmom sensor equivalent.  Do not substitute
+    # root angular velocity; the mjlab term remains a documented parity gap.
+    action_rate_l2 = RewTerm(func=action_rate_cost, weight=-0.1)
+    dof_pos_limits = RewTerm(
+        func=joint_pos_limits,
+        weight=-1.0,
+        params={"asset_cfg": SceneEntityCfg("robot", joint_names=(r"^(?!passive_).*",))},
+    )
     foot_clearance = RewTerm(
         func=contact_mdp.feet_clearance,
         weight=-2.0,
