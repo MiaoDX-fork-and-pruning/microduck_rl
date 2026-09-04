@@ -2,7 +2,7 @@ status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
 latest_intent: implement the IsaacLab backend plan via intuitive-flow
-current_slice: Task H reward-local-optimum probe; short smoke passes, long diagnostic did not initialize in time
+current_slice: Task H long Velocity-Flat training run authorized and in progress
 blocker_kind: evaluation_battery
   blocker_fingerprint: external-load friction parity is unavailable in same-step IsaacLab actuator timing
 last_proven_evidence: >-
@@ -94,10 +94,9 @@ completed: >-
   started and stopped after about four minutes during scene initialization
   without producing a checkpoint, so it is not training evidence.
 next_action: >-
-  Human decision required before spending another long IsaacLab run: either
-  accept a slower 4096-env diagnostic with a larger initialization budget, or
-  redesign the early-balance curriculum/reward before retrying. The current
-  reward change has no long-run evidence yet. Keep the USD
+  Complete the authorized 4096-env/4000-iteration Velocity-Flat run, then
+  evaluate its best/latest checkpoint with the fixed zero/forward/lateral/yaw
+  battery before deciding whether Task H is credible. Keep the USD
   `drive_configured=false` finding visible: BAM is explicit effort control, not
   implicit PhysX PD. PhysX force getters are available, but only as post-step
   data; a one-step delayed controller would require a new design decision.
@@ -120,5 +119,6 @@ parked_todos: >-
   External-load friction parity remains unresolved because same-step solved
   torque is unavailable to the explicit actuator callback; a longer IsaacLab
   run is pending an explicit Task H resource/experiment decision; DCMotorCfg is
-  not accepted as BAM parity. The 4096-env retry produced no checkpoint and was
-  stopped during initialization.
+  not accepted as BAM parity. The previous 4096-env retry produced no
+  checkpoint and was stopped during initialization; this authorized run is the
+  first retry after the reward adjustment.
