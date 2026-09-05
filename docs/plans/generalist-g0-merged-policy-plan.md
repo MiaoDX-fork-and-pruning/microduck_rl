@@ -1,9 +1,9 @@
 # Generalist G0 Merged Policy Plan
 
-Status: paused-pending-direction-review
+Status: approved-next-preflight
 
-Current checkpoint: implementation and diagnostic exploration complete; plan
-paused pending direction review. The versioned teacher manifest
+Current checkpoint: direction review resolved; implementation proceeds through
+preflight with a true shared merged actor. The versioned teacher manifest
 (`docs/plans/generalist-g0-teacher-manifest.json`) and legal transition graph
 (`docs/generalist_g0_transition_graph.json`) are hash-verified; data
 collection, BC/DAgger, direct PPO, hybrid PPO, ONNX parity, latency, and
@@ -26,7 +26,30 @@ The evaluator work reached action parity, but the recovery reset poses used by
 the latest probe are not yet proven to be the manifest-frozen specialist reset
 states. The native recovery numbers are consequently diagnostic only. The plan
 is paused for a direction review before any further probe training or PPO run.
-No merged PPO, new behavior, or G0 acceptance claim is authorized.
+The routed specialist bundle remains a control upper bound and is not an
+accepted merged candidate.
+
+## Resolved Direction Review (2026-09-05)
+
+- The product candidate must be one shared actor with one shared action head;
+  it may not select complete specialist networks at runtime.
+- Capacity expansion is allowed and required as an explicit ablation: test
+  approximately 2x and 4x the parameter count of one specialist before
+  concluding that the abstraction is not learnable.
+- Behavior-specific conditioning is allowed only as shared-trunk adapters or
+  FiLM-style modulation. Full copied specialist heads are control arms, not
+  the merged product candidate.
+- G0 remains limited to `velstand`, `velocity`, and `sitstand`. Ground pick,
+  kick, and roulade stay out of this phase.
+- Transitions are hard acceptance gates: `VELSTAND <-> VELOCITY` and
+  `VELSTAND <-> SITSTAND` must pass in one no-reset episode.
+- The high-level scheduler remains responsible for behavior id, phase, side,
+  legal transitions, and recovery trigger. The shared actor owns continuous
+  joint control after that decision.
+
+The six-specialist routed ONNX produced during investigation is retained only
+as a routing upper bound and regression control. It does not satisfy this
+direction because its behavior branches contain complete specialist networks.
 
 ## Evidence Ledger (2026-09-04)
 
