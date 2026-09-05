@@ -138,6 +138,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
         tilt_trace: list[float] = []
         official_fall_seen = False
         official_recovery_seen = False
+        official_limp_seen = False
+        official_recovery_gain_seen = False
         gains: list[int] = []
         targets: list[list[float]] = []
         max_tilt = 0.0
@@ -189,7 +191,10 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
                     requested_commands.append(list(movement.get("requested", [0.0, 0.0, 0.0])))
                     applied_commands.append(list(movement.get("applied", [0.0, 0.0, 0.0])))
                     safety = state.get("safety", {})
+                    was_fallen = official_fall_seen
                     official_fall_seen = official_fall_seen or bool(safety.get("fallen", False))
+                    official_limp_seen = official_limp_seen or bool(safety.get("limp", False))
+                    official_recovery_gain_seen = official_recovery_gain_seen or (was_fallen and not bool(safety.get("limp", False)) and int(safety.get("gain", 0)) >= 160)
                     official_recovery_seen = official_recovery_seen or (
                         official_fall_seen and not bool(safety.get("fallen", False))
                     )
@@ -266,6 +271,8 @@ def run_profile(args: argparse.Namespace, roller: bool) -> dict[str, Any]:
             "recovery_seen": physical_recovery_seen and official_recovery_seen,
             "physical_recovery_seen": physical_recovery_seen,
             "official_recovery_seen": official_recovery_seen,
+            "official_limp_seen": official_limp_seen,
+            "official_recovery_gain_seen": official_recovery_gain_seen,
             "reset_count": 0,
             "passed": passed,
             "failure_reason": failure_reason,
