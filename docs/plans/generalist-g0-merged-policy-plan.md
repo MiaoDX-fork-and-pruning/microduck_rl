@@ -25,7 +25,8 @@ closed learnability result.
 The evaluator work reached action parity, but the recovery reset poses used by
 the latest probe are not yet proven to be the manifest-frozen specialist reset
 states. The native recovery numbers are consequently diagnostic only. The plan
-is paused for a direction review before any further probe training or PPO run.
+is approved for a new capacity and conditioning experiment under the resolved
+direction review below.
 The routed specialist bundle remains a control upper bound and is not an
 accepted merged candidate.
 
@@ -104,11 +105,9 @@ full generalist-v0 program: the goal is to prove that one conditioned model
 can represent a small, already-validated transition graph before adding
 dynamic skills.
 
-Execution ordering is now strict: the direct/hybrid PPO work described in P2
-remains suspended while the plan is paused for direction review. If Option A is
-approved, the VELSTAND probe is rerun only to repair the reset-contract
-evidence and complete its frozen control comparison; it is not another PPO
-arm or an automatic authorization to resume merged training.
+Execution ordering is now strict: preflight must define the shared-actor
+capacity ablations and data gates before implementation resumes. Existing
+direct/hybrid PPO results remain diagnostic controls, not the new candidate.
 
 ## Decision
 
