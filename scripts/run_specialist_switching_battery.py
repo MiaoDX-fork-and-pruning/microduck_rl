@@ -18,6 +18,7 @@ from specialist_scenario import load_scenario, scenario_events
 
 PATHS = {p.name: str(p / "policy.onnx") for p in (ROOT / "artifacts/specialists").iterdir() if (p / "policy.onnx").exists()}
 TILT_FAILURE = math.radians(65)
+MERGED_ROUTES = {"velstand_flat": 0, "velocity_flat": 1, "sitstand_flat": 2, "ground_pick_flat": 3, "ball_kick_flat": 4, "roulade_flat": 5}
 
 
 def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = None, merged_policy: Path | None = None) -> dict:
@@ -44,6 +45,10 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         kwargs[mapping[pid]] = PATHS[pid]
     policy = PolicyInference(model, data, **kwargs)
     merged_session = ort.InferenceSession(str(merged_policy), providers=["CPUExecutionProvider"]) if merged_policy else None
+    if merged_session is not None:
+        unsupported = sorted({f.policy_id for f in frames} - MERGED_ROUTES.keys())
+        if unsupported:
+            raise ValueError(f"merged foot-mode policy does not support profiles: {unsupported}; use the roller specialist route")
     policy.validate_specialist_policies(f.policy_id for f in frames)
     free = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
     q = int(model.jnt_qposadr[free]); data.qpos[q:q+3] = [0, 0, 0.1385 if roller else 0.125]; data.qpos[q+3:q+7] = [1,0,0,0]
@@ -93,7 +98,7 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
         if merged_session is None:
             action = policy.infer()
         else:
-            route = {"velstand_flat": 0, "velocity_flat": 1, "sitstand_flat": 2, "ground_pick_flat": 3, "ball_kick_flat": 4, "roulade_flat": 5}[frame.policy_id]
+            route = MERGED_ROUTES[frame.policy_id]
             condition = np.zeros(23, dtype=np.float32); condition[route] = 1.0
             condition[6:19] = policy.command
             merged_obs = np.concatenate((obs[:48], condition)).astype(np.float32)[None]
