@@ -18,7 +18,8 @@ def load_teacher(root, name):
 
 def main():
     ap = argparse.ArgumentParser(); ap.add_argument("--specialists", type=Path, default=Path("artifacts/specialists")); ap.add_argument("--output", type=Path, required=True); args = ap.parse_args()
-    model = RoutedG0TeacherActor(load_teacher(args.specialists, "velstand_flat"), load_teacher(args.specialists, "velocity_flat")); args.output.parent.mkdir(parents=True, exist_ok=True)
+    names = ("velstand_flat", "velocity_flat", "sitstand_flat", "ground_pick_flat", "ball_kick_flat", "roulade_flat")
+    model = RoutedG0TeacherActor(*(load_teacher(args.specialists, name) for name in names)); args.output.parent.mkdir(parents=True, exist_ok=True)
     torch.onnx.export(model, torch.zeros(1, 71), str(args.output), input_names=["observations"], output_names=["actions"], dynamic_axes={"observations": {0: "batch"}, "actions": {0: "batch"}}, opset_version=17)
-    print(json.dumps({"output": str(args.output), "input_dim": 71, "action_dim": 14, "routing": {"stand": 48, "locomotion": 49}}, indent=2))
+    print(json.dumps({"output": str(args.output), "input_dim": 71, "action_dim": 14, "routing": {name: 48 + i for i, name in enumerate(("stand", "locomotion", "sit_stand", "ground_pick", "kick", "roulade"))}}, indent=2))
 if __name__ == "__main__": main()

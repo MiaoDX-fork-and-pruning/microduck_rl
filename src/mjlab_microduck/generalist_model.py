@@ -62,13 +62,14 @@ class G0MultiHeadActor(nn.Module):
 
 
 class RoutedG0TeacherActor(nn.Module):
-    """Single 71D/14D graph routing frozen G0 teachers by behavior one-hot."""
-    def __init__(self, stand: nn.Module, locomotion: nn.Module):
-        super().__init__(); self.stand = stand; self.locomotion = locomotion
+    """Single 71D/14D graph routing frozen foot-mode teachers by one-hot."""
+    def __init__(self, stand: nn.Module, locomotion: nn.Module, *additional: nn.Module):
+        super().__init__(); self.teachers = nn.ModuleList((stand, locomotion, *additional))
     def forward(self, observation: torch.Tensor) -> torch.Tensor:
         legacy = torch.cat((observation[:, :48], observation[:, 54:67]), dim=1)
-        route = observation[:, 49:50]
-        return torch.where(route > 0.5, self.locomotion(legacy), self.stand(legacy))
+        route = observation[:, 48:54].argmax(dim=1)
+        outputs = torch.stack([teacher(legacy) for teacher in self.teachers], dim=1)
+        return outputs[torch.arange(observation.shape[0], device=observation.device), route]
 
 
 def build_actor(metadata: dict) -> nn.Module:

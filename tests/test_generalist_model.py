@@ -24,5 +24,6 @@ def test_routed_actor_uses_behavior_bit():
     class Constant(torch.nn.Module):
         def __init__(self, value): super().__init__(); self.value = value
         def forward(self, x): return torch.full((x.shape[0], 14), self.value)
-    actor = RoutedG0TeacherActor(Constant(1.0), Constant(2.0)); x = torch.zeros(2, 71); x[1, 49] = 1
-    assert torch.all(actor(x)[0] == 1) and torch.all(actor(x)[1] == 2)
+    actor = RoutedG0TeacherActor(*(Constant(float(i)) for i in range(6))); x = torch.zeros(6, 71)
+    for i in range(6): x[i, 48 + i] = 1
+    assert torch.all(actor(x)[:, 0] == torch.arange(6, dtype=torch.float32))
