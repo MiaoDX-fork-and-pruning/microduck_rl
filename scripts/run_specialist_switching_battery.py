@@ -94,8 +94,8 @@ def run(scenario_path: Path, roller: bool, output: Path, video: Path | None = No
             action = policy.infer()
         else:
             route = {"velstand_flat": 0, "velocity_flat": 1, "sitstand_flat": 2, "ground_pick_flat": 3, "ball_kick_flat": 4, "roulade_flat": 5}[frame.policy_id]
-            condition = np.zeros(17, dtype=np.float32); condition[route] = 1.0
-            condition[6:] = policy.command
+            condition = np.zeros(23, dtype=np.float32); condition[route] = 1.0
+            condition[6:19] = policy.command
             merged_obs = np.concatenate((obs[:48], condition)).astype(np.float32)[None]
             action = merged_session.run(None, {merged_session.get_inputs()[0].name: merged_obs})[0][0]
         finite = finite and bool(np.isfinite(obs).all() and np.isfinite(action).all() and np.isfinite(data.qpos).all() and np.isfinite(data.qvel).all())
