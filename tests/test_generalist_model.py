@@ -1,6 +1,6 @@
 import torch
 
-from mjlab_microduck.generalist_model import G0MultiHeadActor
+from mjlab_microduck.generalist_model import G0MultiHeadActor, RoutedG0TeacherActor
 
 
 def test_multihead_routes_by_behavior_condition():
@@ -19,3 +19,10 @@ def test_multihead_routes_by_behavior_condition():
     assert torch.all(output[0] == 1.0)
     assert torch.all(output[1] == 2.0)
     assert torch.all(output[2] == 3.0)
+
+def test_routed_actor_uses_behavior_bit():
+    class Constant(torch.nn.Module):
+        def __init__(self, value): super().__init__(); self.value = value
+        def forward(self, x): return torch.full((x.shape[0], 14), self.value)
+    actor = RoutedG0TeacherActor(Constant(1.0), Constant(2.0)); x = torch.zeros(2, 71); x[1, 49] = 1
+    assert torch.all(actor(x)[0] == 1) and torch.all(actor(x)[1] == 2)

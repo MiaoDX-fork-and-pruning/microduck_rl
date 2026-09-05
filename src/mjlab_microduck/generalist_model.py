@@ -61,6 +61,16 @@ class G0MultiHeadActor(nn.Module):
         return torch.tanh(action) if self.bounded else action
 
 
+class RoutedG0TeacherActor(nn.Module):
+    """Single 71D/14D graph routing frozen G0 teachers by behavior one-hot."""
+    def __init__(self, stand: nn.Module, locomotion: nn.Module):
+        super().__init__(); self.stand = stand; self.locomotion = locomotion
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        legacy = torch.cat((observation[:, :48], observation[:, 54:67]), dim=1)
+        route = observation[:, 49:50]
+        return torch.where(route > 0.5, self.locomotion(legacy), self.stand(legacy))
+
+
 def build_actor(metadata: dict) -> nn.Module:
     if metadata.get("model_kind") == "g0_multihead":
         return G0MultiHeadActor(bounded=metadata.get("bounded_actions", True))
