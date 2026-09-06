@@ -1,6 +1,8 @@
 # Generalist G0 Merged Policy Plan
 
-Status: approved-next-preflight
+Status: preflight-ready
+
+Preflight contract: `docs/plans/generalist-g0-merged-policy-preflight.md`
 
 Current checkpoint: direction review resolved; implementation proceeds through
 preflight with a true shared merged actor. The versioned teacher manifest
