@@ -66,7 +66,7 @@ def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarra
     return selected[rng.permutation(len(selected))]
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
     import torch
     from torch import nn
 
@@ -99,7 +99,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
         train_idx = torch.from_numpy(train_base[local].astype(np.int64))
     else:
         train_idx = torch.from_numpy(train_base[rng.permutation(len(train_base))].astype(np.int64))
-    model = G0MultiHeadActor(bounded=bounded) if multihead else (nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh(), nn.Linear(256, 14)) if small else nn.Sequential(nn.Linear(71, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 128), nn.Tanh(), nn.Linear(128, 14)))
+    model = G0MultiHeadActor(bounded=bounded) if multihead else (nn.Sequential(nn.Linear(71, 256), nn.Tanh(), nn.Linear(256, 256), nn.Tanh(), nn.Linear(256, 14)) if small else (nn.Sequential(nn.Linear(71, 1024), nn.Tanh(), nn.Linear(1024, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 14)) if capacity_4x else nn.Sequential(nn.Linear(71, 512), nn.Tanh(), nn.Linear(512, 256), nn.Tanh(), nn.Linear(256, 128), nn.Tanh(), nn.Linear(128, 14))))
     if bounded and not multihead:
         model.add_module("output_tanh", nn.Tanh())
     if init_checkpoint:
@@ -131,7 +131,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14] if small else [71, 512, 256, 128, 14], "model_kind": "g0_multihead" if multihead else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None,
+            "architecture": [71, 256, 256, 14] if small else ([71, 1024, 512, 256, 14] if capacity_4x else [71, 512, 256, 128, 14]), "model_kind": "g0_multihead" if multihead else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None,
             "trajectory_split": True, "train_trajectories": len(train_trajectories), "validation_trajectories": len(unique) - len(train_trajectories)}
 
 
@@ -147,6 +147,7 @@ def main() -> None:
     ap.add_argument("--small-model", action="store_true")
     ap.add_argument("--bounded-actions", action="store_true")
     ap.add_argument("--multihead", action="store_true")
+    ap.add_argument("--capacity-4x", action="store_true", help="use the explicit larger shared dense actor ablation")
     ap.add_argument("--behavior", choices=("stand", "locomotion", "sit_stand"), default=None)
     args = ap.parse_args()
     args.output.mkdir(parents=True, exist_ok=True)
@@ -158,7 +159,7 @@ def main() -> None:
             manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
-    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead)
+    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, capacity_4x=args.capacity_4x)
     manifest["metrics"] = metrics
     (args.output / "manifest.json").parent.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
