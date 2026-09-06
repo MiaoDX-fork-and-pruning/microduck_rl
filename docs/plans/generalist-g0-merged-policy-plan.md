@@ -33,6 +33,13 @@ reset-contract mismatch. Native specialist behavior remains finite and above
 the standalone numeric gate, but reset equivalence to historical evidence and
 human video acceptance remain unproven.
 
+The canonical G0 gate validator confirms the corrected 2x and 4x arms are
+diagnostic failures: all three standalone behavior gates and all four legal
+transition gates fail, despite zero transition resets and finite outputs. The
+reports are `/tmp/g0-bc-2x-real-eval.json` and
+`/tmp/g0-bc-4x-real-eval.json`; the existing gate summary is
+`/tmp/g0-final-gate.json`.
+
 Verification checkpoint: the full repository suite reports 323 passed, 1
 skipped, and 1 pre-existing failure in the x86_64 torch registry assertion due
 to the unrelated `uv.lock` mirror change. G0/generalist and specialist focused

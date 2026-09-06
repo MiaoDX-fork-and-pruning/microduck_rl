@@ -201,6 +201,13 @@ PPO experiment requires a new approved plan.
 - The smoke checkpoint is diagnostic only; no merged candidate has passed the
   canonical evaluator or P4 acceptance gate.
 
+- Canonical gate validation of the corrected 2x and 4x arms remains
+  `DIAGNOSTIC_FAIL`: all three standalone behavior gates and all four legal
+  transition gates fail, with zero transition resets and finite outputs. Source
+  reports are `/tmp/g0-bc-2x-real-eval.json` and
+  `/tmp/g0-bc-4x-real-eval.json`; the summary is `/tmp/g0-final-gate.json`.
+- Current G0/generalist contract suite passes 46/46 tests.
+
 - Probe-focused tests: 17 passed.
 - Canonical compatibility report SHA-256:
   `f78d833fd17ca3e0921593cbd0ed1d1c25512e76cdc5f530d6c28f73e189d947`.
