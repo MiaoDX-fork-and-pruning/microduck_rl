@@ -164,28 +164,34 @@ PPO experiment requires a new approved plan.
   fallen episodes.
 - Reset-contract capture plus schema/model/graph/evaluator/BC tests pass
   (23/23).
-- Added `scripts/capture_specialist_recovery_traces.py` and captured real
-  `velstand_flat` fallen states from deterministic x/y angular impulses. The
-  traces contain qpos/qvel, 61D observations, 14D actions, commands, tilt, and
-  height; both falls were finite and crossed the 40-degree fallen gate, but
-  neither recovered within 500 control ticks. These are diagnostic rollout
-  traces, not specialist acceptance resets or product claims.
-- Recovery capture and regression tests pass (15/15).
-- Added `scripts/replay_specialist_recovery_trace.py` and replayed the captured
-  fall states through the immutable `velstand_flat` ONNX. The x-axis fall was
-  finite but did not recover within 500 control ticks (final tilt about 1.59
-  rad, height about 0.046 m); the y-axis replay also failed recovery and
-  exceeded the action gate slightly (`1.00096`). These are real rollout-state
-  diagnostics, not hand-authored reset baselines. The evidence-repair result is
-  therefore fail-closed: exact replay is possible, but the tested specialist
-  recovery states do not establish a passing recovery baseline.
+- Added `scripts/capture_specialist_recovery_traces.py` and
+  `scripts/replay_specialist_recovery_trace.py`. Version-2 traces save the
+  complete MuJoCo integration state, previous action, command, observation,
+  action, and next state at one control boundary, with teacher/scene/model
+  hashes. Replaying the x-axis fall suffix now has exact parity (all four
+  max-absolute deltas are `0.0`) and does not recover within 396 ticks. The
+  y-axis suffix also has exact parity and does not recover. These remain CPU
+  perturbation diagnostics (`accepted_reset_equivalence=false`), not specialist
+  acceptance baselines. Strong impulses can produce raw teacher actions over
+  1.0, so those traces are excluded from training data.
+- The previous v1 replay result is superseded: it reset previous-action history
+  and therefore was not a valid exact replay. Capture/replay regression tests
+  pass (15/15).
+- The first recovery-augmented BC attempt used raw fall traces whose teacher
+  actions exceeded the 14D unit-action contract; that dataset is diagnostic
+  only and was not used for acceptance. The corrected capture metadata now
+  records this condition explicitly.
 
-- The explicit shared-actor capacity ablation completed 2026-09-06. The 4x
-  dense actor (`[71, 1024, 512, 256, 14]`) trained on the identical frozen
-  traces and seed, remained finite, and failed all standalone behavior and
-  legal-transition gates in `/tmp/g0-bc-4x-eval.json`.
-- The post-ablation trainer/evaluator tests pass (6/6). Across the 1x, 2x,
-  and 4x shared dense arms, no candidate has passed closed-loop G0 acceptance.
+- The explicit shared-actor capacity ablations were re-run with corrected,
+  manifest-recorded arms. Baseline is `[71, 512, 256, 128, 14]` (202,894
+  parameters), 2x is `[71, 768, 384, 192, 14]` (427,214 parameters), and 4x
+  is `[71, 1088, 544, 272, 14]` (822,814 parameters). Both corrected 2x and
+  4x candidates remained finite but failed every standalone and legal-edge
+  gate in `/tmp/g0-bc-2x-real-eval.json` and `/tmp/g0-bc-4x-real-eval.json`.
+- The earlier `/tmp/g0-bc-2x` label was incorrect: it used the baseline
+  architecture and is superseded by the corrected run. Across the corrected
+  1x, 2x, and 4x shared dense arms, no candidate has passed closed-loop G0
+  acceptance.
 
 - Execution resumed 2026-09-06: focused G0 contract tests passed (32/32).
 - Teacher manifest regenerated and hash-verified successfully with
