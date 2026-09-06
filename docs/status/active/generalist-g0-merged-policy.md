@@ -150,6 +150,13 @@ PPO experiment requires a new approved plan.
 
 ## Last proof
 
+- The explicit shared-actor capacity ablation completed 2026-09-06. The 4x
+  dense actor (`[71, 1024, 512, 256, 14]`) trained on the identical frozen
+  traces and seed, remained finite, and failed all standalone behavior and
+  legal-transition gates in `/tmp/g0-bc-4x-eval.json`.
+- The post-ablation trainer/evaluator tests pass (6/6). Across the 1x, 2x,
+  and 4x shared dense arms, no candidate has passed closed-loop G0 acceptance.
+
 - Execution resumed 2026-09-06: focused G0 contract tests passed (32/32).
 - Teacher manifest regenerated and hash-verified successfully with
   `scripts/freeze_generalist_teachers.py`.
