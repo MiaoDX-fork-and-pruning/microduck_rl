@@ -164,6 +164,13 @@ PPO experiment requires a new approved plan.
   fallen episodes.
 - Reset-contract capture plus schema/model/graph/evaluator/BC tests pass
   (23/23).
+- Added `scripts/capture_specialist_recovery_traces.py` and captured real
+  `velstand_flat` fallen states from deterministic x/y angular impulses. The
+  traces contain qpos/qvel, 61D observations, 14D actions, commands, tilt, and
+  height; both falls were finite and crossed the 40-degree fallen gate, but
+  neither recovered within 500 control ticks. These are diagnostic rollout
+  traces, not specialist acceptance resets or product claims.
+- Recovery capture and regression tests pass (15/15).
 
 - The explicit shared-actor capacity ablation completed 2026-09-06. The 4x
   dense actor (`[71, 1024, 512, 256, 14]`) trained on the identical frozen
