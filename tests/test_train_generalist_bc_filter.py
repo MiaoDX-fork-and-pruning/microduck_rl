@@ -59,6 +59,13 @@ def test_canonical_training_entrypoint_exists():
     assert (Path(__file__).parents[1] / "scripts" / "train_generalist_canonical.py").exists()
 
 
+def test_canonical_dagger_shards_preserve_segment_trajectories(tmp_path):
+    # The entrypoint must keep adjacent student-state frames together so the
+    # trajectory split cannot leak neighboring frames into validation.
+    source = Path(__file__).parents[1] / "scripts" / "train_generalist_canonical.py"
+    assert "np.unique(extra_segments.astype(str), return_inverse=True)" in source.read_text()
+
+
 def test_gated_adapter_can_initialize_from_generalist_model(tmp_path):
     x = np.zeros((6, 71), dtype=np.float32)
     y = np.zeros((6, 14), dtype=np.float32)

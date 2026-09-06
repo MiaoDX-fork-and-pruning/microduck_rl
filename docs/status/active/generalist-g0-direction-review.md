@@ -154,6 +154,12 @@ unbounded FiLM run also failed. The remaining uncertainty is therefore the
 closed-loop objective/state sensitivity itself, not ordinary trace horizon,
 transition coverage, startup weighting, or output clipping.
 
+The final one-hot action-adapter control also failed `0/7`: direct frozen
+behavior-bit routing produced finite in-range actions, low offline validation
+MSE (`1.06e-5`), and ONNX parity (`2.98e-7` max error), but no standalone or
+legal-transition gate passed. Therefore learned softmax gate mixing is not the
+remaining explanation.
+
 Evidence hashes:
 
 - Phase-A/native diagnostic report: `45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31`

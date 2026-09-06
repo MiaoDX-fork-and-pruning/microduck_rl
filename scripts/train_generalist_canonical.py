@@ -21,15 +21,27 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--gated-adapter", action="store_true")
     parser.add_argument("--film", action="store_true")
+    parser.add_argument("--action-adapter", action="store_true")
+    parser.add_argument("--onehot-action-adapter", action="store_true",
+                        help="use frozen one-hot low-rank action residuals")
     parser.add_argument("--unbounded", action="store_true",
                         help="leave the shared action head unbounded for diagnostics")
+    parser.add_argument("--fit-all", action="store_true", help="fit every canonical trajectory; diagnostic only")
+    parser.add_argument("--input-noise-std", type=float, default=0.0,
+                        help="augment proprioception with deterministic Gaussian noise")
+    parser.add_argument("--extra-data", type=Path, action="append", default=[],
+                        help="cumulative teacher-labeled student-state shard")
+    parser.add_argument("--init-run", type=Path, default=None,
+                        help="initialize from a compatible shared actor run")
     parser.add_argument("--critical-ticks", type=int, default=0,
                         help="oversample the first N ticks of every canonical segment")
     args = parser.parse_args()
-    if args.gated_adapter == args.film:
-        raise SystemExit("choose exactly one of --gated-adapter or --film")
+    if sum((args.gated_adapter, args.film, args.action_adapter, args.onehot_action_adapter)) != 1:
+        raise SystemExit("choose exactly one conditioned actor variant")
     if args.critical_ticks < 0:
         raise SystemExit("--critical-ticks must be non-negative")
+    if args.input_noise_std < 0 or not np.isfinite(args.input_noise_std):
+        raise SystemExit("--input-noise-std must be finite and non-negative")
     with np.load(args.data, allow_pickle=False) as payload:
         x = np.asarray(payload["inputs"], dtype=np.float32)
         y = np.asarray(payload["actions"], dtype=np.float32)
@@ -38,6 +50,28 @@ def main() -> None:
     validate_batch(x, y)
     if trajectory_ids.shape != (len(x),) or segment_ids.shape != (len(x),):
         raise ValueError("canonical data metadata must align with samples")
+    if args.input_noise_std:
+        rng = np.random.default_rng(args.seed)
+        noisy = x.copy()
+        noisy[:, :48] += rng.normal(0.0, args.input_noise_std, noisy[:, :48].shape).astype(np.float32)
+        x = np.concatenate((x, noisy))
+        y = np.concatenate((y, y.copy()))
+        trajectory_ids = np.concatenate((trajectory_ids, trajectory_ids + trajectory_ids.max() + 1))
+        segment_ids = np.concatenate((segment_ids, segment_ids))
+    for shard_path in args.extra_data:
+        with np.load(shard_path, allow_pickle=False) as shard:
+            extra_x = np.asarray(shard["inputs"], dtype=np.float32)
+            extra_y = np.asarray(shard["actions"], dtype=np.float32)
+            extra_segments = np.asarray(shard.get("segment_ids", np.arange(len(extra_x))))
+        validate_batch(extra_x, extra_y)
+        if extra_segments.shape != (len(extra_x),):
+            raise ValueError("extra segment_ids must align with shard samples")
+        offset = int(trajectory_ids.max()) + 1 if len(trajectory_ids) else 0
+        _, extra_ids = np.unique(extra_segments.astype(str), return_inverse=True)
+        extra_ids = extra_ids.astype(np.int64) + offset
+        x = np.concatenate((x, extra_x)); y = np.concatenate((y, extra_y))
+        trajectory_ids = np.concatenate((trajectory_ids, extra_ids))
+        segment_ids = np.concatenate((segment_ids, extra_segments))
     bucket_labels = None
     if args.critical_ticks:
         offsets = np.zeros(len(x), dtype=np.int64)
@@ -51,7 +85,10 @@ def main() -> None:
     metrics = bc.train(
         x, y, args.output, args.epochs, args.seed,
         balance=True, bounded=not args.unbounded, gated_adapter=args.gated_adapter,
-        film=args.film, trajectory_ids=trajectory_ids, bucket_labels=bucket_labels,
+        film=args.film, action_adapter=args.action_adapter,
+        onehot_action_adapter=args.onehot_action_adapter,
+        trajectory_ids=trajectory_ids, bucket_labels=bucket_labels,
+        fit_all=args.fit_all, init_model=(args.init_run / "model.pt") if args.init_run else None,
     )
     manifest = {
         "schema": "generalist-v0-canonical-teacher",
@@ -61,6 +98,10 @@ def main() -> None:
         "trajectories": int(len(np.unique(trajectory_ids))),
         "segments": sorted({str(item) for item in segment_ids}),
         "critical_ticks": args.critical_ticks,
+        "input_noise_std": args.input_noise_std,
+        "extra_data": [str(path) for path in args.extra_data],
+        "init_run": str(args.init_run) if args.init_run else None,
+        "model_kind": "onehot_action_adapter" if args.onehot_action_adapter else "action_adapter" if args.action_adapter else "film" if args.film else "gated_adapter",
         "metrics": metrics,
     }
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

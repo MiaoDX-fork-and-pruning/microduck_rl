@@ -134,6 +134,51 @@ class FiLMG0Actor(nn.Module):
         return torch.tanh(action) if self.bounded else action
 
 
+class ActionAdapterG0Actor(nn.Module):
+    """Shared trunk/head with condition-gated low-rank action residuals."""
+
+    def __init__(self, bounded: bool = True, hidden_dim: int = 512,
+                 adapter_dim: int = 32, behavior_count: int = 3):
+        super().__init__()
+        if hidden_dim < 1 or adapter_dim < 1 or behavior_count < 1:
+            raise ValueError("action adapter dimensions must be positive")
+        self.bounded = bounded
+        self.behavior_count = behavior_count
+        self.trunk = nn.Sequential(nn.Linear(71, hidden_dim), nn.Tanh())
+        self.action_head = nn.Linear(hidden_dim, 14)
+        self.gate = nn.Linear(6, behavior_count)
+        self.adapter_down = nn.ModuleList(nn.Linear(hidden_dim, adapter_dim) for _ in range(behavior_count))
+        self.adapter_up = nn.ModuleList(nn.Linear(adapter_dim, 14) for _ in range(behavior_count))
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        if observation.ndim != 2 or observation.shape[1] != 71:
+            raise ValueError("G0 action-adapter input must have shape [N,71]")
+        hidden = self.trunk(observation)
+        weights = torch.softmax(self.gate(observation[:, 48:54]), dim=-1)
+        residuals = torch.stack([
+            self.adapter_up[index](torch.tanh(self.adapter_down[index](hidden)))
+            for index in range(self.behavior_count)
+        ], dim=1)
+        action = self.action_head(hidden) + (residuals * weights.unsqueeze(-1)).sum(dim=1)
+        return torch.tanh(action) if self.bounded else action
+
+
+class OneHotActionAdapterG0Actor(ActionAdapterG0Actor):
+    """Action adapter whose behavior selection uses the frozen one-hot bits."""
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        if observation.ndim != 2 or observation.shape[1] != 71:
+            raise ValueError("G0 one-hot action-adapter input must have shape [N,71]")
+        hidden = self.trunk(observation)
+        weights = observation[:, 48:51]
+        residuals = torch.stack([
+            self.adapter_up[index](torch.tanh(self.adapter_down[index](hidden)))
+            for index in range(self.behavior_count)
+        ], dim=1)
+        action = self.action_head(hidden) + (residuals * weights.unsqueeze(-1)).sum(dim=1)
+        return torch.tanh(action) if self.bounded else action
+
+
 class RoutedG0TeacherActor(nn.Module):
     """Single 71D/14D graph routing frozen foot-mode teachers by one-hot."""
     def __init__(self, stand: nn.Module, locomotion: nn.Module, *additional: nn.Module):
@@ -160,6 +205,20 @@ def build_actor(metadata: dict) -> nn.Module:
             bounded=metadata.get("bounded_actions", True),
             hidden_dim=int(metadata.get("hidden_dim", 512)),
             output_hidden_dim=int(metadata.get("output_hidden_dim", 256)),
+            behavior_count=int(metadata.get("behavior_count", 3)),
+        )
+    if metadata.get("model_kind") == "action_adapter":
+        return ActionAdapterG0Actor(
+            bounded=metadata.get("bounded_actions", True),
+            hidden_dim=int(metadata.get("hidden_dim", 512)),
+            adapter_dim=int(metadata.get("adapter_dim", 32)),
+            behavior_count=int(metadata.get("behavior_count", 3)),
+        )
+    if metadata.get("model_kind") == "onehot_action_adapter":
+        return OneHotActionAdapterG0Actor(
+            bounded=metadata.get("bounded_actions", True),
+            hidden_dim=int(metadata.get("hidden_dim", 512)),
+            adapter_dim=int(metadata.get("adapter_dim", 32)),
             behavior_count=int(metadata.get("behavior_count", 3)),
         )
     architecture = metadata.get("architecture", [71, 512, 256, 128, 14])

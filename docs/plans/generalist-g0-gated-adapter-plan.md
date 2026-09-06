@@ -58,6 +58,16 @@ gates. A critical-window oversampling arm and a 2,000-epoch unbounded FiLM arm
 also failed. This rules out missing evaluator-horizon data, simple startup
 sample weighting, and output clipping as sufficient fixes.
 
+Final bounded follow-up (2026-09-07): a one-hot action-adapter actor kept one
+shared trunk and one shared 14D action head, but selected its low-rank residual
+directly from the frozen behavior bits instead of a learned softmax gate. The
+1,000-epoch canonical run reached validation MSE `1.06e-5`; ONNX parity passed
+with maximum absolute error `2.98e-7`. The canonical evaluator nevertheless
+failed all three standalone behavior gates and all four exercised legal
+transition gates (`0/7`), with finite in-range actions. This rejects learned
+gate mixing as the remaining explanation under the current pointwise BC and
+71D memoryless state contract.
+
 ## Goal
 
 Test whether explicit condition gating and low-rank hidden residual adapters
@@ -106,3 +116,9 @@ Stop and diagnose if the adapter remains finite but fails the standalone gate;
 do not add more BC epochs, PPO, or widen behavior scope under this plan. Any
 materially different routing, copied specialist branch, recurrent state, or
 reward change requires a separate approved plan.
+
+The stop condition is met. This plan is exhausted and remains diagnostic;
+further training or tests under this recipe are not justified. A new attempt
+must first define a materially different hypothesis, such as changing the
+state representation or the temporal training objective, with a new acceptance
+contract and explicit one-shared-actor proof.

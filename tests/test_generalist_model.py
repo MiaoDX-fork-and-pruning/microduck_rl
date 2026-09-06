@@ -1,6 +1,6 @@
 import torch
 
-from mjlab_microduck.generalist_model import FiLMG0Actor, G0MultiHeadActor, GatedAdapterG0Actor, RoutedG0TeacherActor, build_actor
+from mjlab_microduck.generalist_model import ActionAdapterG0Actor, FiLMG0Actor, G0MultiHeadActor, GatedAdapterG0Actor, OneHotActionAdapterG0Actor, RoutedG0TeacherActor, build_actor
 
 
 def test_multihead_routes_by_behavior_condition():
@@ -70,3 +70,32 @@ def test_film_actor_has_one_shared_action_head_and_restores_metadata():
                             "behavior_count": 3})
     assert isinstance(restored, FiLMG0Actor)
     assert sum(name == "action_head.weight" for name, _ in restored.named_parameters()) == 1
+
+
+def test_action_adapter_has_one_shared_action_head():
+    model = ActionAdapterG0Actor(bounded=True, hidden_dim=16, adapter_dim=4)
+    output = model(torch.zeros((2, 71)))
+    assert output.shape == (2, 14)
+    assert sum(name == "action_head.weight" for name, _ in model.named_parameters()) == 1
+    restored = build_actor({"model_kind": "action_adapter", "bounded_actions": True,
+                            "hidden_dim": 16, "adapter_dim": 4, "behavior_count": 3})
+    assert isinstance(restored, ActionAdapterG0Actor)
+
+
+def test_onehot_action_adapter_routes_residual_by_frozen_bits():
+    model = OneHotActionAdapterG0Actor(bounded=False, hidden_dim=8, adapter_dim=2)
+    with torch.no_grad():
+        for parameter in model.parameters():
+            parameter.zero_()
+        for index, adapter in enumerate(model.adapter_up):
+            adapter.bias.fill_(float(index + 1))
+    x = torch.zeros((3, 71))
+    x[0, 48] = 1.0
+    x[1, 49] = 1.0
+    x[2, 50] = 1.0
+    output = model(x)
+    assert torch.all(output[:, 0] == torch.tensor([1.0, 2.0, 3.0]))
+    assert sum(name == "action_head.weight" for name, _ in model.named_parameters()) == 1
+    restored = build_actor({"model_kind": "onehot_action_adapter", "bounded_actions": False,
+                            "hidden_dim": 8, "adapter_dim": 2, "behavior_count": 3})
+    assert isinstance(restored, OneHotActionAdapterG0Actor)
