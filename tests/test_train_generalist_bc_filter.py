@@ -55,6 +55,10 @@ def test_film_training_emits_reconstructable_metadata(tmp_path):
     assert metrics["output_hidden_dim"] == 256
 
 
+def test_canonical_training_entrypoint_exists():
+    assert (Path(__file__).parents[1] / "scripts" / "train_generalist_canonical.py").exists()
+
+
 def test_gated_adapter_can_initialize_from_generalist_model(tmp_path):
     x = np.zeros((6, 71), dtype=np.float32)
     y = np.zeros((6, 14), dtype=np.float32)

@@ -145,6 +145,15 @@ plan is exhausted. Any next attempt needs a separately approved hypothesis
 with a changed training objective or state representation and an explicit
 one-shared-actor proof; it must not be another epoch, seed, or adapter sweep.
 
+The canonical-teacher follow-up is now recorded as an additional negative
+control: exact 50 Hz teacher rollouts for all three standalone behaviors and
+four legal transitions (5,600 samples) were used to train gated-adapter and
+FiLM shared actors. Offline validation MSE fell below `2.4e-5`, but both actors
+failed `0/7` canonical gates. Oversampling the first 100 ticks and a 2,000-epoch
+unbounded FiLM run also failed. The remaining uncertainty is therefore the
+closed-loop objective/state sensitivity itself, not ordinary trace horizon,
+transition coverage, startup weighting, or output clipping.
+
 Evidence hashes:
 
 - Phase-A/native diagnostic report: `45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31`

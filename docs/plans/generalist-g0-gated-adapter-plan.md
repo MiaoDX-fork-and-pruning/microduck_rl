@@ -48,6 +48,16 @@ unbounded 1000-epoch BC runs passed ONNX parity and failed all seven canonical
 gates. The unbounded run also failed with raw actions above one, so output
 range is not the primary explanation.
 
+Follow-up canonical-teacher probe (2026-09-06) collected the exact 50 Hz
+standalone and four legal-transition trajectories used by the evaluator:
+5,600 samples across seven trajectories, with segment-local transition phase
+and the correct frozen teacher selected at each segment. Training gated-adapter
+and FiLM actors on this data reached offline validation MSE below `2.4e-5`,
+and both exported with ONNX parity, but both still failed all seven canonical
+gates. A critical-window oversampling arm and a 2,000-epoch unbounded FiLM arm
+also failed. This rules out missing evaluator-horizon data, simple startup
+sample weighting, and output clipping as sufficient fixes.
+
 ## Goal
 
 Test whether explicit condition gating and low-rank hidden residual adapters
