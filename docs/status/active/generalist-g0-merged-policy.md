@@ -180,6 +180,11 @@ PPO experiment requires a new approved plan.
   actions exceeded the 14D unit-action contract; that dataset is diagnostic
   only and was not used for acceptance. The corrected capture metadata now
   records this condition explicitly.
+- Final repository regression: 323 tests passed, 1 skipped, and 1 failed in
+  `tests/test_aarch64_cuda_torch.py::test_x86_64_resolution_stays_on_pypi`.
+  The failure is caused by the pre-existing `uv.lock` mirror registry change,
+  which is outside this plan's no-touch scope; all G0/generalist and
+  specialist contract tests passed.
 
 - The explicit shared-actor capacity ablations were re-run with corrected,
   manifest-recorded arms. Baseline is `[71, 512, 256, 128, 14]` (202,894

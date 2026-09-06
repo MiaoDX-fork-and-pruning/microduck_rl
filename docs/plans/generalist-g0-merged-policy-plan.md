@@ -23,6 +23,11 @@ canonical standalone and legal-transition gates. The plan remains
 fail-closed: no candidate is accepted, and any new architecture or reward
 direction requires a separate approved plan.
 
+Verification checkpoint: the full repository suite reports 323 passed, 1
+skipped, and 1 pre-existing failure in the x86_64 torch registry assertion due
+to the unrelated `uv.lock` mirror change. G0/generalist and specialist focused
+tests remain green.
+
 ## Latest Checkpoint: VELSTAND Causal Probe
 
 The approved VELSTAND causal probe has run its available preliminary slices.
