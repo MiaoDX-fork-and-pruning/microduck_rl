@@ -1,7 +1,7 @@
 # G0 Direction Review
 
-Date: 2026-09-04
-Status: decision required
+Date: 2026-09-04; resolved 2026-09-06
+Status: resolved; gated-adapter experiment tracked separately
 Related plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 
 ## Executive Summary
@@ -90,7 +90,7 @@ observed interference. The new plan must name the mechanism, define a fresh
 acceptance contract, and avoid silently weakening the current G0 gates. It may
 not be introduced as another anchor/tax/seed sweep under this plan.
 
-## Explicit No-Go Until Decision
+## Historical No-Go Before Decision
 
 - no merged PPO;
 - no `VELOCITY` or additional behavior;
@@ -98,6 +98,16 @@ not be introduced as another anchor/tax/seed sweep under this plan.
 - no architecture expansion under the current plan;
 - no claim that the specialist recovery policy is broken based on the
   hand-authored recovery poses.
+
+This decision gate is resolved. The bounded gated-adapter experiment is tracked
+in `docs/plans/generalist-g0-gated-adapter-plan.md`; it is a new diagnostic
+architecture hypothesis, not an extension of the old PPO/capacity sweep.
+
+The gated-adapter implementation is present and exportable. Its 100-epoch
+frozen-data diagnostic reaches validation MSE `0.001619` and ONNX parity
+`3.43e-7`, but its 120-tick standalone rollout fails stand, locomotion, and
+sitstand stability gates. It remains diagnostic; specialist fallback stays the
+validated product path.
 
 ## Current Recommendation
 

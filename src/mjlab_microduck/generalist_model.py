@@ -61,6 +61,49 @@ class G0MultiHeadActor(nn.Module):
         return torch.tanh(action) if self.bounded else action
 
 
+class GatedAdapterG0Actor(nn.Module):
+    """Condition-gated shared actor with lightweight residual behavior adapters.
+
+    The trunk and action head are shared across all G0 behaviors. Each adapter
+    is a low-rank residual in hidden space, so the model can separate behavior
+    corrections without embedding a complete specialist policy branch.
+    """
+
+    def __init__(self, bounded: bool = True, hidden_dim: int = 256,
+                 adapter_dim: int = 32, behavior_count: int = 3):
+        super().__init__()
+        if hidden_dim < 1 or adapter_dim < 1 or behavior_count < 1:
+            raise ValueError("gated adapter dimensions must be positive")
+        self.behavior_count = behavior_count
+        self.bounded = bounded
+        self.trunk = nn.Sequential(
+            nn.Linear(71, hidden_dim), nn.Tanh(),
+            nn.Linear(hidden_dim, hidden_dim), nn.Tanh(),
+        )
+        self.gate = nn.Linear(6, behavior_count)
+        self.adapter_down = nn.ModuleList(
+            nn.Linear(hidden_dim, adapter_dim) for _ in range(behavior_count)
+        )
+        self.adapter_up = nn.ModuleList(
+            nn.Linear(adapter_dim, hidden_dim) for _ in range(behavior_count)
+        )
+        self.action_head = nn.Linear(hidden_dim, 14)
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        if observation.ndim != 2 or observation.shape[1] != 71:
+            raise ValueError("G0 gated-adapter input must have shape [N,71]")
+        hidden = self.trunk(observation)
+        condition = observation[:, 48:54]
+        weights = torch.softmax(self.gate(condition), dim=-1)
+        residuals = torch.stack([
+            self.adapter_up[index](torch.tanh(self.adapter_down[index](hidden)))
+            for index in range(self.behavior_count)
+        ], dim=1)
+        hidden = hidden + (residuals * weights.unsqueeze(-1)).sum(dim=1)
+        action = self.action_head(hidden)
+        return torch.tanh(action) if self.bounded else action
+
+
 class RoutedG0TeacherActor(nn.Module):
     """Single 71D/14D graph routing frozen foot-mode teachers by one-hot."""
     def __init__(self, stand: nn.Module, locomotion: nn.Module, *additional: nn.Module):
@@ -75,6 +118,13 @@ class RoutedG0TeacherActor(nn.Module):
 def build_actor(metadata: dict) -> nn.Module:
     if metadata.get("model_kind") == "g0_multihead":
         return G0MultiHeadActor(bounded=metadata.get("bounded_actions", True))
+    if metadata.get("model_kind") == "gated_adapter":
+        return GatedAdapterG0Actor(
+            bounded=metadata.get("bounded_actions", True),
+            hidden_dim=int(metadata.get("hidden_dim", 256)),
+            adapter_dim=int(metadata.get("adapter_dim", 32)),
+            behavior_count=int(metadata.get("behavior_count", 3)),
+        )
     architecture = metadata.get("architecture", [71, 512, 256, 128, 14])
     layers: list[nn.Module] = []
     for index, (source, target) in enumerate(zip(architecture, architecture[1:])):
