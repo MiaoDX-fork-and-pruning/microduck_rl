@@ -150,6 +150,21 @@ PPO experiment requires a new approved plan.
 
 ## Last proof
 
+- Option 1 reset-contract repair advanced 2026-09-06: added
+  `scripts/capture_specialist_reset_contract.py` and captured deterministic
+  initial reset state, command, horizon, and termination-manager contracts for
+  all three accepted G0 specialists. Versioned contracts are stored in
+  `docs/plans/generalist-g0-reset-contract-{velstand,velocity,sitstand}.json`.
+- The captures show that the accepted specialist evaluator's reset is an
+  upright initial distribution; it does not persist the later recovery qpos/qvel
+  states. `velstand` uses a 1000-step horizon and `fallen_too_long`, `velocity`
+  uses `fell_over`, and `sitstand` uses a 600-step horizon. Therefore the
+  hand-authored recovery buckets in the causal probe still cannot be promoted
+  to specialist recovery baselines without a trace-capture run from actual
+  fallen episodes.
+- Reset-contract capture plus schema/model/graph/evaluator/BC tests pass
+  (23/23).
+
 - The explicit shared-actor capacity ablation completed 2026-09-06. The 4x
   dense actor (`[71, 1024, 512, 256, 14]`) trained on the identical frozen
   traces and seed, remained finite, and failed all standalone behavior and
