@@ -73,8 +73,10 @@ def _reset(model: mujoco.MjModel, data: mujoco.MjData, helper: PolicyInference) 
     mujoco.mj_forward(model, data)
 
 
-def collect(run: Path, reference_onnx: Path, seed: int = 42) -> dict[str, np.ndarray]:
+def collect(run: Path, reference_onnx: Path, seed: int = 42, beta: float = 0.9) -> dict[str, np.ndarray]:
     del seed  # Canonical segments are deterministic; retained in the manifest.
+    if not 0.0 <= beta <= 1.0:
+        raise ValueError("beta must be between 0 and 1")
     import torch
 
     student = _load_student(run)
@@ -104,7 +106,8 @@ def collect(run: Path, reference_onnx: Path, seed: int = 42) -> dict[str, np.nda
                 legacy = helper.get_observations()
                 conditioned = make_conditioned_observation(
                     legacy[None, :], command[None, :], behavior,
-                    phase=np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
+                    phase=np.array([[tick / max(segment.ticks - 1, 1) if segment.active_transition else 0.0,
+                                     float(segment.active_transition)]], dtype=np.float32),
                     posture=np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
                 )[0]
                 teacher = _teacher_action(sessions[behavior], legacy)
@@ -116,8 +119,11 @@ def collect(run: Path, reference_onnx: Path, seed: int = 42) -> dict[str, np.nda
                 ys.append(teacher)
                 behavior_ids.append(("stand", "locomotion", "sit_stand").index(behavior))
                 segment_ids.append(case_name)
-                helper.last_action = student_action.copy()
-                helper.apply_action(student_action)
+                # Keep the rollout near the teacher manifold while still
+                # exposing the student to its own induced observations.
+                applied_action = beta * teacher + (1.0 - beta) * student_action
+                helper.last_action = applied_action.copy()
+                helper.apply_action(applied_action)
                 for _ in range(4):
                     mujoco.mj_step(model, data)
                 trunk = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
@@ -142,8 +148,10 @@ def main() -> None:
     parser.add_argument("--reference-onnx", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--beta", type=float, default=0.9,
+                        help="teacher mixture weight during state collection")
     args = parser.parse_args()
-    data = collect(args.student_run, args.reference_onnx, args.seed)
+    data = collect(args.student_run, args.reference_onnx, args.seed, args.beta)
     args.output.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(args.output, **data)
     labels = data["behavior_ids"]
@@ -153,6 +161,7 @@ def main() -> None:
         "student_run": str(args.student_run),
         "reference_onnx": str(args.reference_onnx),
         "seed": args.seed,
+        "beta": args.beta,
         "physics_steps_per_control_tick": 4,
         "samples": int(len(labels)),
         "samples_by_behavior": {name: int(np.sum(labels == index)) for index, name in enumerate(("stand", "locomotion", "sit_stand"))},

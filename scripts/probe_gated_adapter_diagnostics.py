@@ -137,7 +137,8 @@ def _canonical_case(model, policy, reference_onnx: Path, state: str,
             legacy = helper.get_observations()
             conditioned = make_conditioned_observation(
                 legacy[None, :], command[None, :], behavior,
-                phase=np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
+                phase=np.array([[tick / max(segment.ticks - 1, 1) if segment.active_transition else 0.0,
+                                 float(segment.active_transition)]], dtype=np.float32),
                 posture=np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
             )
             action = policy(conditioned)

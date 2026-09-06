@@ -36,6 +36,15 @@ def test_edge_preparation_is_not_scored():
         assert any(segment.score for segment in segments[1:])
 
 
+def test_phase_is_zero_for_standalone_and_progresses_only_on_transition():
+    module = _module()
+    assert all(not segment.active_transition for segment in module.BEHAVIOR_SEGMENTS["VELOCITY"])
+    assert any(segment.active_transition for segment in module.EDGE_SEGMENTS[("VELSTAND", "VELOCITY")])
+    # Keep this assertion tied to the evaluator's condition construction rather
+    # than allowing a standalone segment to acquire synthetic timer input.
+    assert module.BEHAVIOR_SEGMENTS["VELSTAND"][0].active_transition is False
+
+
 def test_behavior_and_edge_gates_enforce_destination_outcomes():
     module = _module()
     assert module.STAND_HEIGHT_MIN_M == pytest.approx(0.1035)

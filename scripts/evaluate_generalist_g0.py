@@ -201,7 +201,11 @@ def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Se
             kwargs = {}
             if condition_mode == "canonical":
                 kwargs = {
-                    "phase": np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
+                    # G0 phase is a transition timer. Standalone behavior
+                    # episodes start with phase=0 and do not invent elapsed
+                    # phase that the training environment never supplied.
+                    "phase": np.array([[tick / max(segment.ticks - 1, 1) if segment.active_transition else 0.0,
+                                         float(segment.active_transition)]], dtype=np.float32),
                     "posture": np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
                 }
             conditioned = make_conditioned_observation(

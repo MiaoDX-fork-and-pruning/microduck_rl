@@ -37,6 +37,8 @@ def main() -> None:
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--epochs", type=int, default=100)
     parser.add_argument("--seed", type=int, default=7)
+    parser.add_argument("--init-run", type=Path, default=None,
+                        help="initialize from a compatible generalist run's model.pt")
     args = parser.parse_args()
 
     x, y, manifest = bc.collect(args.trace_root)
@@ -56,6 +58,7 @@ def main() -> None:
     metrics = bc.train(
         x, y, args.output, args.epochs, args.seed,
         balance=True, bounded=True, gated_adapter=True,
+        init_model=(args.init_run / "model.pt") if args.init_run else None,
         trajectory_ids=trajectory_ids,
     )
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y,

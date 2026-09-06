@@ -80,7 +80,7 @@ def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarra
     return selected[rng.permutation(len(selected))]
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, gated_adapter: bool = False, capacity_2x: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, init_model: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, gated_adapter: bool = False, capacity_2x: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
     import torch
     from torch import nn
 
@@ -122,6 +122,8 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
         raise ValueError("capacity ablations do not support specialist checkpoint initialization")
     if init_checkpoint and gated_adapter:
         raise ValueError("gated-adapter actor does not support specialist checkpoint initialization")
+    if init_checkpoint and init_model:
+        raise ValueError("choose one initialization source")
     model = (
         G0MultiHeadActor(bounded=bounded) if multihead else
         GatedAdapterG0Actor(bounded=bounded) if gated_adapter else
@@ -137,6 +139,15 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
             model[0].bias.copy_(source["mlp.0.bias"])
             for dst, key in ((2, "mlp.2"), (4, "mlp.4"), (6, "mlp.6")):
                 model[dst].weight.copy_(source[key + ".weight"]); model[dst].bias.copy_(source[key + ".bias"])
+    if init_model:
+        payload = torch.load(init_model, map_location="cpu", weights_only=False)
+        state = payload.get("state_dict")
+        if not isinstance(state, dict):
+            raise ValueError("generalist initialization model must contain a state_dict")
+        try:
+            model.load_state_dict(state, strict=True)
+        except RuntimeError as exc:
+            raise ValueError("generalist initialization model is incompatible with the selected actor") from exc
     opt = torch.optim.AdamW(model.parameters(), lr=3e-4)
     tx, ty = torch.from_numpy(x), torch.from_numpy(y)
     for _ in range(epochs):
@@ -158,7 +169,7 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14] if gated_adapter else architecture, "parameter_count": sum(parameter.numel() for parameter in model.parameters()), "model_kind": "g0_multihead" if multihead else "gated_adapter" if gated_adapter else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None,
+            "architecture": [71, 256, 256, 14] if gated_adapter else architecture, "parameter_count": sum(parameter.numel() for parameter in model.parameters()), "model_kind": "g0_multihead" if multihead else "gated_adapter" if gated_adapter else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None, "init_model": str(init_model) if init_model else None,
             "hidden_dim": 256 if gated_adapter else None, "adapter_dim": 32 if gated_adapter else None,
             "behavior_count": 3 if gated_adapter else None,
             "trajectory_split": True, "train_trajectories": len(train_trajectories), "validation_trajectories": len(unique) - len(train_trajectories)}
@@ -173,6 +184,7 @@ def main() -> None:
     ap.add_argument("--extra-data", type=Path, default=None)
     ap.add_argument("--no-balance", action="store_true")
     ap.add_argument("--init-checkpoint", type=Path, default=None)
+    ap.add_argument("--init-model", type=Path, default=None, help="initialize from a compatible generalist model.pt")
     ap.add_argument("--small-model", action="store_true")
     ap.add_argument("--bounded-actions", action="store_true")
     ap.add_argument("--multihead", action="store_true")
@@ -190,7 +202,7 @@ def main() -> None:
             manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
-    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, gated_adapter=args.gated_adapter, capacity_2x=args.capacity_2x, capacity_4x=args.capacity_4x)
+    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, init_model=args.init_model, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, gated_adapter=args.gated_adapter, capacity_2x=args.capacity_2x, capacity_4x=args.capacity_4x)
     manifest["metrics"] = metrics
     (args.output / "manifest.json").parent.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")

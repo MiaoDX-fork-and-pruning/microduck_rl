@@ -40,3 +40,19 @@ def test_gated_adapter_training_emits_reconstructable_metadata(tmp_path):
     payload = torch.load(tmp_path / "run" / "model.pt", weights_only=False)
     trained.load_state_dict(payload["state_dict"], strict=True)
     assert not any(name.endswith("output_tanh") for name, _ in trained.named_modules())
+
+
+def test_gated_adapter_can_initialize_from_generalist_model(tmp_path):
+    x = np.zeros((6, 71), dtype=np.float32)
+    y = np.zeros((6, 14), dtype=np.float32)
+    for index in range(3):
+        x[index, 48 + index] = 1.0
+        x[index + 3, 48 + index] = 1.0
+    source = tmp_path / "source"
+    target = tmp_path / "target"
+    train(x, y, source, epochs=1, seed=3, balance=False,
+          gated_adapter=True, bounded=True)
+    metrics = train(x, y, target, epochs=1, seed=3, balance=False,
+                    gated_adapter=True, bounded=True,
+                    init_model=source / "model.pt")
+    assert metrics["init_model"] == str(source / "model.pt")
