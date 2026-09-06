@@ -116,14 +116,16 @@ What is not established:
 - No evidence justifies adding `VELOCITY`, changing rewards, expanding the
   architecture, or launching another PPO sweep.
 
-Decision gate:
+Decision gate (resolved 2026-09-05/06):
 
-The next action requires an explicit direction choice. The default
-recommendation is to repair the frozen reset evidence once, then decide whether
-the merged actor remains a worthwhile research bet. If the exact reset contract
-cannot be recovered, close the current G0 merge attempt as inconclusive and
-retain specialists as the validated deployment path; do not compensate with
-more hyperparameter searches.
+The direction review selected option 1, bounded reset-contract/evaluator
+evidence repair, while retaining the shared actor as the approved product
+hypothesis. Option 2, specialist-only product reshaping, is rejected for this
+plan. Option 3, a materially different architecture experiment, is outside
+this plan and requires a new approved plan. The repair is now executed; its
+native trace result is diagnostic because CUDA Warp diverges after the first
+physics step while CPU replay is bitwise stable. Keep the plan fail-closed: do
+not claim a merged candidate until the full G0 acceptance gate passes.
 
 This plan defines the first bounded merged-policy experiment for the
 no-wheel/all-collisions Microduck. It is intentionally narrower than the

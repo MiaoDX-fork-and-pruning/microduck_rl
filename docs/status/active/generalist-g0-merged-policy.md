@@ -116,33 +116,18 @@ intentionally not interpreted or promoted: the probe is fail-closed on reset
 semantics and no merged PPO, VELOCITY addition, reward change, or architecture
 expansion is authorized.
 
-## Direction review
+## Direction review, resolved
 
-The current question is no longer “which PPO recipe should we try next?” It is
-“is a single conditioned actor the right abstraction for this behavior set?”
-The strongest evidence against the current direction is repeated
-behavior-specific interference: stand can improve while locomotion regresses,
-or the reverse, even when offline action MSE is low and all outputs are finite.
-Teacher anchors and curriculum changes reduced symptoms but did not establish
-closed-loop learnability. More sweeps over anchor weights, taxes, or reset
-probabilities are therefore paused.
+The 2026-09-05/06 review selected option 1: repair the exact specialist reset
+and evaluator evidence, then judge the already-approved shared actor against
+the frozen G0 gates. Option 2, specialist-only product reshaping, was rejected
+for this plan. Option 3, a materially different architecture experiment,
+remains outside this plan and would require a new approved plan.
 
-The next decision should choose one of:
-
-1. **Repair evidence only:** recover the exact specialist recovery reset and
-   termination definitions, rerun native parity, then run the frozen Phase-B
-   controls once. This is the smallest reversible action.
-2. **Reshape the product hypothesis:** keep specialist policies as the runtime
-   solution and treat a merged policy as optional research, rather than a
-   required replacement. This avoids spending more training budget on an
-   unproven shared actor.
-3. **Approve a new architecture experiment:** only with an explicit hypothesis
-   for the observed interference (for example a gated/multi-policy runtime
-   composition), a new plan, and a fresh acceptance contract. This is outside
-   the current G0 plan.
-
-The current plan is fail-closed rather than accepted; the specialist fallback
-path remains the only validated product path.
+Option 1 is now executed. CPU replay is bitwise stable; CUDA Warp diverges
+after the first physics step, so the native trace result remains diagnostic and
+the current plan stays fail-closed. The specialist fallback is validated, but
+no merged candidate has passed the G0 acceptance gate.
 
 Any materially different reward, initialization, actor objective, capacity, or
 PPO experiment requires a new approved plan.
