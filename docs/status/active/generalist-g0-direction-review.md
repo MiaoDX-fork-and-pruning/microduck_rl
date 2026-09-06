@@ -103,18 +103,21 @@ This decision gate is resolved. The bounded gated-adapter experiment is tracked
 in `docs/plans/generalist-g0-gated-adapter-plan.md`; it is a new diagnostic
 architecture hypothesis, not an extension of the old PPO/capacity sweep.
 
-The gated-adapter implementation is present and exportable. Its 100-epoch
-frozen-data diagnostic reaches validation MSE `0.001619` and ONNX parity
-`3.43e-7`, but its 120-tick standalone rollout fails stand, locomotion, and
-sitstand stability gates. It remains diagnostic; specialist fallback stays the
-validated product path.
+The gated-adapter implementation is present and exportable. The corrected
+100-epoch frozen-data run reaches validation MSE `0.001619`; canonical 50 Hz
+evaluation is finite, but all three standalone behavior gates and all four
+exercised legal transition gates fail. The bounded student-state coverage and
+unbounded-action representation probes also failed all seven canonical gates.
+It remains diagnostic; specialist fallback stays the validated product path.
 
 ## Current Recommendation
 
-Choose Option A once. If the exact reset contract is unavailable or the native
-teacher still fails after exact replay, stop the current merge plan as
-inconclusive and keep the validated specialist fallback. Reopen merged-policy
-work only under a new approved hypothesis.
+Option A has been executed, and the bounded gated-adapter experiment plus its
+coverage and action-representation probes have been evaluated under the
+canonical G0 battery. The shared actor remains a research failure despite
+finite execution. Stop this line of training and keep the validated specialist
+fallback. Reopen merged-policy work only under a new approved hypothesis with
+a new acceptance contract; the product requirement remains one shared actor.
 
 Evidence hashes:
 

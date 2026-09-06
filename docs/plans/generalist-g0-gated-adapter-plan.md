@@ -1,16 +1,25 @@
 # Generalist G0 Gated Adapter Experiment
 
-Status: active-fail-closed
+Status: active-fail-closed; bounded probes exhausted
 
 Parent evidence: `docs/plans/generalist-g0-merged-policy-plan.md`
 
 Current checkpoint (2026-09-06): the model, trainer, loader, and ONNX export
-path are implemented. A 1-epoch CLI smoke on 4,200 frozen samples emits a
-reconstructable `gated_adapter` manifest; a 100-epoch diagnostic reached
-validation MSE `0.001619`. ONNX parity passes with max absolute error
-`3.43e-7`, while the 120-tick standalone rollout fails all three stability
-gates. This is an implementation-complete but research-failed checkpoint; no
-PPO escalation is authorized by this plan.
+path are implemented. The corrected 100-epoch run on 4,200 frozen samples
+emits a reconstructable `gated_adapter` manifest and reaches validation MSE
+`0.001619`. Canonical 50 Hz evaluation is finite, but all three standalone
+behavior gates and all four exercised legal transition gates fail. This is an
+implementation-complete but research-failed checkpoint; no further training
+or PPO escalation is authorized by this plan.
+
+Bounded diagnostic probes (2026-09-06) are complete. Relabeling 5,600
+student-visited states with the frozen teachers and retraining the same actor
+did not improve canonical behavior: all three standalone and all four legal
+transition gates still failed. Removing the training-side output `tanh` reduced
+offline validation MSE to `0.001458`, but canonical evaluation still failed
+all seven gates. The current evidence does not support isolated state-coverage
+or output-bound fixes, so this plan authorizes no further blind architecture
+or optimizer sweep.
 
 ## Goal
 
@@ -57,6 +66,6 @@ and multi-head candidates.
 ## Stop conditions
 
 Stop and diagnose if the adapter remains finite but fails the standalone gate;
-do not add more PPO or widen behavior scope under this plan. Any materially
-different routing, copied specialist branch, recurrent state, or reward change
-requires a separate approved plan.
+do not add more BC epochs, PPO, or widen behavior scope under this plan. Any
+materially different routing, copied specialist branch, recurrent state, or
+reward change requires a separate approved plan.
