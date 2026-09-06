@@ -150,6 +150,15 @@ PPO experiment requires a new approved plan.
 
 ## Last proof
 
+- Execution resumed 2026-09-06: focused G0 contract tests passed (32/32).
+- Teacher manifest regenerated and hash-verified successfully with
+  `scripts/freeze_generalist_teachers.py`.
+- The required 64-env/5-iteration G0 smoke test completed in offline WandB
+  mode through iteration 4/5 with finite states/actions and non-positive
+  weighted penalties. Online WandB remains unavailable without an API key.
+- The smoke checkpoint is diagnostic only; no merged candidate has passed the
+  canonical evaluator or P4 acceptance gate.
+
 - Probe-focused tests: 17 passed.
 - Canonical compatibility report SHA-256:
   `f78d833fd17ca3e0921593cbd0ed1d1c25512e76cdc5f530d6c28f73e189d947`.
