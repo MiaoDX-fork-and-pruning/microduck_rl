@@ -171,6 +171,14 @@ PPO experiment requires a new approved plan.
   neither recovered within 500 control ticks. These are diagnostic rollout
   traces, not specialist acceptance resets or product claims.
 - Recovery capture and regression tests pass (15/15).
+- Added `scripts/replay_specialist_recovery_trace.py` and replayed the captured
+  fall states through the immutable `velstand_flat` ONNX. The x-axis fall was
+  finite but did not recover within 500 control ticks (final tilt about 1.59
+  rad, height about 0.046 m); the y-axis replay also failed recovery and
+  exceeded the action gate slightly (`1.00096`). These are real rollout-state
+  diagnostics, not hand-authored reset baselines. The evidence-repair result is
+  therefore fail-closed: exact replay is possible, but the tested specialist
+  recovery states do not establish a passing recovery baseline.
 
 - The explicit shared-actor capacity ablation completed 2026-09-06. The 4x
   dense actor (`[71, 1024, 512, 256, 14]`) trained on the identical frozen
