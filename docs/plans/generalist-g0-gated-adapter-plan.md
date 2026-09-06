@@ -1,6 +1,6 @@
 # Generalist G0 Gated Adapter Experiment
 
-Status: active-fail-closed; bounded probes exhausted
+Status: active-fail-closed; bounded probes exhausted; follow-up evidence recorded
 
 Parent evidence: `docs/plans/generalist-g0-merged-policy-plan.md`
 
@@ -33,6 +33,20 @@ overflow is reportable separately from the shared actor's action-range gate.
 The G0 `1.0 m` locomotion product gate remains unchanged. The routed control
 reproduced the expected stand and locomotion physics, while the shared gated
 adapter still failed its standalone and transition gates.
+
+Follow-up evidence (2026-09-06): compatible generalist initialization and a
+teacher-mixed DAgger collector were added. With `beta=0.9`, the student-state
+shard's 65-degree tilt breach fraction fell to `0.208` from approximately
+`0.96`, but phase-corrected gated-adapter fine-tuning still failed all seven
+canonical gates. Standalone phase was aligned with the training timer contract
+(zero outside transitions), and the routed teacher was freshly exported with
+exact specialist action parity.
+
+A separate FiLM probe retained one shared trunk and one shared 14D action head
+while applying condition-dependent feature modulation. Both bounded and
+unbounded 1000-epoch BC runs passed ONNX parity and failed all seven canonical
+gates. The unbounded run also failed with raw actions above one, so output
+range is not the primary explanation.
 
 ## Goal
 

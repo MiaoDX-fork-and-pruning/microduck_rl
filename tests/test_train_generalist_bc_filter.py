@@ -42,6 +42,19 @@ def test_gated_adapter_training_emits_reconstructable_metadata(tmp_path):
     assert not any(name.endswith("output_tanh") for name, _ in trained.named_modules())
 
 
+def test_film_training_emits_reconstructable_metadata(tmp_path):
+    x = np.zeros((6, 71), dtype=np.float32)
+    y = np.zeros((6, 14), dtype=np.float32)
+    for index in range(3):
+        x[index, 48 + index] = 1.0
+        x[index + 3, 48 + index] = 1.0
+    metrics = train(x, y, tmp_path / "run", epochs=1, seed=3,
+                    balance=False, film=True, bounded=True)
+    assert metrics["model_kind"] == "film"
+    assert metrics["hidden_dim"] == 512
+    assert metrics["output_hidden_dim"] == 256
+
+
 def test_gated_adapter_can_initialize_from_generalist_model(tmp_path):
     x = np.zeros((6, 71), dtype=np.float32)
     y = np.zeros((6, 14), dtype=np.float32)

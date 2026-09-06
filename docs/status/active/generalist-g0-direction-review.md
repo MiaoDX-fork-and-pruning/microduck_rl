@@ -129,6 +129,22 @@ A 1,000-epoch convergence probe lowered offline validation MSE to `0.000313`,
 but the corrected canonical run still failed all seven gates. More optimizer
 budget is therefore not a supported next step.
 
+Follow-up shared-policy probes found that teacher-mixed DAgger (`beta=0.9`)
+reduced the student rollout's 65-degree tilt breach fraction to `0.208` from
+approximately `0.96`, but phase-corrected gated-adapter fine-tuning still
+failed all seven canonical gates. A fresh routed teacher graph has exact
+per-specialist action parity; it passes stand and `VELOCITY -> VELSTAND`, while
+locomotion reaches `0.963 m` against the `1.0 m` gate and sit/stand raw actions
+exceed the shared action range. A one-head FiLM actor was tested in bounded and
+unbounded forms; both failed all seven gates. This rejects more BC, ordinary
+DAgger, phase-only correction, gating, and output-bound changes as sufficient
+explanations.
+
+The requested shared actor remains the product direction, but the current G0
+plan is exhausted. Any next attempt needs a separately approved hypothesis
+with a changed training objective or state representation and an explicit
+one-shared-actor proof; it must not be another epoch, seed, or adapter sweep.
+
 Evidence hashes:
 
 - Phase-A/native diagnostic report: `45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31`

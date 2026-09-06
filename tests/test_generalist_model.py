@@ -1,6 +1,6 @@
 import torch
 
-from mjlab_microduck.generalist_model import G0MultiHeadActor, GatedAdapterG0Actor, RoutedG0TeacherActor, build_actor
+from mjlab_microduck.generalist_model import FiLMG0Actor, G0MultiHeadActor, GatedAdapterG0Actor, RoutedG0TeacherActor, build_actor
 
 
 def test_multihead_routes_by_behavior_condition():
@@ -54,3 +54,19 @@ def test_build_actor_restores_gated_adapter_metadata():
     assert isinstance(model, GatedAdapterG0Actor)
     assert model.trunk[0].in_features == 71
     assert model.action_head.out_features == 14
+
+
+def test_film_actor_has_one_shared_action_head_and_restores_metadata():
+    model = FiLMG0Actor(bounded=True, hidden_dim=16, output_hidden_dim=8)
+    x = torch.zeros((3, 71))
+    x[0, 48] = 1.0
+    x[1, 49] = 1.0
+    x[2, 50] = 1.0
+    output = model(x)
+    assert output.shape == (3, 14)
+    assert torch.all(output <= 1.0) and torch.all(output >= -1.0)
+    restored = build_actor({"model_kind": "film", "bounded_actions": True,
+                            "hidden_dim": 16, "output_hidden_dim": 8,
+                            "behavior_count": 3})
+    assert isinstance(restored, FiLMG0Actor)
+    assert sum(name == "action_head.weight" for name, _ in restored.named_parameters()) == 1

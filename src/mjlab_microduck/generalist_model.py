@@ -104,6 +104,36 @@ class GatedAdapterG0Actor(nn.Module):
         return torch.tanh(action) if self.bounded else action
 
 
+class FiLMG0Actor(nn.Module):
+    """One shared trunk/action head with condition-dependent feature modulation."""
+
+    def __init__(self, bounded: bool = True, hidden_dim: int = 512,
+                 output_hidden_dim: int = 256, behavior_count: int = 3):
+        super().__init__()
+        if hidden_dim < 1 or output_hidden_dim < 1 or behavior_count < 1:
+            raise ValueError("FiLM dimensions must be positive")
+        self.bounded = bounded
+        self.behavior_count = behavior_count
+        self.output_hidden_dim = output_hidden_dim
+        self.trunk = nn.Sequential(
+            nn.Linear(71, hidden_dim), nn.Tanh(),
+            nn.Linear(hidden_dim, output_hidden_dim), nn.Tanh(),
+        )
+        self.condition_film = nn.Linear(6, 2 * output_hidden_dim)
+        self.action_head = nn.Linear(output_hidden_dim, 14)
+
+    def forward(self, observation: torch.Tensor) -> torch.Tensor:
+        if observation.ndim != 2 or observation.shape[1] != 71:
+            raise ValueError("G0 FiLM input must have shape [N,71]")
+        hidden = self.trunk(observation)
+        modulation = self.condition_film(observation[:, 48:54])
+        scale = modulation[:, :self.output_hidden_dim]
+        shift = modulation[:, self.output_hidden_dim:]
+        hidden = hidden * (1.0 + scale) + shift
+        action = self.action_head(hidden)
+        return torch.tanh(action) if self.bounded else action
+
+
 class RoutedG0TeacherActor(nn.Module):
     """Single 71D/14D graph routing frozen foot-mode teachers by one-hot."""
     def __init__(self, stand: nn.Module, locomotion: nn.Module, *additional: nn.Module):
@@ -123,6 +153,13 @@ def build_actor(metadata: dict) -> nn.Module:
             bounded=metadata.get("bounded_actions", True),
             hidden_dim=int(metadata.get("hidden_dim", 256)),
             adapter_dim=int(metadata.get("adapter_dim", 32)),
+            behavior_count=int(metadata.get("behavior_count", 3)),
+        )
+    if metadata.get("model_kind") == "film":
+        return FiLMG0Actor(
+            bounded=metadata.get("bounded_actions", True),
+            hidden_dim=int(metadata.get("hidden_dim", 512)),
+            output_hidden_dim=int(metadata.get("output_hidden_dim", 256)),
             behavior_count=int(metadata.get("behavior_count", 3)),
         )
     architecture = metadata.get("architecture", [71, 512, 256, 128, 14])

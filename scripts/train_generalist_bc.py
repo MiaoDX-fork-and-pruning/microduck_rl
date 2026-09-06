@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 from mjlab_microduck.generalist_schema import SCHEMA, SCHEMA_VERSION, make_conditioned_observation, validate_batch
-from mjlab_microduck.generalist_model import G0MultiHeadActor, GatedAdapterG0Actor
+from mjlab_microduck.generalist_model import FiLMG0Actor, G0MultiHeadActor, GatedAdapterG0Actor
 
 
 def collect(trace_root: Path, behaviors: tuple[str, ...] = ("stand", "locomotion", "sit_stand")) -> tuple[np.ndarray, np.ndarray, dict]:
@@ -80,7 +80,7 @@ def balanced_indices(labels: np.ndarray, seed: int = 0, bucket_labels: np.ndarra
     return selected[rng.permutation(len(selected))]
 
 
-def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, init_model: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, gated_adapter: bool = False, capacity_2x: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
+def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balance: bool = True, init_checkpoint: Path | None = None, init_model: Path | None = None, small: bool = False, bounded: bool = False, multihead: bool = False, gated_adapter: bool = False, film: bool = False, capacity_2x: bool = False, capacity_4x: bool = False, trajectory_ids: np.ndarray | None = None, bucket_labels: np.ndarray | None = None) -> dict:
     import torch
     from torch import nn
 
@@ -113,20 +113,21 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
         train_idx = torch.from_numpy(train_base[local].astype(np.int64))
     else:
         train_idx = torch.from_numpy(train_base[rng.permutation(len(train_base))].astype(np.int64))
-    if (multihead or gated_adapter) and (small or capacity_2x or capacity_4x):
+    if (multihead or gated_adapter or film) and (small or capacity_2x or capacity_4x):
         raise ValueError("capacity flags apply only to the shared dense actor")
-    if multihead and gated_adapter:
+    if sum((multihead, gated_adapter, film)) > 1:
         raise ValueError("choose one conditioned actor variant")
     architecture = dense_architecture(small=small, capacity_2x=capacity_2x, capacity_4x=capacity_4x)
     if init_checkpoint and (capacity_2x or capacity_4x):
         raise ValueError("capacity ablations do not support specialist checkpoint initialization")
-    if init_checkpoint and gated_adapter:
-        raise ValueError("gated-adapter actor does not support specialist checkpoint initialization")
+    if init_checkpoint and (gated_adapter or film):
+        raise ValueError("conditioned actor does not support specialist checkpoint initialization")
     if init_checkpoint and init_model:
         raise ValueError("choose one initialization source")
     model = (
         G0MultiHeadActor(bounded=bounded) if multihead else
         GatedAdapterG0Actor(bounded=bounded) if gated_adapter else
+        FiLMG0Actor(bounded=bounded) if film else
         nn.Sequential(*[layer for index, (source, target) in enumerate(zip(architecture, architecture[1:])) for layer in ((nn.Linear(source, target),) if index == len(architecture) - 2 else (nn.Linear(source, target), nn.Tanh()))])
     )
     if bounded and not multihead and not gated_adapter:
@@ -169,9 +170,9 @@ def train(x: np.ndarray, y: np.ndarray, out: Path, epochs: int, seed: int, balan
     return {"train_mse": float(loss.item()), "validation_mse": val,
             "validation_mse_by_behavior": per_behavior, "samples": len(x),
             "seed": seed, "model_sha256": model_hash,
-            "architecture": [71, 256, 256, 14] if gated_adapter else architecture, "parameter_count": sum(parameter.numel() for parameter in model.parameters()), "model_kind": "g0_multihead" if multihead else "gated_adapter" if gated_adapter else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None, "init_model": str(init_model) if init_model else None,
-            "hidden_dim": 256 if gated_adapter else None, "adapter_dim": 32 if gated_adapter else None,
-            "behavior_count": 3 if gated_adapter else None,
+            "architecture": [71, 512, 256, 14] if film else [71, 256, 256, 14] if gated_adapter else architecture, "parameter_count": sum(parameter.numel() for parameter in model.parameters()), "model_kind": "g0_multihead" if multihead else "gated_adapter" if gated_adapter else "film" if film else "dense", "bounded_actions": bounded, "init_checkpoint": str(init_checkpoint) if init_checkpoint else None, "init_model": str(init_model) if init_model else None,
+            "hidden_dim": 512 if film else 256 if gated_adapter else None, "output_hidden_dim": 256 if film else None, "adapter_dim": 32 if gated_adapter else None,
+            "behavior_count": 3 if gated_adapter or film else None,
             "trajectory_split": True, "train_trajectories": len(train_trajectories), "validation_trajectories": len(unique) - len(train_trajectories)}
 
 
@@ -189,6 +190,7 @@ def main() -> None:
     ap.add_argument("--bounded-actions", action="store_true")
     ap.add_argument("--multihead", action="store_true")
     ap.add_argument("--gated-adapter", action="store_true", help="use the shared trunk/gated residual adapter actor")
+    ap.add_argument("--film", action="store_true", help="use shared trunk with condition-dependent FiLM modulation")
     ap.add_argument("--capacity-4x", action="store_true", help="use the explicit larger shared dense actor ablation")
     ap.add_argument("--capacity-2x", action="store_true", help="use the approximately 2x shared dense actor ablation")
     ap.add_argument("--behavior", choices=("stand", "locomotion", "sit_stand"), default=None)
@@ -202,7 +204,7 @@ def main() -> None:
             manifest["extra_data"] = str(args.extra_data)
     np.savez_compressed(args.output / "dataset.npz", inputs=x, actions=y)
     manifest.update({"samples": len(x), "input_dim": 71, "action_dim": 14, "seed": args.seed})
-    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, init_model=args.init_model, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, gated_adapter=args.gated_adapter, capacity_2x=args.capacity_2x, capacity_4x=args.capacity_4x)
+    metrics = train(x, y, args.output, args.epochs, args.seed, balance=not args.no_balance, init_checkpoint=args.init_checkpoint, init_model=args.init_model, small=args.small_model, bounded=args.bounded_actions, multihead=args.multihead, gated_adapter=args.gated_adapter, film=args.film, capacity_2x=args.capacity_2x, capacity_4x=args.capacity_4x)
     manifest["metrics"] = metrics
     (args.output / "manifest.json").parent.mkdir(parents=True, exist_ok=True)
     (args.output / "manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
