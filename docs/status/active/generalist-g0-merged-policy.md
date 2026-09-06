@@ -197,6 +197,16 @@ PPO experiment requires a new approved plan.
   1x, 2x, and 4x shared dense arms, no candidate has passed closed-loop G0
   acceptance.
 
+- Native evaluator trace capture now records pre-step observation, full MuJoCo
+  state, previous/raw/applied action, episode mask/step, reward, done, and
+  termination fields. Two CUDA runs with identical serialized contracts match
+  at reset and the first boundary, then diverge after the first physics step;
+  strict prefix replay is therefore false. Two CPU runs through the same
+  `RslRlVecEnvWrapper` route are bitwise identical for 1000 ticks. The evidence
+  points to GPU Warp/contacts non-bitwise determinism rather than reset
+  semantics drift. Both native runs remain diagnostic because no historical
+  reset equivalence or human video review is established.
+
 - Execution resumed 2026-09-06: focused G0 contract tests passed (32/32).
 - Teacher manifest regenerated and hash-verified successfully with
   `scripts/freeze_generalist_teachers.py`.

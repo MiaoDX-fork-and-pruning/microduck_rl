@@ -23,6 +23,16 @@ canonical standalone and legal-transition gates. The plan remains
 fail-closed: no candidate is accepted, and any new architecture or reward
 direction requires a separate approved plan.
 
+Native evaluator trace checkpoint (2026-09-06): two 32-env CUDA runs use the
+same task, checkpoint, seed, and serialized cfg hashes. Initial state and first
+control boundary match, but GPU MuJoCo Warp trajectories diverge after the
+first physics step; the strict prefix gate therefore fails. Two 4-env CPU runs
+through the same wrapper and trace schema are bitwise identical across 1000
+ticks. This establishes a GPU execution reproducibility limitation, not a
+reset-contract mismatch. Native specialist behavior remains finite and above
+the standalone numeric gate, but reset equivalence to historical evidence and
+human video acceptance remain unproven.
+
 Verification checkpoint: the full repository suite reports 323 passed, 1
 skipped, and 1 pre-existing failure in the x86_64 torch registry assertion due
 to the unrelated `uv.lock` mirror change. G0/generalist and specialist focused
