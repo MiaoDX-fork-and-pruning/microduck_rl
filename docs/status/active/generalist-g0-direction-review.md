@@ -119,6 +119,16 @@ finite execution. Stop this line of training and keep the validated specialist
 fallback. Reopen merged-policy work only under a new approved hypothesis with
 a new acceptance contract; the product requirement remains one shared actor.
 
+Before treating that result as final, the canonical evaluator was aligned with
+the accepted specialist semantics: `0.20 m/s` velocity, world-up tilt, and
+separate raw-teacher action overflow reporting. The G0 `1.0 m` locomotion gate
+was preserved. The routed control then reproduced stand and locomotion
+physics, while the shared actor still failed its behavior and transition gates.
+
+A 1,000-epoch convergence probe lowered offline validation MSE to `0.000313`,
+but the corrected canonical run still failed all seven gates. More optimizer
+budget is therefore not a supported next step.
+
 Evidence hashes:
 
 - Phase-A/native diagnostic report: `45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31`

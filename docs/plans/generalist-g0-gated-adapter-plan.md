@@ -21,6 +21,19 @@ all seven gates. The current evidence does not support isolated state-coverage
 or output-bound fixes, so this plan authorizes no further blind architecture
 or optimizer sweep.
 
+An explicit 1,000-epoch convergence probe reached offline validation MSE
+`0.000313`, yet the corrected canonical evaluator still failed all three
+standalone and all four legal transition gates. This rules out the current
+full-batch optimizer budget as the primary explanation for closed-loop loss.
+
+The canonical evaluator also required contract repairs before interpreting the
+control arm: velocity now uses the accepted `0.20 m/s` command, tilt uses trunk
+world-up alignment rather than total quaternion angle, and raw teacher action
+overflow is reportable separately from the shared actor's action-range gate.
+The G0 `1.0 m` locomotion product gate remains unchanged. The routed control
+reproduced the expected stand and locomotion physics, while the shared gated
+adapter still failed its standalone and transition gates.
+
 ## Goal
 
 Test whether explicit condition gating and low-rank hidden residual adapters

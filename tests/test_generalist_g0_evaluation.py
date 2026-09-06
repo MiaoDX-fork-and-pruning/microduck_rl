@@ -28,6 +28,14 @@ def test_trace_metrics_rejects_action_contract_violation():
     assert report["success"] is False
 
 
+def test_action_range_can_be_reported_separately_for_raw_teacher_control():
+    trace = TraceMetrics()
+    trace.append(height=0.12, tilt=0.1, position=[0, 0, 0.12], action=np.full(14, 1.2))
+    report = trace.report(enforce_action_range=False)
+    assert report["success"] is True
+    assert report["action_range_valid"] is False
+
+
 def test_trace_metrics_applies_behavior_outcome_gates():
     trace = TraceMetrics()
     trace.append(height=0.10, tilt=0.1, position=[0, 0, 0], action=np.zeros(14))

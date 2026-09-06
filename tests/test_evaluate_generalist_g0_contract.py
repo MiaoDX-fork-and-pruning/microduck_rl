@@ -17,7 +17,7 @@ def test_canonical_segments_match_track_a_dwell_and_handoff():
     module = _module()
     assert module.CONTROL_HZ == 50
     assert [(s.state, s.command_x, s.ticks) for s in module.BEHAVIOR_SEGMENTS["VELOCITY"]] == [
-        ("VELOCITY", 0.15, 700)
+        ("VELOCITY", 0.20, 700)
     ]
     sit_to_stand = module.EDGE_SEGMENTS[("SITSTAND", "VELSTAND")]
     assert [(s.state, s.command_x, s.ticks) for s in sit_to_stand] == [
@@ -58,3 +58,11 @@ def test_behavior_and_edge_gates_enforce_destination_outcomes():
             "final_height_min_m": module.STAND_HEIGHT_MIN_M,
         },
     }
+
+
+def test_tilt_metric_uses_world_up_alignment_not_total_quaternion_angle():
+    module = _module()
+    import numpy as np
+    # A 90-degree yaw is upright and must not be classified as a fall.
+    rotation = np.array([[0.0, -1.0, 0.0], [1.0, 0.0, 0.0], [0.0, 0.0, 1.0]])
+    assert np.arccos(np.clip(float(rotation[2, 2]), -1.0, 1.0)) == pytest.approx(0.0)

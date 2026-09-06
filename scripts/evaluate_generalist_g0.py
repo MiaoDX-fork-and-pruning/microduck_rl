@@ -41,13 +41,13 @@ class Segment:
 
 BEHAVIOR_SEGMENTS = {
     "VELSTAND": (Segment("VELSTAND", 0.0, 8.0),),
-    "VELOCITY": (Segment("VELOCITY", 0.15, 14.0),),
+    "VELOCITY": (Segment("VELOCITY", 0.20, 14.0),),
     "SITSTAND": (Segment("SITSTAND", 1.0, 6.0), Segment("SITSTAND", 0.0, 6.0)),
 }
 
 EDGE_SEGMENTS = {
-    ("VELSTAND", "VELOCITY"): (Segment("VELSTAND", 0.0, 8.0, score=False), Segment("VELOCITY", 0.15, 14.0, True)),
-    ("VELOCITY", "VELSTAND"): (Segment("VELOCITY", 0.15, 14.0, score=False), Segment("VELSTAND", 0.0, 8.0, True)),
+    ("VELSTAND", "VELOCITY"): (Segment("VELSTAND", 0.0, 8.0, score=False), Segment("VELOCITY", 0.20, 14.0, True)),
+    ("VELOCITY", "VELSTAND"): (Segment("VELOCITY", 0.20, 14.0, score=False), Segment("VELSTAND", 0.0, 8.0, True)),
     ("VELSTAND", "SITSTAND"): (Segment("VELSTAND", 0.0, 8.0, score=False), Segment("SITSTAND", 1.0, 6.0, True)),
     ("SITSTAND", "VELSTAND"): (
         Segment("SITSTAND", 1.0, 6.0, score=False),
@@ -134,21 +134,21 @@ class Policy:
     def __call__(self, observation: np.ndarray) -> np.ndarray:
         if self.backend == "onnx":
             value = np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
-            return np.clip(value, -1.0, 1.0)
+            return value
         import torch
         if self.backend == "rsl_raw_checkpoint":
             if self._obs_mean is not None and self._obs_std is not None:
                 observation = (observation - self._obs_mean) / np.maximum(self._obs_std, 1e-6)
             with torch.inference_mode():
                 value = self.model(torch.from_numpy(observation[None, :]).to(next(self.model.parameters()).device))
-            return np.clip(value.detach().cpu().numpy()[0].astype(np.float32), -1.0, 1.0)
+            return value.detach().cpu().numpy()[0].astype(np.float32)
         if self.backend == "rsl_rl":
             with torch.inference_mode():
                 value = self._torch_policy({"actor": torch.from_numpy(observation[None, :]).to(self._device)})
-            return np.clip(value.detach().cpu().numpy()[0].astype(np.float32), -1.0, 1.0)
+            return value.detach().cpu().numpy()[0].astype(np.float32)
         with torch.inference_mode():
             value = self.model(torch.from_numpy(observation)).numpy()[0].astype(np.float32)
-            return np.clip(value, -1.0, 1.0)
+            return value
 
 
 def _command(state: str, command_x: float | None = None) -> np.ndarray:
@@ -177,7 +177,10 @@ EDGE_GATES = {
 }
 
 
-def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Segment, ...]) -> TraceMetrics:
+def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Segment, ...],
+                 *, condition_mode: str = "canonical") -> TraceMetrics:
+    if condition_mode not in ("canonical", "training_default"):
+        raise ValueError(f"unknown condition mode: {condition_mode}")
     data = mujoco.MjData(model)
     helper = PolicyInference(model, data, walking_onnx_path=str(reference_onnx), new_cmd_obs=True,
                              use_projected_gravity=True)
@@ -195,18 +198,24 @@ def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Se
         helper.command = command
         for tick in range(segment.ticks):
             legacy = helper.get_observations()
+            kwargs = {}
+            if condition_mode == "canonical":
+                kwargs = {
+                    "phase": np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
+                    "posture": np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
+                }
             conditioned = make_conditioned_observation(
-                legacy[None, :], command[None, :], STATE_TO_BEHAVIOR[state],
-                phase=np.array([[tick / max(segment.ticks - 1, 1), float(segment.active_transition)]], dtype=np.float32),
-                posture=np.array([[segment.command_x if state == "SITSTAND" else 0.0]], dtype=np.float32),
+                legacy[None, :], command[None, :], STATE_TO_BEHAVIOR[state], **kwargs
             )
             action = policy(conditioned)
             helper.last_action = action.copy()
             helper.apply_action(action)
             for _ in range(4):
                 mujoco.mj_step(model, data)
-            quat = data.xquat[trunk]
-            tilt = 2.0 * np.arccos(np.clip(abs(float(quat[0])), 0.0, 1.0))
+            # Tilt is loss of the body's world-up alignment. A quaternion's
+            # total rotation angle would incorrectly count yaw as falling.
+            rotation = data.xmat[trunk].reshape(3, 3)
+            tilt = np.arccos(np.clip(float(rotation[2, 2]), -1.0, 1.0))
             if segment.score:
                 metrics.append(height=data.xpos[trunk, 2], tilt=tilt, position=data.xpos[trunk], action=action)
             if not metrics.finite:
@@ -226,6 +235,10 @@ def main() -> None:
     parser.add_argument("--observation-reference-onnx", type=Path, required=True,
                         help="61D specialist ONNX used by the established observation harness only")
     parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--condition-mode", choices=("canonical", "training_default"), default="canonical",
+                        help="condition fields used by the evaluator; training_default is a contract probe")
+    parser.add_argument("--allow-action-overflow", action="store_true",
+                        help="diagnostic control-arm mode for raw specialist outputs")
     parser.add_argument("--output", type=Path, default=Path("artifacts/generalist-g0/evaluation.json"))
     args = parser.parse_args()
     np.random.seed(args.seed)
@@ -234,16 +247,18 @@ def main() -> None:
     model.opt.timestep = 0.005
     behaviors = []
     for state, behavior in STATE_TO_BEHAVIOR.items():
-        metrics = run_sequence(model, policy, args.observation_reference_onnx, BEHAVIOR_SEGMENTS[state])
+        metrics = run_sequence(model, policy, args.observation_reference_onnx, BEHAVIOR_SEGMENTS[state], condition_mode=args.condition_mode)
         behaviors.append({"state": state, "behavior": behavior,
-                          "metrics": metrics.report(**BEHAVIOR_GATES[behavior])})
+                          "metrics": metrics.report(**BEHAVIOR_GATES[behavior], enforce_action_range=not args.allow_action_overflow)})
     edges = []
     for source_state, destination in sorted(LEGAL_EDGES):
         metrics = run_sequence(model, policy, args.observation_reference_onnx,
-                               EDGE_SEGMENTS[(source_state, destination)])
+                               EDGE_SEGMENTS[(source_state, destination)], condition_mode=args.condition_mode)
         edges.append({"from": source_state, "to": destination, "reset_count": 0,
-                      "metrics": metrics.report(**EDGE_GATES[(source_state, destination)])})
+                      "metrics": metrics.report(**EDGE_GATES[(source_state, destination)], enforce_action_range=not args.allow_action_overflow)})
     report = make_report(backend=policy.backend, seed=args.seed, behaviors=behaviors, edges=edges)
+    report["condition_mode"] = args.condition_mode
+    report["action_range_enforced"] = not args.allow_action_overflow
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(json.dumps(report, indent=2) + "\n")
     print(json.dumps(report, indent=2))

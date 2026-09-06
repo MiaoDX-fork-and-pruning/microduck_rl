@@ -44,7 +44,8 @@ class TraceMetrics:
     def report(self, *, displacement_gate_m: float | None = None,
                height_min_m: float | None = None, height_max_m: float | None = None,
                final_height_min_m: float | None = None,
-               final_height_max_m: float | None = None) -> dict:
+               final_height_max_m: float | None = None,
+               enforce_action_range: bool = True) -> dict:
         displacement = (
             self.positions[-1] - self.positions[0]
             if len(self.positions) >= 2
@@ -52,8 +53,10 @@ class TraceMetrics:
         )
         actions = np.asarray(self.actions)
         jumps = np.abs(np.diff(actions, axis=0)) if len(actions) >= 2 else np.zeros((0, 14))
-        passed = bool(self.finite and self.actions and max(self.tilts, default=np.inf) < np.deg2rad(65.0)
-                      and np.max(np.abs(actions)) <= 1.0 + 1e-6)
+        passed = bool(self.finite and self.actions and max(self.tilts, default=np.inf) < np.deg2rad(65.0))
+        action_range_valid = bool(not actions.size or np.max(np.abs(actions)) <= 1.0 + 1e-6)
+        if enforce_action_range:
+            passed = passed and action_range_valid
         if displacement_gate_m is not None:
             passed = passed and float(np.linalg.norm(displacement[:2])) >= displacement_gate_m
         if height_min_m is not None:
@@ -72,6 +75,7 @@ class TraceMetrics:
             "world_displacement_m": displacement.tolist(),
             "displacement_m": float(np.linalg.norm(displacement[:2])),
             "max_abs_action": float(np.max(np.abs(actions))) if actions.size else None,
+            "action_range_valid": action_range_valid,
             "peak_action_jump": float(np.max(jumps)) if jumps.size else 0.0,
             "success": passed,
             "passed": passed,
