@@ -1,6 +1,6 @@
 # Generalist G0 Merged Policy
 
-Status: PAUSED_PENDING_DIRECTION_REVIEW
+Status: ACTIVE_FAIL_CLOSED
 
 Source plan: `docs/plans/generalist-g0-merged-policy-plan.md`
 Causal probe: `docs/plans/generalist-g0-velstand-causal-probe.md`
@@ -76,8 +76,7 @@ immutable external evidence package required for acceptance.
 
 ## Direction-review handoff
 
-The next context must choose a direction-review option before any new
-execution. The default recommendation is one bounded evidence repair:
+The approved execution has completed one bounded evidence repair:
 
 1. recover the exact specialist reset qpos/qvel, command, horizon, and
    termination contract;
@@ -85,10 +84,11 @@ execution. The default recommendation is one bounded evidence repair:
 3. only if that native baseline passes, run the already-frozen Phase-B control
    arms on the same battery.
 
-If the exact reset contract cannot be recovered, or the native teacher still
-fails after exact replay, close this merge attempt as inconclusive and retain
-the validated specialist fallback. Any new architecture, reward, PPO, or
-additional behavior requires a separate approved plan.
+The exact initial reset contract is recovered and real fall-state suffixes can
+be replayed exactly, but the tested native fall states do not recover. The
+evidence remains diagnostic rather than an accepted recovery baseline. Any new
+architecture, reward, PPO, or additional behavior requires a separate approved
+plan.
 
 ## Current execution update (2026-09-03)
 
@@ -141,9 +141,8 @@ The next decision should choose one of:
    composition), a new plan, and a fresh acceptance contract. This is outside
    the current G0 plan.
 
-Until that decision is made, the current plan is paused, not accepted and not
-abandoned. The specialist fallback path remains the only validated product
-path.
+The current plan is fail-closed rather than accepted; the specialist fallback
+path remains the only validated product path.
 
 Any materially different reward, initialization, actor objective, capacity, or
 PPO experiment requires a new approved plan.

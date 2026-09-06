@@ -1,6 +1,6 @@
 # G0 Shared Merged Policy Preflight
 
-Preflight status: DRAFT
+Preflight status: APPROVED
 Task source: approved direction review and `docs/plans/generalist-g0-merged-policy-plan.md`
 Canonical source: `docs/plans/generalist-g0-merged-policy-plan.md`
 Route: durable `$intuitive-flow` after approval

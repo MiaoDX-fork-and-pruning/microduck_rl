@@ -1,6 +1,6 @@
 # Generalist G0 Merged Policy Plan
 
-Status: preflight-ready
+Status: active-fail-closed
 
 Preflight contract: `docs/plans/generalist-g0-merged-policy-preflight.md`
 
@@ -13,6 +13,15 @@ fallback tooling are implemented and covered by focused tests. No merged
 candidate is accepted. Further work requires either one bounded reset-contract
 repair or a new approved hypothesis about whether a single conditioned actor
 is the right abstraction.
+
+Execution checkpoint (2026-09-06): the approved reset-contract repair and the
+required shared dense capacity ablation have been executed. Deterministic reset
+contracts are versioned for all three teachers; versioned x/y perturbation
+traces replay with exact state/action parity, but do not establish an accepted
+recovery baseline. Corrected shared dense 1x/2x/4x BC arms all fail the
+canonical standalone and legal-transition gates. The plan remains
+fail-closed: no candidate is accepted, and any new architecture or reward
+direction requires a separate approved plan.
 
 ## Latest Checkpoint: VELSTAND Causal Probe
 
