@@ -1,6 +1,6 @@
 # Generalist G0 Temporal Window Plan
 
-Status: IN_PROGRESS
+Status: COMPLETE_STOPPED_AT_BC_GATE
 
 ## Goal
 
@@ -121,6 +121,15 @@ implementation.
   DAgger guard are wired while preserving the legacy 71D path.
 - Focused contract proof: 37 tests passed (schema, history, model, evaluator,
   export, benchmark, and DAgger helpers).
-- Remaining gates: collect/hash the seven canonical trajectories, train the H4
-  BC probe, run all three standalone gates, and only then consider one DAgger
-  round. No candidate is promoted to production.
+- Canonical data validation passed: 5,600 finite samples, seven trajectories,
+  13 hard segments, all three frozen teacher hashes verified, and deterministic
+  215D replay.
+- The first-seed 1,000-epoch H4 BC probe reached validation MSE `3.48e-4` but
+  failed all three standalone gates (`0/3`). Outputs remained finite and within
+  the action range.
+- Technical export gates pass: ONNX metadata records the H4 ordering/reset
+  contract, PyTorch/ONNX max absolute error is `2.38e-7`, and CPU p95 latency is
+  `0.0613 ms` for PyTorch and `0.0157 ms` for ONNX against a `15 ms` budget.
+- The explicit BC stop gate fired. No DAgger round or PPO run was launched, and
+  no candidate is promoted to production. Durable metrics and artifact hashes
+  are recorded in `docs/plans/generalist-g0-h4-result.json`.

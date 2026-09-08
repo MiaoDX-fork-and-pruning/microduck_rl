@@ -229,6 +229,10 @@ segment-start padding, and rejects cross-segment windows. `train_generalist_cano
 manifest; `export_generalist_g0.py` exports H4 artifacts and reports their input
 dimension while preserving the legacy 71D path.
 
-Focused temporal/schema/model/export tests pass: 19 passed. Canonical H4 data
-collection, standalone gates, DAgger gating, and product acceptance are not yet
-run; no H4 candidate is promoted or implied active in production.
+Focused temporal/schema/model/export tests pass. Canonical H4 data validation
+then passed with 5,600 finite samples across seven trajectories and verified
+teacher hashes. The 1,000-epoch H4 BC probe reached validation MSE `3.48e-4`
+but failed all three standalone gates. The plan's stop gate fired: no DAgger or
+PPO was run, and no H4 candidate is promoted or implied active in production.
+The final metrics and reproducibility hashes are in
+`docs/plans/generalist-g0-h4-result.json`.

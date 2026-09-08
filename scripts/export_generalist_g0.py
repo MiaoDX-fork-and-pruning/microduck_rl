@@ -54,6 +54,17 @@ def export_g0(run: Path, onnx_path: Path, golden_path: Path, parity_path: Path,
                       input_names=["observations"], output_names=["actions"],
                       dynamic_axes={"observations": {0: "batch"}, "actions": {0: "batch"}},
                       opset_version=17)
+    if metrics.get("schema") == "generalist-g0-h4":
+        import onnx
+        exported = onnx.load(str(onnx_path))
+        onnx.helper.set_model_props(exported, {
+            "schema": "generalist-g0-h4", "schema_version": "1",
+            "input_dim": "215", "action_dim": "14", "history_frames": "4",
+            "proprioception_dim": "48", "condition_dim": "23",
+            "frame_order": "oldest_to_newest", "padding": "repeat_first_frame",
+            "segment_reset": "true", "control_hz": "50",
+        })
+        onnx.save(exported, str(onnx_path))
     np.savez_compressed(golden_path, observations=inputs, pt_actions=expected,
                         case_ids=np.asarray([f"sample:{i}" for i in range(samples)]))
     import onnxruntime as ort

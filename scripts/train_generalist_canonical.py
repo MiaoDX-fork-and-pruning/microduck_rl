@@ -38,6 +38,8 @@ def main() -> None:
                         help="oversample the first N ticks of every canonical segment")
     parser.add_argument("--temporal-window", action="store_true", help="train the H4 temporal candidate")
     args = parser.parse_args()
+    if args.temporal_window and any((args.gated_adapter, args.film, args.action_adapter, args.onehot_action_adapter)):
+        raise SystemExit("H4 uses one shared trunk/head; do not select a conditioned adapter")
     if not args.temporal_window and sum((args.gated_adapter, args.film, args.action_adapter, args.onehot_action_adapter)) != 1:
         raise SystemExit("choose exactly one conditioned actor variant")
     if args.critical_ticks < 0:
