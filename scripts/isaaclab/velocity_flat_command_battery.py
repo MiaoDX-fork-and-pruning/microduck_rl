@@ -29,7 +29,9 @@ except ModuleNotFoundError:  # direct ``python scripts/isaaclab/...py`` entry
     from velocity_flat_battery_spec import CASES, NUM_ENVS, SEED, STEPS_PER_CASE, evaluate_case
 
 
-TASK = "IsaacLab-Velocity-Flat-MicroDuck"
+DEFAULT_TASK = "IsaacLab-Velocity-Flat-MicroDuck"
+# Backward-compatible module constant for callers that imported ``TASK``.
+TASK = DEFAULT_TASK
 # Keep the required scenarios visible at this executable boundary.  The case
 # definitions remain centralized in ``velocity_flat_battery_spec`` so the
 # MuJoCo and IsaacLab harnesses cannot silently drift apart.
@@ -177,6 +179,7 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
 
 def main() -> None:
     parser = argparse.ArgumentParser()
+    parser.add_argument("--task", default=DEFAULT_TASK)
     parser.add_argument("--checkpoint", type=Path, required=True)
     parser.add_argument("--num-envs", type=int, default=NUM_ENVS)
     parser.add_argument("--steps", type=int, default=STEPS_PER_CASE)
@@ -195,17 +198,34 @@ def main() -> None:
         from rsl_rl.runners import OnPolicyRunner
 
         from isaaclab_microduck.tasks import register_tasks
-        from isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg import MicroduckVelocityFlatPPORunnerCfg
-        from isaaclab_microduck.tasks.velocity_flat import make_velocity_flat_env_cfg
+        from isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg import (
+            MicroduckVelocityFlatAdaptedPPORunnerCfg,
+            MicroduckVelocityFlatPPORunnerCfg,
+        )
+        from isaaclab_microduck.tasks.velocity_flat import (
+            make_velocity_flat_adapted_env_cfg,
+            make_velocity_flat_env_cfg,
+        )
 
         register_tasks()
         print("ISAACLAB_VELOCITY_BATTERY:tasks_registered", flush=True)
-        env_cfg = make_velocity_flat_env_cfg(play=True, num_envs=args.num_envs)
+        profiles = {
+            DEFAULT_TASK: (make_velocity_flat_env_cfg, MicroduckVelocityFlatPPORunnerCfg),
+            "IsaacLab-Velocity-Flat-MicroDuck-Adapted": (
+                make_velocity_flat_adapted_env_cfg,
+                MicroduckVelocityFlatAdaptedPPORunnerCfg,
+            ),
+        }
+        try:
+            make_env_cfg, runner_cfg_type = profiles[args.task]
+        except KeyError as exc:
+            raise ValueError(f"unknown IsaacLab battery task: {args.task!r}") from exc
+        env_cfg = make_env_cfg(play=True, num_envs=args.num_envs)
         env_cfg.seed = args.seed
         env_cfg.commands.base_velocity.resampling_time_range = (1.0e9, 1.0e9)
-        env = gym.make(TASK, cfg=env_cfg)
+        env = gym.make(args.task, cfg=env_cfg)
         print("ISAACLAB_VELOCITY_BATTERY:env_made", flush=True)
-        agent_cfg = MicroduckVelocityFlatPPORunnerCfg()
+        agent_cfg = runner_cfg_type()
         # Use the same action boundary as training and the production mjlab
         # recipe. In particular, do not silently make evaluation safer by
         # clipping raw policy output here.
@@ -232,7 +252,7 @@ def main() -> None:
             print(f"ISAACLAB_VELOCITY_BATTERY:case:{name}:done", flush=True)
 
         report = {
-            "task": TASK,
+            "task": args.task,
             "backend": "isaaclab",
             "isaaclab_version": "3.0.0",
             "isaacsim_version": "6.0.1",

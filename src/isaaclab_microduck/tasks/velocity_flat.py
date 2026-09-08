@@ -72,13 +72,14 @@ MIN_ROOT_HEIGHT_M = 0.055
 
 @configclass
 class MicroduckVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
-    """mjlab-compatible velocity command with a held turn-in-place bucket."""
+    """Velocity command with optional forward, lateral, and turn buckets."""
 
     class_type: type["MicroduckVelocityCommand"] | str = "isaaclab_microduck.tasks.velocity_flat:MicroduckVelocityCommand"
-    # Match the MJLab recipe.  This bucket is part of the shared command
-    # distribution; no IsaacLab-only command buckets belong in strict mode.
+    # Strict mode uses the MJLab values. Adapted mode overrides only these
+    # bucket fractions to reproduce the earlier IsaacLab training profile.
     rel_turn_in_place_envs: float = 0.15
     rel_forward_envs: float = 0.2
+    rel_lateral_envs: float = 0.0
 
 
 class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
@@ -119,6 +120,30 @@ class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
             )
             self.vel_command_b[turn_ids, 2] = signs * magnitude
             self.is_standing_env[turn_ids] = False
+
+        # The adapted profile historically sampled lateral commands from the
+        # non-turn subset and left the base sampler's yaw target untouched.
+        # Keep that exact behavior behind an explicit config field; strict
+        # mode has a zero fraction and therefore no IsaacLab-only bucket.
+        lateral_fraction = float(self.cfg.rel_lateral_envs)
+        remaining = ids[~select]
+        if lateral_fraction <= 0.0 or len(remaining) == 0:
+            return
+        lateral = torch.rand(len(remaining), device=self.device) < lateral_fraction
+        lateral_ids = remaining[lateral]
+        if len(lateral_ids) > 0:
+            self.vel_command_b[lateral_ids, 0] = 0.0
+            signs = torch.where(
+                torch.rand(len(lateral_ids), device=self.device) < 0.5,
+                -torch.ones(len(lateral_ids), device=self.device),
+                torch.ones(len(lateral_ids), device=self.device),
+            )
+            lo, hi = self.cfg.ranges.lin_vel_y
+            magnitude = torch.empty(len(lateral_ids), device=self.device).uniform_(
+                0.5 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+            )
+            self.vel_command_b[lateral_ids, 1] = signs * magnitude
+            self.is_standing_env[lateral_ids] = False
 
 
 @configclass
@@ -1153,8 +1178,50 @@ class IsaacLabVelocityFlatEnvCfg_PLAY(IsaacLabVelocityFlatEnvCfg):
         self.observations.policy.enable_corruption = False
 
 
+@configclass
+class IsaacLabVelocityFlatAdaptedEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """Historical IsaacLab profile that produced the earlier walking policy.
+
+    This profile is intentionally separate from strict MJLab parity. It keeps
+    the same robot, ABI, actuator, DR, terminations, and PPO architecture while
+    restoring the reward balance, command bucket, and action-rate schedule
+    captured in the known-good ``2026-09-05_15-16-03`` manifest.
+    """
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        command = self.commands.base_velocity
+        command.rel_forward_envs = 0.0
+        command.rel_lateral_envs = 0.25
+        self.rewards.track_lin_vel.weight = 4.0
+        self.rewards.track_ang_vel.weight = 6.0
+        self.rewards.pose.weight = 0.5
+        self.rewards.air_time.weight = 1.0
+        self.curriculum.action_rate_weight.params["weight_stages"] = [
+            {"step": 0, "weight": -0.1},
+        ]
+
+
+@configclass
+class IsaacLabVelocityFlatAdaptedEnvCfg_PLAY(IsaacLabVelocityFlatAdaptedEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
 def make_velocity_flat_env_cfg(*, play: bool = False, num_envs: int = 1):
     cfg = IsaacLabVelocityFlatEnvCfg_PLAY() if play else IsaacLabVelocityFlatEnvCfg()
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_adapted_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatAdaptedEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatAdaptedEnvCfg()
+    )
     cfg.scene.num_envs = num_envs
     return cfg
 
@@ -1162,7 +1229,10 @@ def make_velocity_flat_env_cfg(*, play: bool = False, num_envs: int = 1):
 __all__ = [
     "IsaacLabVelocityFlatEnvCfg",
     "IsaacLabVelocityFlatEnvCfg_PLAY",
+    "IsaacLabVelocityFlatAdaptedEnvCfg",
+    "IsaacLabVelocityFlatAdaptedEnvCfg_PLAY",
     "make_velocity_flat_env_cfg",
+    "make_velocity_flat_adapted_env_cfg",
     "policy_command_block",
     "policy_gyro",
     "policy_joint_pos",

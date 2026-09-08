@@ -55,4 +55,14 @@ class MicroduckVelocityFlatPPORunnerCfg(RslRlOnPolicyRunnerCfg):
     )
 
 
-__all__ = ["MicroduckVelocityFlatPPORunnerCfg"]
+@configclass
+class MicroduckVelocityFlatAdaptedPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """Runner for the historical IsaacLab-specific adapted profile."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_adapted"
+
+
+__all__ = [
+    "MicroduckVelocityFlatPPORunnerCfg",
+    "MicroduckVelocityFlatAdaptedPPORunnerCfg",
+]

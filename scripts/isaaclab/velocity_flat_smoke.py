@@ -15,6 +15,7 @@ from isaaclab.app import AppLauncher
 def main() -> None:
     print("ISAACLAB_VELOCITY_FLAT_SMOKE:main:start", flush=True)
     parser = argparse.ArgumentParser()
+    parser.add_argument("--task", default="IsaacLab-Velocity-Flat-MicroDuck")
     parser.add_argument("--num-envs", type=int, default=1)
     parser.add_argument("--steps", type=int, default=20)
     parser.add_argument("--output", type=Path)
@@ -37,13 +38,18 @@ def main() -> None:
 
         register_tasks()
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:tasks_registered", flush=True)
-        env = gym.make(
-            "IsaacLab-Velocity-Flat-MicroDuck",
-            cfg=__import__(
-                "isaaclab_microduck.tasks.velocity_flat",
-                fromlist=["make_velocity_flat_env_cfg"],
-            ).make_velocity_flat_env_cfg(num_envs=args.num_envs),
-        )
+        task_module = __import__("isaaclab_microduck.tasks.velocity_flat", fromlist=[
+            "make_velocity_flat_env_cfg", "make_velocity_flat_adapted_env_cfg"
+        ])
+        factories = {
+            "IsaacLab-Velocity-Flat-MicroDuck": task_module.make_velocity_flat_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-Adapted": task_module.make_velocity_flat_adapted_env_cfg,
+        }
+        try:
+            make_env_cfg = factories[args.task]
+        except KeyError as exc:
+            raise ValueError(f"unknown IsaacLab smoke task: {args.task!r}") from exc
+        env = gym.make(args.task, cfg=make_env_cfg(num_envs=args.num_envs))
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:env_made", flush=True)
         base_env = env.unwrapped
         robot = base_env.scene["robot"]
