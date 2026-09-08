@@ -11,6 +11,7 @@ from infer_policy import DEFAULT_POSE, PolicyInference
 from mjlab_microduck.generalist_schema import ACTION_DIM, OBS_DIM, make_conditioned_observation, validate_batch
 from mjlab_microduck.generalist_transition_graph import validate_transition
 from mjlab_microduck.generalist_model import build_actor
+from mjlab_microduck.generalist_temporal import H4Actor, History
 
 _G0_POLICY_STATE = {"velstand_flat": "VELSTAND", "velocity_flat": "VELOCITY", "sitstand_flat": "SITSTAND"}
 RECOVERY_BUCKETS = frozenset({
@@ -120,26 +121,37 @@ def validate_replay_batch(data: dict[str, np.ndarray]) -> None:
     if len(lengths) != 1:
         raise ValueError("replay fields have inconsistent lengths")
 
+def _standalone_passed(path: Path) -> bool:
+    report = json.loads(path.read_text())
+    behaviors = report.get("behaviors", [])
+    return len(behaviors) == 3 and all(item.get("success", item.get("passed", item.get("metrics", {}).get("success", False))) for item in behaviors)
+
+
 def main():
-    ap=argparse.ArgumentParser(); ap.add_argument('--student-run',type=Path,required=True); ap.add_argument('--output',type=Path,required=True); ap.add_argument('--ticks',type=int,default=120); ap.add_argument('--beta',type=float,default=.5); ap.add_argument('--behavior', choices=('stand','locomotion','sit_stand'), default='stand'); args=ap.parse_args()
+    ap=argparse.ArgumentParser(); ap.add_argument('--student-run',type=Path,required=True); ap.add_argument('--output',type=Path,required=True); ap.add_argument('--ticks',type=int,default=120); ap.add_argument('--beta',type=float,default=.5); ap.add_argument('--behavior', choices=('stand','locomotion','sit_stand'), default='stand'); ap.add_argument('--standalone-evaluation',type=Path); ap.add_argument('--round',type=int,default=1); args=ap.parse_args()
     import torch
     b=torch.load(args.student_run/'model.pt',weights_only=False)
     manifest = json.loads((args.student_run/'manifest.json').read_text()) if (args.student_run/'manifest.json').exists() else {}
-    net=build_actor(manifest.get('metrics', {})); net.load_state_dict(b['state_dict']); net.eval()
+    temporal = manifest.get('schema') == 'generalist-g0-h4'
+    if temporal and (args.round != 1 or args.standalone_evaluation is None or not _standalone_passed(args.standalone_evaluation)):
+        raise SystemExit('H4 permits exactly one DAgger round after all standalone gates pass')
+    net=(H4Actor(bounded=manifest.get('metrics', {}).get('bounded_actions', True)) if temporal else build_actor(manifest.get('metrics', {}))); net.load_state_dict(b['state_dict']); net.eval()
     model=mujoco.MjModel.from_xml_path('src/mjlab_microduck/robot/microduck/scene.xml'); model.opt.timestep=.005
-    xs=[]; ys=[]
+    xs=[]; ys=[]; segment_ids=[]
     profiles = [('stand',0.,'artifacts/specialists/velstand_flat/policy.onnx'),('locomotion',.2,'artifacts/specialists/velocity_flat/policy.onnx'),('sit_stand',1.,'artifacts/specialists/sitstand_flat/policy.onnx')]
     for behavior,speed,teacher_path in [p for p in profiles if p[0] == args.behavior]:
         data=mujoco.MjData(model); teacher=PolicyInference(model,data,walking_onnx_path=teacher_path,new_cmd_obs=True,use_projected_gravity=True); teacher.command=np.array([speed,0,0]+[0]*10,np.float32)
         jid=mujoco.mj_name2id(model,mujoco.mjtObj.mjOBJ_JOINT,'trunk_base_freejoint'); qa=int(model.jnt_qposadr[jid]); data.qpos[qa:qa+3]=[0,0,.125]; data.qpos[qa+3:qa+7]=[1,0,0,0]
         for i,q in enumerate(teacher.joint_qpos_indices): data.qpos[q]=DEFAULT_POSE[i]
         mujoco.mj_forward(model,data)
+        history = History()
         for _ in range(args.ticks):
             legacy=teacher.get_observations(); x=make_conditioned_observation(legacy[None],teacher.command[None],behavior)
-            with torch.no_grad(): student=net(torch.from_numpy(x)).numpy()[0]
+            student_x = history.append(x[0])[None] if temporal else x
+            with torch.no_grad(): student=net(torch.from_numpy(student_x)).numpy()[0]
             teacher.last_action=teacher.last_action.copy(); ta=teacher.infer()
-            xs.append(x[0]); ys.append(ta)
+            xs.append(x[0]); ys.append(ta); segment_ids.append(behavior)
             action=args.beta*ta+(1-args.beta)*student; teacher.last_action=action.astype(np.float32); teacher.apply_action(action)
-            for _ in range(5): mujoco.mj_step(model,data)
-    args.output.parent.mkdir(parents=True,exist_ok=True); np.savez_compressed(args.output,inputs=np.asarray(xs,np.float32),actions=np.asarray(ys,np.float32)); print({'samples':len(xs),'beta':args.beta,'output':str(args.output)})
+            for _ in range(4): mujoco.mj_step(model,data)
+    args.output.parent.mkdir(parents=True,exist_ok=True); np.savez_compressed(args.output,inputs=np.asarray(xs,np.float32),actions=np.asarray(ys,np.float32),segment_ids=np.asarray(segment_ids)); print({'samples':len(xs),'beta':args.beta,'round':args.round,'output':str(args.output)})
 if __name__=='__main__': main()

@@ -218,3 +218,17 @@ PPO experiment requires a new approved plan.
 
 No-touch scope: specialist 61D ABI, production runtime, roller/hardware
 behavior, and the unrelated `uv.lock` worktree change.
+
+## H4 temporal-window execution update (2026-09-08)
+
+Implementation of the approved temporal-window candidate is in progress. The
+new `generalist_temporal` contract defines four 48D proprioception frames plus
+the newest 23D condition block (`215D -> 14D`), repeats the first frame for
+segment-start padding, and rejects cross-segment windows. `train_generalist_canonical.py
+--temporal-window` trains one shared H4 trunk/head and writes a versioned H4
+manifest; `export_generalist_g0.py` exports H4 artifacts and reports their input
+dimension while preserving the legacy 71D path.
+
+Focused temporal/schema/model/export tests pass: 19 passed. Canonical H4 data
+collection, standalone gates, DAgger gating, and product acceptance are not yet
+run; no H4 candidate is promoted or implied active in production.

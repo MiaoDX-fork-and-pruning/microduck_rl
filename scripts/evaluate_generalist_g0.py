@@ -15,6 +15,7 @@ import numpy as np
 from mjlab_microduck.generalist_g0_evaluation import STATE_TO_BEHAVIOR, TraceMetrics, make_report
 from mjlab_microduck.generalist_model import build_actor
 from mjlab_microduck.generalist_schema import make_conditioned_observation
+from mjlab_microduck.generalist_temporal import H4Actor, History
 from mjlab_microduck.generalist_transition_graph import LEGAL_EDGES
 from mjlab_microduck.tasks.microduck_sitstand_env_cfg import SIT_Z, STAND_Z
 
@@ -64,18 +65,23 @@ class Policy:
         if sum(value is not None for value in (run, onnx, checkpoint)) != 1:
             raise ValueError("choose exactly one of --run, --onnx, or --checkpoint")
         self.backend = "onnx" if onnx else ("rsl_rl" if checkpoint else "pytorch")
+        self.temporal = False
+        self.history = History()
         if onnx:
             import onnxruntime as ort
             self.session = ort.InferenceSession(str(onnx), providers=["CPUExecutionProvider"])
             inputs = self.session.get_inputs()
-            if len(inputs) != 1 or inputs[0].shape[-1] != 71:
-                raise ValueError("G0 ONNX must expose one 71D input")
+            if len(inputs) != 1 or inputs[0].shape[-1] not in (71, 215):
+                raise ValueError("G0 ONNX must expose one 71D or 215D input")
+            self.temporal = inputs[0].shape[-1] == 215
             self.input_name = inputs[0].name
         elif run:
             import torch
             bundle = torch.load(run / "model.pt", weights_only=False)
-            metadata = json.loads((run / "manifest.json").read_text()).get("metrics", {})
-            self.model = build_actor(metadata)
+            manifest = json.loads((run / "manifest.json").read_text())
+            metadata = manifest.get("metrics", {})
+            self.temporal = manifest.get("schema") == "generalist-g0-h4"
+            self.model = H4Actor(bounded=metadata.get("bounded_actions", True)) if self.temporal else build_actor(metadata)
             self.model.load_state_dict(bundle["state_dict"])
             self.model.eval()
         else:
@@ -132,6 +138,10 @@ class Policy:
         self._device = target
 
     def __call__(self, observation: np.ndarray) -> np.ndarray:
+        observation = np.asarray(observation, dtype=np.float32)
+        frame = observation[0] if observation.ndim == 2 else observation
+        if self.temporal:
+            observation = self.history.append(frame)[None, :]
         if self.backend == "onnx":
             value = np.asarray(self.session.run(None, {self.input_name: observation})[0][0], dtype=np.float32)
             return value
@@ -193,6 +203,8 @@ def run_sequence(model, policy: Policy, reference_onnx: Path, segments: tuple[Se
     trunk = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
     metrics = TraceMetrics()
     for segment in segments:
+        if policy.temporal:
+            policy.history.reset()
         state = segment.state
         command = _command(state, segment.command_x)
         helper.command = command

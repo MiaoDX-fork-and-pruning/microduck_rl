@@ -62,7 +62,7 @@ def collect(reference_onnx: Path) -> dict[str, np.ndarray]:
         helper = PolicyInference(model, data, walking_onnx_path=str(reference_onnx),
                                  new_cmd_obs=True, use_projected_gravity=True)
         _reset(model, data, helper)
-        for segment in segments:
+        for segment_index, segment in enumerate(segments):
             behavior = g0.STATE_TO_BEHAVIOR[segment.state]
             session = ort.InferenceSession(str(TEACHERS[behavior]), providers=["CPUExecutionProvider"])
             command = g0._command(segment.state, segment.command_x)
@@ -79,7 +79,7 @@ def collect(reference_onnx: Path) -> dict[str, np.ndarray]:
                 inputs.append(conditioned)
                 actions.append(_action(session, legacy))
                 trajectory_ids.append(trajectory)
-                segment_ids.append(case_name)
+                segment_ids.append(f"{case_name}:{segment_index}:{segment.state}")
                 helper.last_action = actions[-1].copy()
                 helper.apply_action(actions[-1])
                 for _ in range(4):

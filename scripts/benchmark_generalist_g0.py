@@ -31,7 +31,9 @@ def benchmark(model, onnx_path: Path | None = None, *, seed: int = 42,
     if margin_ms < 0 or margin_ms >= control_period_ms:
         raise ValueError("margin_ms must be non-negative and below control period")
     rng = np.random.default_rng(seed)
-    inputs = rng.standard_normal((1, 71), dtype=np.float32)
+    first_linear = next((module for module in model.modules() if hasattr(module, "in_features")), None)
+    input_dim = int(first_linear.in_features) if first_linear is not None else 71
+    inputs = rng.standard_normal((1, input_dim), dtype=np.float32)
     import torch
     tensor = torch.from_numpy(inputs)
     model.eval()
@@ -45,7 +47,7 @@ def benchmark(model, onnx_path: Path | None = None, *, seed: int = 42,
             if hasattr(output, "item"):
                 output.reshape(-1)[0].item()
             pt_samples.append((time.perf_counter() - start) * 1000.0)
-    result = {"schema_version": 1, "input_dim": 71, "action_dim": 14,
+    result = {"schema_version": 1, "input_dim": input_dim, "action_dim": 14,
               "seed": seed, "warmup": warmup, "iterations": iterations,
               "control_period_ms": control_period_ms, "margin_ms": margin_ms,
               "budget_ms": control_period_ms - margin_ms,
@@ -71,6 +73,7 @@ def benchmark(model, onnx_path: Path | None = None, *, seed: int = 42,
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--onnx", type=Path)
+    parser.add_argument("--run", type=Path, help="run directory; defaults to the legacy test actor")
     parser.add_argument("--output", type=Path)
     parser.add_argument("--iterations", type=int, default=100)
     parser.add_argument("--warmup", type=int, default=20)
@@ -78,7 +81,12 @@ def main() -> None:
     args = parser.parse_args()
     import torch
     from mjlab_microduck.generalist_model import G0MultiHeadActor
-    report = benchmark(G0MultiHeadActor(), args.onnx, warmup=args.warmup,
+    if args.run:
+        from export_generalist_g0 import _load
+        model, _ = _load(args.run)
+    else:
+        model = G0MultiHeadActor()
+    report = benchmark(model, args.onnx, warmup=args.warmup,
                        iterations=args.iterations, margin_ms=args.margin_ms)
     if args.output:
         args.output.write_text(json.dumps(report, indent=2) + "\n")

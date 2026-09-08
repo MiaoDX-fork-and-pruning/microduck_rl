@@ -10,6 +10,7 @@ from pathlib import Path
 import numpy as np
 
 from mjlab_microduck.generalist_model import build_actor
+from mjlab_microduck.generalist_temporal import H4Actor
 
 
 def _sha256(path: Path) -> str:
@@ -20,11 +21,14 @@ def _load(run: Path):
     import torch
     manifest = json.loads((run / "manifest.json").read_text())
     metrics = manifest.get("metrics", manifest)
-    model = build_actor(metrics)
+    model = H4Actor(bounded=metrics.get("bounded_actions", True)) if manifest.get("schema") == "generalist-g0-h4" else build_actor(metrics)
     bundle = torch.load(run / "model.pt", map_location="cpu", weights_only=False)
     state = bundle.get("state_dict", bundle)
     model.load_state_dict(state, strict=True)
     model.eval()
+    metrics = dict(metrics)
+    metrics.setdefault("input_dim", manifest.get("input_dim", 71))
+    metrics.setdefault("schema", manifest.get("schema"))
     return model, metrics
 
 
@@ -36,11 +40,13 @@ def export_g0(run: Path, onnx_path: Path, golden_path: Path, parity_path: Path,
         raise ValueError("samples must be at least 2")
     model, metrics = _load(run)
     rng = np.random.default_rng(seed)
-    inputs = rng.standard_normal((samples, 71), dtype=np.float32)
+    input_dim = int(metrics.get("input_dim", 71))
+    inputs = rng.standard_normal((samples, input_dim), dtype=np.float32)
     # Include explicit one-hot behavior cases and zero command fields.
-    inputs[:, 48:54] = 0
-    for i in range(min(3, samples)):
-        inputs[i, 48 + i] = 1
+    if input_dim == 71:
+        inputs[:, 48:54] = 0
+        for i in range(min(3, samples)):
+            inputs[i, 48 + i] = 1
     with torch.inference_mode():
         expected = model(torch.from_numpy(inputs)).numpy().astype(np.float32)
     onnx_path.parent.mkdir(parents=True, exist_ok=True)
@@ -55,7 +61,7 @@ def export_g0(run: Path, onnx_path: Path, golden_path: Path, parity_path: Path,
     actual = np.asarray(session.run(["actions"], {"observations": inputs})[0], dtype=np.float32)
     error = np.abs(actual - expected)
     passed = bool(np.all(error <= atol + rtol * np.abs(expected)))
-    report = {"schema_version": 1, "passed": passed, "input_dim": 71, "action_dim": 14,
+    report = {"schema_version": 1, "passed": passed, "input_dim": input_dim, "action_dim": 14,
               "samples": samples, "seed": seed, "atol": atol, "rtol": rtol,
               "max_abs_error": float(error.max(initial=0.0)),
               "onnx_sha256": _sha256(onnx_path), "golden": str(golden_path),
