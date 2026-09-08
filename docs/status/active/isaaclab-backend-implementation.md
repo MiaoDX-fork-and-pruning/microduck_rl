@@ -1,10 +1,10 @@
 status: ACTIVE
 source_plan: docs/isaaclab_backend_implementation_plan.md
 control_plane: /root
-latest_intent: reproduce mjlab Velocity-Flat semantics in IsaacLab via intuitive-flow
-current_slice: checkpoint provenance and normalizer/weight cross-evaluation completed; strict trained-policy battery still blocks forward/lateral response
-blocker_kind: implementation_and_parity_evidence
-blocker_fingerprint: corrected strict policy fails forward/lateral command-response gates while accepted mjlab policy passes the same IsaacLab battery
+latest_intent: reproduce the historical IsaacLab adapted Velocity-Flat walking profile while retaining the strict MJLab-parity task
+current_slice: adapted 4096-env/6000-iteration reproduction completed; checkpoints 500-1500 pass the six-case walking battery, while later checkpoints lose translation response
+blocker_kind: adapted_checkpoint_selection_and_strict_behavior_gap
+blocker_fingerprint: historical adapted recipe reproduces walking in the 500-1500 window, but its final checkpoint loses forward/lateral response; strict parity checkpoint remains blocked on the same gate
 last_proven_evidence: >-
   `velocity_flat_home_smoke_1.json` runs the real IsaacLab 3.0.0 / Isaac Sim
   6.0.1 articulation: policy-ordered default HOME has max absolute error 0.0,
@@ -109,25 +109,26 @@ completed: >-
   lateral command response fail while zero/yaw/turn cases pass:
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Keep the strict trained-policy forward/lateral gate blocked. Do not tune
-  rewards/PPO or launch another long run; the accepted-policy A/B and the
-  normalizer/weight cross-evaluation prove the runtime can express directional
-  behavior and that normalizer drift alone is insufficient. The next bounded
-  proof is a read-only strict-run recipe audit against the mjlab runner,
-  including seed, symmetry setting, curriculum/event timing, and checkpoint
-  provenance, before any replacement run is considered.
+  Treat adapted `model_750.pt` as the current walking candidate and run ONNX
+  export plus MuJoCo/runtime rehearsal before deployment. Keep strict parity's
+  forward/lateral gate blocked. If a final adapted checkpoint is required,
+  investigate an early-stop or curriculum schedule that preserves the proven
+  500-1500 behavior window; do not infer success from total training reward.
 next_proof: >-
-  Completed: checkpoint schema/normalizer audit plus two-way normalizer/weight
-  cross-evaluation under the fixed 16-env/300-step battery. Artifacts:
-  `.cache/isaaclab-assets/velocity_flat_checkpoint_audit_p0.json` and
-  `.cache/isaaclab-assets/velocity_flat_normalizer_weight_cross_eval_p0.json`.
+  Completed: adapted run `microduck_isaaclab_velocity_flat_adapted/2026-09-08_09-08-31`
+  finished normally. Fixed six-case battery passed for `model_500`, `750`,
+  `1000`, `1250`, and `1500`; `model_2000` and `model_5999` failed only the
+  translation response cases. Detailed artifacts and hashes are recorded in
+  `docs/isaaclab_velocity_flat_adapted_profile.md`.
 stop_condition: >-
-  Do not start VelStand. Do not launch another long run while the corrected
-  strict policy fails the forward/lateral battery; do not tune reward/PPO to
-  hide behavior differences. MuJoCo/PhysX solver and same-step external-load
+  Do not use adapted `model_5999.pt` or the corrected strict checkpoint as a
+  walking deployment artifact while their forward/lateral battery gates fail.
+  Do not launch another long run or tune reward/PPO without a bounded
+  curriculum hypothesis. MuJoCo/PhysX solver and same-step external-load
   friction timing remain explicit backend limitations.
 no_touch_scope: existing mjlab behavior, uv.lock, production runtime, old long-run artifacts
 parked_todos: >-
-  MuJoCo/PhysX solver behavior and unavailable same-step solved external-load
-  torque remain explicit backend limitations. The old long-run checkpoints are
-  retained only for diagnosis. VelStand and all later task ports remain deferred.
+  Export/rehearse adapted `model_750.pt`; preserve all generated battery JSON
+  under `.cache/` as local evidence. MuJoCo/PhysX solver behavior and
+  unavailable same-step solved external-load torque remain explicit backend
+  limitations. VelStand and all later task ports remain deferred.
