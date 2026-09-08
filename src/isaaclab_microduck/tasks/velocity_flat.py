@@ -66,12 +66,19 @@ if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
 
+NUM_STEPS_PER_ENV = 24
+MIN_ROOT_HEIGHT_M = 0.055
+
+
 @configclass
 class MicroduckVelocityCommandCfg(mdp.UniformVelocityCommandCfg):
     """mjlab-compatible velocity command with a held turn-in-place bucket."""
 
     class_type: type["MicroduckVelocityCommand"] | str = "isaaclab_microduck.tasks.velocity_flat:MicroduckVelocityCommand"
+    # Match the MJLab recipe.  This bucket is part of the shared command
+    # distribution; no IsaacLab-only command buckets belong in strict mode.
     rel_turn_in_place_envs: float = 0.15
+    rel_forward_envs: float = 0.2
 
 
 class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
@@ -85,25 +92,33 @@ class MicroduckVelocityCommand(mdp.UniformVelocityCommand):
         # once so initial reset and subset reset use the same path.
         ids = _command_env_ids(env_ids, self.num_envs, self.device)
         super()._resample_command(ids)
+        if len(ids) == 0:
+            return
+        # Match mjlab's inherited forward-only bucket: positive x command,
+        # with lateral and yaw targets cleared. Standing envs are still allowed
+        # to overlap and are zeroed by the base command update.
+        forward = torch.rand(len(ids), device=self.device) < max(float(self.cfg.rel_forward_envs), 0.0)
+        forward_ids = ids[forward]
+        if len(forward_ids) > 0:
+            self.vel_command_b[forward_ids, 0] = self.vel_command_b[forward_ids, 0].abs().clamp(min=0.3)
+            self.vel_command_b[forward_ids, 1:] = 0.0
+
         fraction = float(self.cfg.rel_turn_in_place_envs)
-        if fraction <= 0.0 or len(ids) == 0:
-            return
-        select = torch.rand(len(ids), device=self.device) < fraction
+        select = torch.rand(len(ids), device=self.device) < max(fraction, 0.0)
         turn_ids = ids[select]
-        if len(turn_ids) == 0:
-            return
-        self.vel_command_b[turn_ids, :2] = 0.0
-        signs = torch.where(
-            torch.rand(len(turn_ids), device=self.device) < 0.5,
-            -torch.ones(len(turn_ids), device=self.device),
-            torch.ones(len(turn_ids), device=self.device),
-        )
-        lo, hi = self.cfg.ranges.ang_vel_z
-        magnitude = torch.empty(len(turn_ids), device=self.device).uniform_(
-            0.4 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
-        )
-        self.vel_command_b[turn_ids, 2] = signs * magnitude
-        self.is_standing_env[turn_ids] = False
+        if len(turn_ids) > 0:
+            self.vel_command_b[turn_ids, :2] = 0.0
+            signs = torch.where(
+                torch.rand(len(turn_ids), device=self.device) < 0.5,
+                -torch.ones(len(turn_ids), device=self.device),
+                torch.ones(len(turn_ids), device=self.device),
+            )
+            lo, hi = self.cfg.ranges.ang_vel_z
+            magnitude = torch.empty(len(turn_ids), device=self.device).uniform_(
+                0.4 * max(abs(lo), abs(hi)), max(abs(lo), abs(hi))
+            )
+            self.vel_command_b[turn_ids, 2] = signs * magnitude
+            self.is_standing_env[turn_ids] = False
 
 
 @configclass
@@ -457,6 +472,18 @@ def fallen_mjlab(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCf
     return torch.linalg.norm(gravity_xy, dim=-1) > 0.9396926
 
 
+def root_height_below(
+    env: ManagerBasedEnv,
+    min_height: float,
+    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot"),
+) -> torch.Tensor:
+    """Terminate below the shared minimum viable walking height."""
+
+    asset = _asset(env, asset_cfg)
+    height = asset.data.root_link_pos_w.torch[:, 2] - env.scene.env_origins[:, 2]
+    return height < min_height
+
+
 def reset_actor_history(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
     """Clear stateful actor corruption and smoothness buffers on reset."""
 
@@ -535,13 +562,6 @@ def upright_gaussian(
 
     gravity_xy = _asset(env, asset_cfg).data.projected_gravity_b.torch[:, :2]
     return torch.exp(-torch.sum(torch.square(gravity_xy), dim=1) / std**2)
-
-
-def fallen(env: ManagerBasedEnv, asset_cfg: SceneEntityCfg = SceneEntityCfg("robot")) -> torch.Tensor:
-    asset = _asset(env, asset_cfg)
-    gravity_xy = asset.data.projected_gravity_b.torch[:, :2]
-    height = asset.data.root_link_pos_w.torch[:, 2]
-    return (torch.linalg.norm(gravity_xy, dim=-1) > 0.75) | (height < 0.055)
 
 
 def spawn_ground_after_clone(env: ManagerBasedEnv, env_ids: torch.Tensor) -> None:
@@ -691,6 +711,7 @@ class CommandsCfg:
         # this latent sampling policy diverge if heading is enabled later.
         rel_heading_envs=0.0,
         rel_turn_in_place_envs=0.15,
+        rel_forward_envs=0.2,
         heading_command=False,
         ranges=mdp.UniformVelocityCommandCfg.Ranges(
             lin_vel_x=(-0.4, 0.4),
@@ -1003,6 +1024,11 @@ class RewardsCfg:
 class TerminationsCfg:
     time_out = DoneTerm(func=mdp.time_out, time_out=True)
     fallen = DoneTerm(func=fallen_mjlab, time_out=False)
+    root_height = DoneTerm(
+        func=root_height_below,
+        params={"min_height": MIN_ROOT_HEIGHT_M},
+        time_out=False,
+    )
     nan_state = DoneTerm(
         func=contact_mdp.nan_state,
         time_out=False,
@@ -1021,11 +1047,11 @@ class CurriculumCfg:
             "reward_name": "action_rate_l2",
             "weight_stages": [
                 {"step": 0, "weight": -0.1},
-                {"step": 500 * 24, "weight": -0.2},
-                {"step": 750 * 24, "weight": -0.4},
-                {"step": 1000 * 24, "weight": -0.6},
-                {"step": 1250 * 24, "weight": -0.8},
-                {"step": 1500 * 24, "weight": -1.0},
+                {"step": 500 * NUM_STEPS_PER_ENV, "weight": -0.2},
+                {"step": 750 * NUM_STEPS_PER_ENV, "weight": -0.4},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "weight": -0.6},
+                {"step": 1250 * NUM_STEPS_PER_ENV, "weight": -0.8},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "weight": -1.0},
             ],
         },
     )
@@ -1035,11 +1061,11 @@ class CurriculumCfg:
             "command_name": "base_velocity",
             "standing_stages": [
                 {"step": 0, "rel_standing_envs": 0.02},
-                {"step": 500 * 24, "rel_standing_envs": 0.05},
-                {"step": 750 * 24, "rel_standing_envs": 0.10},
-                {"step": 1000 * 24, "rel_standing_envs": 0.15},
-                {"step": 1500 * 24, "rel_standing_envs": 0.20},
-                {"step": 2000 * 24, "rel_standing_envs": 0.25},
+                {"step": 500 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.05},
+                {"step": 750 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.10},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.15},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.20},
+                {"step": 2000 * NUM_STEPS_PER_ENV, "rel_standing_envs": 0.25},
             ],
         },
     )
@@ -1049,10 +1075,10 @@ class CurriculumCfg:
             "command_name": "head_pose",
             "range_stages": [
                 {"step": 0, "ranges": ((-0.05, 0.05), (-0.05, 0.05), (-0.07, 0.07), (-0.015, 0.015))},
-                {"step": 500 * 24, "ranges": ((-0.17, 0.17), (-0.17, 0.17), (-0.21, 0.21), (-0.047, 0.047))},
-                {"step": 1000 * 24, "ranges": ((-0.39, 0.39), (-0.39, 0.39), (-0.49, 0.49), (-0.11, 0.11))},
-                {"step": 1500 * 24, "ranges": ((-0.72, 0.72), (-0.72, 0.72), (-0.91, 0.91), (-0.20, 0.20))},
-                {"step": 2000 * 24, "ranges": ((-1.10, 1.10), (-1.10, 1.10), (-1.40, 1.40), (-0.31, 0.31))},
+                {"step": 500 * NUM_STEPS_PER_ENV, "ranges": ((-0.17, 0.17), (-0.17, 0.17), (-0.21, 0.21), (-0.047, 0.047))},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "ranges": ((-0.39, 0.39), (-0.39, 0.39), (-0.49, 0.49), (-0.11, 0.11))},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "ranges": ((-0.72, 0.72), (-0.72, 0.72), (-0.91, 0.91), (-0.20, 0.20))},
+                {"step": 2000 * NUM_STEPS_PER_ENV, "ranges": ((-1.10, 1.10), (-1.10, 1.10), (-1.40, 1.40), (-0.31, 0.31))},
             ],
         },
     )
@@ -1069,9 +1095,9 @@ class CurriculumCfg:
             "event_name": "randomize_com",
             "range_stages": [
                 {"step": 0, "range": 0.003},
-                {"step": 500 * 24, "range": 0.005},
-                {"step": 1000 * 24, "range": 0.01},
-                {"step": 1500 * 24, "range": 0.015},
+                {"step": 500 * NUM_STEPS_PER_ENV, "range": 0.005},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "range": 0.01},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "range": 0.015},
             ],
         },
     )
@@ -1081,8 +1107,8 @@ class CurriculumCfg:
             "event_name": "randomize_head_com",
             "range_stages": [
                 {"step": 0, "range": 0.003},
-                {"step": 500 * 24, "range": 0.005},
-                {"step": 1000 * 24, "range": 0.01},
+                {"step": 500 * NUM_STEPS_PER_ENV, "range": 0.005},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "range": 0.01},
             ],
         },
     )
@@ -1092,9 +1118,9 @@ class CurriculumCfg:
             "reward_name": "head_pose_bias",
             "weight_stages": [
                 {"step": 0, "weight": 0.0},
-                {"step": 600 * 24, "weight": 1.0},
-                {"step": 1000 * 24, "weight": 2.0},
-                {"step": 1500 * 24, "weight": 3.0},
+                {"step": 600 * NUM_STEPS_PER_ENV, "weight": 1.0},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "weight": 2.0},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "weight": 3.0},
             ],
         },
     )

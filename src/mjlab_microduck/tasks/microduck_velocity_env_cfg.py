@@ -21,6 +21,10 @@ from copy import deepcopy
 
 NUM_STEPS_PER_ENV = 24
 
+# A walking episode is no longer valid once the trunk is below the lowest
+# viable crouch. Keep this task boundary aligned with the IsaacLab backend.
+MIN_ROOT_HEIGHT_M = 0.055
+
 # Fraction of envs commanded to spin on the spot (lin=0, |ang| ∈ [0.4·max, max]).
 TURN_IN_PLACE_FRACTION = 0.15
 
@@ -383,6 +387,11 @@ def make_microduck_velocity_env_cfg(
         func=microduck_mdp.robot_state_is_nan,
         time_out=False,
         params={"sensor_names": (feet_ground_cfg.name,)},
+    )
+    cfg.terminations["root_height"] = TerminationTermCfg(
+        func=microduck_mdp.root_height_below,
+        time_out=False,
+        params={"min_height": MIN_ROOT_HEIGHT_M},
     )
 
     cfg.events["reset_base"].params["pose_range"]["z"] = (0.12, 0.13)

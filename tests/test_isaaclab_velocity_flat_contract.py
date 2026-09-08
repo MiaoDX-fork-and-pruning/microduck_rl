@@ -2,6 +2,10 @@ from __future__ import annotations
 
 import ast
 from pathlib import Path
+from types import SimpleNamespace
+
+import pytest
+import torch
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -32,9 +36,53 @@ def test_velocity_flat_command_profile_matches_mjlab_recipe() -> None:
     assert "resampling_time_range=(3.0, 8.0)" in source
     assert "rel_standing_envs=0.02" in source
     assert "rel_turn_in_place_envs=0.15" in source
+    assert "rel_forward_envs=0.2" in source
     assert "lin_vel_x=(-0.4, 0.4)" in source
     assert "lin_vel_y=(-0.3, 0.3)" in source
     assert "ang_vel_z=(-1.0, 1.0)" in source
+    assert "rel_lateral_envs" not in source
+
+
+def test_velocity_flat_minimum_root_height_matches_mjlab_recipe() -> None:
+    isaac_source = _source(TASK)
+    mjlab_source = _source(ROOT / "src/mjlab_microduck/tasks/microduck_velocity_env_cfg.py")
+    expected = "MIN_ROOT_HEIGHT_M = 0.055"
+    assert expected in isaac_source
+    assert expected in mjlab_source
+    assert "root_height = DoneTerm(" in isaac_source
+    assert 'cfg.terminations["root_height"] = TerminationTermCfg(' in mjlab_source
+
+
+@pytest.mark.parametrize("env_ids", [slice(None), [0, 2], []])
+@pytest.mark.parametrize("forward_fraction", [0.0, 1.0])
+def test_forward_command_bucket_writes_back_only_selected_envs(env_ids, forward_fraction) -> None:
+    # Execute the production sampler without starting Isaac Sim; the base
+    # sampler is replaced with fixed draws to cover negative and small x.
+    class BaseCommand:
+        def _resample_command(self, env_ids):
+            pass
+
+    tree = ast.parse(_source(TASK))
+    nodes = [node for node in tree.body if getattr(node, "name", None) in {
+        "MicroduckVelocityCommand", "_command_env_ids",
+    }]
+    namespace = {
+        "torch": torch,
+        "mdp": SimpleNamespace(UniformVelocityCommand=BaseCommand),
+        "MicroduckVelocityCommandCfg": object,
+    }
+    exec(compile(ast.Module(body=nodes, type_ignores=[]), str(TASK), "exec"), namespace)
+    term = namespace["MicroduckVelocityCommand"]()
+    term.device, term.num_envs = "cpu", 3
+    term.cfg = SimpleNamespace(rel_forward_envs=forward_fraction, rel_turn_in_place_envs=0.0)
+    term.vel_command_b = torch.tensor([[-0.4, 0.1, 0.2], [0.35, -0.1, 0.3], [0.05, 0.2, -0.4]])
+    expected = term.vel_command_b.clone()
+    ids = namespace["_command_env_ids"](env_ids, term.num_envs, term.device)
+    if forward_fraction:
+        expected[ids, 0] = expected[ids, 0].abs().clamp(min=0.3)
+        expected[ids, 1:] = 0.0
+    term._resample_command(env_ids)
+    torch.testing.assert_close(term.vel_command_b, expected)
 
 
 def test_pose_commands_are_held_manager_terms_with_mjlab_ranges() -> None:
