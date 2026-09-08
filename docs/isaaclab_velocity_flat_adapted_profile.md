@@ -65,6 +65,16 @@ for the recommended `model_750.pt` and the final `model_5999.pt` are
 `6d90910602873fa536b27810a27f59550de3decf937ebf7a4c2e2ca9de8cf7cc` and
 `f065b791e89d5650f5aeddc932439e652a9bf1d02544e873f6f245f560404956`.
 
+The recommended checkpoint was exported through IsaacLab's official play path:
+
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_adapted/2026-09-08_09-08-31/exported/policy.onnx`
+
+The exported graph passes ONNX checker and CPU ONNX Runtime validation with
+input shape `[1, 61]` and output shape `[1, 14]`. A one-step video play attempt
+also exported the graph, but frame capture could not start because the pinned
+container image does not include `omni.replicator`; this does not affect the
+checkpoint battery results.
+
 Run a smoke test with:
 
 ```bash

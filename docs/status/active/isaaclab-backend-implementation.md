@@ -109,8 +109,8 @@ completed: >-
   lateral command response fail while zero/yaw/turn cases pass:
   `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
 next_action: >-
-  Treat adapted `model_750.pt` as the current walking candidate and run ONNX
-  export plus MuJoCo/runtime rehearsal before deployment. Keep strict parity's
+  Treat adapted `model_750.pt` as the current walking candidate and complete
+  the deployment/runtime rehearsal before deployment. Keep strict parity's
   forward/lateral gate blocked. If a final adapted checkpoint is required,
   investigate an early-stop or curriculum schedule that preserves the proven
   500-1500 behavior window; do not infer success from total training reward.
@@ -128,7 +128,9 @@ stop_condition: >-
   friction timing remain explicit backend limitations.
 no_touch_scope: existing mjlab behavior, uv.lock, production runtime, old long-run artifacts
 parked_todos: >-
-  Export/rehearse adapted `model_750.pt`; preserve all generated battery JSON
-  under `.cache/` as local evidence. MuJoCo/PhysX solver behavior and
+  ONNX export for adapted `model_750.pt` is complete; the remaining runtime
+  rehearsal is pending, and video capture needs an image with
+  `omni.replicator`. Preserve all generated battery JSON under `.cache/` as
+  local evidence. MuJoCo/PhysX solver behavior and
   unavailable same-step solved external-load torque remain explicit backend
   limitations. VelStand and all later task ports remain deferred.
