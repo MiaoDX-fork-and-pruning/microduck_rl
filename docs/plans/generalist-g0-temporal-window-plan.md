@@ -1,6 +1,6 @@
 # Generalist G0 Temporal Window Plan
 
-Status: APPROVED_PENDING_IMPLEMENTATION
+Status: IN_PROGRESS
 
 ## Goal
 
@@ -112,3 +112,15 @@ implementation.
   padding.
 - DAgger is gated on all standalone behavior passes and is limited to one round.
 - No production ABI or scheduler change is included.
+
+## Implementation Evidence
+
+- H4 schema and deterministic history implementation: `src/mjlab_microduck/generalist_temporal.py`.
+- Canonical H4 training entry point: `scripts/train_generalist_canonical.py --temporal-window`.
+- H4-aware evaluator, export, benchmark, canonical collection, and one-round
+  DAgger guard are wired while preserving the legacy 71D path.
+- Focused contract proof: 37 tests passed (schema, history, model, evaluator,
+  export, benchmark, and DAgger helpers).
+- Remaining gates: collect/hash the seven canonical trajectories, train the H4
+  BC probe, run all three standalone gates, and only then consider one DAgger
+  round. No candidate is promoted to production.
