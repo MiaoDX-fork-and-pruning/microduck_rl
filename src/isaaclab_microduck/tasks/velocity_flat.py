@@ -1190,6 +1190,10 @@ class IsaacLabVelocityFlatAdaptedEnvCfg(IsaacLabVelocityFlatEnvCfg):
 
     def __post_init__(self) -> None:
         super().__post_init__()
+        # The historical IsaacLab run predates the strict profile's separate
+        # low-height guard.  Keep its orientation-only termination so a new
+        # run has the same failure boundary as the known-good checkpoint.
+        self.terminations.root_height = None
         command = self.commands.base_velocity
         command.rel_forward_envs = 0.0
         command.rel_lateral_envs = 0.25

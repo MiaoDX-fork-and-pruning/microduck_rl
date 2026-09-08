@@ -55,6 +55,7 @@ def test_adapted_profile_preserves_known_good_training_manifest() -> None:
     assert "self.rewards.pose.weight = 0.5" in source
     assert "self.rewards.air_time.weight = 1.0" in source
     assert '"step": 0, "weight": -0.1' in source
+    assert "self.terminations.root_height = None" in source
     assert "class MicroduckVelocityFlatAdaptedPPORunnerCfg" in runner_source
     assert "microduck_isaaclab_velocity_flat_adapted" in runner_source
     assert '"IsaacLab-Velocity-Flat-MicroDuck-Adapted"' in registry_source

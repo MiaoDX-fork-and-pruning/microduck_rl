@@ -6,9 +6,11 @@ IsaacLab-specific training recipe that produced the strongest locomotion result
 in this repository.
 
 The adapted profile shares the robot asset, 61D actor observation ABI, 14D
-action ABI, BAM actuator, domain randomization, root-height termination,
-privileged critic, and PPO architecture with strict mode. It changes only the
-values recorded in the historical run manifest:
+action ABI, BAM actuator, domain randomization, privileged critic, and PPO
+architecture with strict mode. It restores the historical orientation-only
+termination boundary; strict mode additionally has a separate root-height
+guard. The adapted profile changes only the values recorded in the historical
+run manifest:
 
 | Setting | Strict | Adapted |
 | --- | ---: | ---: |
