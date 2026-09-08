@@ -75,6 +75,13 @@ also exported the graph, but frame capture could not start because the pinned
 container image does not include `omni.replicator`; this does not affect the
 checkpoint battery results.
 
+A headless MuJoCo rehearsal through `scripts/infer_policy.py` also loaded the
+graph with `--new-cmd-obs` and produced finite actions for zero, forward,
+lateral, and yaw commands. The resulting motion is not a cross-backend
+acceptance result: forward included substantial yaw drift and lateral response
+was near zero. Use the IsaacLab battery for this profile's reproduction claim;
+run the normal sim2real/runtime acceptance separately before deployment.
+
 Run a smoke test with:
 
 ```bash
