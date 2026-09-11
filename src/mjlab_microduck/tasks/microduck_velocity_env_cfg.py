@@ -58,7 +58,8 @@ USE_PROJECTED_GRAVITY = True  # If True, use projected gravity instead of raw ac
 
 # Domain randomization ranges (adjust as needed)
 # Conservative ranges proven to be stable - can increase gradually if needed
-COM_RANDOMIZATION_RANGE = 0.003  # ±3mm initial, ramped to ±8mm via curriculum
+# Initial per-axis offset; the curriculum below reaches +/-15 mm.
+COM_RANDOMIZATION_RANGE = 0.003  # +/-3 mm at reset
 # Head CoM randomization: applied per-episode to every body of the head assembly
 # (neck → neck_pitch → yaw_roll_motion → head-roll body). Same non-accumulating
 # mechanism as the trunk CoM randomization above. The head-roll body is named
@@ -66,7 +67,8 @@ COM_RANDOMIZATION_RANGE = 0.003  # ±3mm initial, ramped to ±8mm via curriculum
 # hence the alternation. NOTE: bearing_roll is NOT a head body — in both models
 # it is the right-hip-yaw link (child of trunk_base); it has always been listed
 # here by mistake and is kept only to preserve existing DR behavior.
-HEAD_COM_RANDOMIZATION_RANGE = 0.003  # ±3mm initial, ramped via curriculum
+# Initial per-axis offset; the curriculum below reaches +/-10 mm.
+HEAD_COM_RANDOMIZATION_RANGE = 0.003  # +/-3 mm at reset
 HEAD_BODY_NAMES = (
     "neck",
     "neck_pitch",
@@ -666,11 +668,11 @@ def make_microduck_velocity_env_cfg(
     #   neck_pitch, head_pitch, head_yaw, head_roll). Tracked as a primary
     # reward — see "head_pose_tracking" added below. Initial ranges are small
     # non-zero so input neurons stay alive from step 0; curriculum widens them.
-    # Per-joint final caps reflect each joint's mechanically reachable delta
-    # from HOME (XML limits minus HOME offset, with ~10% safety margin):
-    #   neck_pitch / head_pitch: ±1.10 rad (limit ±π/2 with HOME=±20°)
-    #   head_yaw                : ±1.40 rad (limit ±π/2 with HOME=0)
-    #   head_roll               : ±0.31 rad (limit ±20°)
+    # These are historical command caps, expressed as deltas from HOME. They
+    # are not all symmetric mechanical margins: neck_pitch has HOME=0.3491 rad
+    # and an XML upper limit of 1.0472 rad, so its +1.10-rad request is above
+    # that limit. Keep the range unchanged for checkpoint compatibility and
+    # treat reachability as a separate audit item.
     # Initial ranges are small non-zero so input neurons stay alive from step 0.
     cfg.commands["head_pose"] = microduck_mdp.UniformPoseCommandCfg(
         resampling_time_range=HEAD_POSE_CMD_RESAMPLE_S,
@@ -806,11 +808,11 @@ def make_microduck_velocity_env_cfg(
             "command_name": "twist",
             "standing_stages": [
                 {"step": 0,           "rel_standing_envs": 0.02},
-                {"step": 500 * 24,    "rel_standing_envs": 0.05},
-                {"step": 750 * 24,    "rel_standing_envs": 0.1},
-                {"step": 1000 * 24,   "rel_standing_envs": 0.15},
-                {"step": 1500 * 24,   "rel_standing_envs": 0.2},
-                {"step": 2000 * 24,   "rel_standing_envs": 0.25},
+                {"step": 500 * NUM_STEPS_PER_ENV,    "rel_standing_envs": 0.05},
+                {"step": 750 * NUM_STEPS_PER_ENV,    "rel_standing_envs": 0.1},
+                {"step": 1000 * NUM_STEPS_PER_ENV,   "rel_standing_envs": 0.15},
+                {"step": 1500 * NUM_STEPS_PER_ENV,   "rel_standing_envs": 0.2},
+                {"step": 2000 * NUM_STEPS_PER_ENV,   "rel_standing_envs": 0.25},
             ],
         },
     )
@@ -818,10 +820,10 @@ def make_microduck_velocity_env_cfg(
     # NOTE: no velocity-command-range curriculum — ranges are fixed (see the
     # command section above).
 
-    # Head pose command range curriculum — per-joint, scaled to each joint's
-    # reachable delta from HOME (with ~10% margin from XML limits). Same 5-stage
-    # shape as before (5% → 15% → 35% → 65% → 100% of each joint's final cap).
-    # neck/head pitch final ±1.10 rad, head_yaw ±1.40, head_roll ±0.31.
+    # Head pose command range curriculum. These are the historical task caps,
+    # not a guarantee that every symmetric delta is mechanically reachable;
+    # see the command declaration above for the neck_pitch exception. Same
+    # 5-stage shape as before (5% -> 15% -> 35% -> 65% -> 100%).
     cfg.curriculum["head_pose_range"] = CurriculumTermCfg(
         func=microduck_mdp.pose_command_range_curriculum,
         params={
@@ -829,10 +831,10 @@ def make_microduck_velocity_env_cfg(
             "range_stages": [
                 # step,                ranges = ((neck_pitch), (head_pitch), (head_yaw),  (head_roll))
                 {"step": 0,         "ranges": ((-0.05, 0.05),  (-0.05, 0.05),  (-0.07, 0.07),  (-0.015, 0.015))},
-                {"step": 500 * 24,  "ranges": ((-0.17, 0.17),  (-0.17, 0.17),  (-0.21, 0.21),  (-0.047, 0.047))},
-                {"step": 1000 * 24, "ranges": ((-0.39, 0.39),  (-0.39, 0.39),  (-0.49, 0.49),  (-0.11, 0.11))},
-                {"step": 1500 * 24, "ranges": ((-0.72, 0.72),  (-0.72, 0.72),  (-0.91, 0.91),  (-0.20, 0.20))},
-                {"step": 2000 * 24, "ranges": ((-1.10, 1.10),  (-1.10, 1.10),  (-1.40, 1.40),  (-0.31, 0.31))},
+                {"step": 500 * NUM_STEPS_PER_ENV,  "ranges": ((-0.17, 0.17),  (-0.17, 0.17),  (-0.21, 0.21),  (-0.047, 0.047))},
+                {"step": 1000 * NUM_STEPS_PER_ENV, "ranges": ((-0.39, 0.39),  (-0.39, 0.39),  (-0.49, 0.49),  (-0.11, 0.11))},
+                {"step": 1500 * NUM_STEPS_PER_ENV, "ranges": ((-0.72, 0.72),  (-0.72, 0.72),  (-0.91, 0.91),  (-0.20, 0.20))},
+                {"step": 2000 * NUM_STEPS_PER_ENV, "ranges": ((-1.10, 1.10),  (-1.10, 1.10),  (-1.40, 1.40),  (-0.31, 0.31))},
             ],
         },
     )
@@ -870,9 +872,9 @@ def make_microduck_velocity_env_cfg(
                     # BACKWARD balance untrainable. Regression timeline matched the
                     # ramp increases: 0.015 → 0.02 → 0.03 as policies got worse.
                     {"step": 0,          "range": 0.003},
-                    {"step": 500 * 24,  "range": 0.005},
-                    {"step": 1000 * 24,  "range": 0.01},
-                    {"step": 1500 * 24,  "range": 0.015},
+                    {"step": 500 * NUM_STEPS_PER_ENV,  "range": 0.005},
+                    {"step": 1000 * NUM_STEPS_PER_ENV,  "range": 0.01},
+                    {"step": 1500 * NUM_STEPS_PER_ENV,  "range": 0.015},
                 ],
             },
         )
@@ -887,8 +889,8 @@ def make_microduck_velocity_env_cfg(
                     # Capped at ±10 mm (2026-07 audit — same over-conservatism
                     # concern as trunk CoM; head is a large lever arm).
                     {"step": 0,          "range": 0.003},
-                    {"step": 500 * 24,  "range": 0.005},
-                    {"step": 1000 * 24,  "range": 0.01},
+                    {"step": 500 * NUM_STEPS_PER_ENV,  "range": 0.005},
+                    {"step": 1000 * NUM_STEPS_PER_ENV,  "range": 0.01},
                 ],
             },
         )
