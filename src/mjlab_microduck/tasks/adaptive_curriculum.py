@@ -193,3 +193,46 @@ class CapabilityGate:
         if not isinstance(trace, list):
             raise ValueError("adaptive state has invalid trace")
         self.trace = [Transition(**dict(item)) for item in trace]
+
+
+ADAPTIVE_AXIS_CONFIGS = (
+    AxisConfig(
+        "com_range",
+        (0.003, 0.005, 0.010, 0.015),
+        upper_threshold=0.80,
+        lower_threshold=0.60,
+        pass_windows=2,
+        fail_windows=2,
+        min_dwell_steps=10 * 24,
+    ),
+    AxisConfig(
+        "head_com_range",
+        (0.003, 0.005, 0.010),
+        upper_threshold=0.80,
+        lower_threshold=0.60,
+        pass_windows=2,
+        fail_windows=2,
+        min_dwell_steps=10 * 24,
+    ),
+)
+
+
+def apply_stage_to_env(env: object, axis_name: str, stage_value: object) -> None:
+    """Apply a capability transition to the live MJLab event manager.
+
+    Managers deepcopy configuration during construction, so this intentionally
+    resolves the term through ``get_term_cfg``.  The helper accepts ``object``
+    to keep the controller importable and unit-testable without MJLab.
+    """
+
+    event_name = {
+        "com_range": "randomize_com",
+        "head_com_range": "randomize_head_com",
+    }.get(axis_name)
+    if event_name is None:
+        raise KeyError(f"no MJLab event binding for adaptive axis: {axis_name}")
+    event_manager = getattr(env, "event_manager", None)
+    if event_manager is None:
+        raise AttributeError("adaptive environment has no event_manager")
+    event_cfg = event_manager.get_term_cfg(event_name)
+    event_cfg.params["ranges"] = (-float(stage_value), float(stage_value))

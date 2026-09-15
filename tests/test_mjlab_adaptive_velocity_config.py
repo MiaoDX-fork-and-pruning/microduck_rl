@@ -12,9 +12,9 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
     assert adaptive.curriculum == {}
     assert adaptive.observations == canonical.observations
     assert adaptive.actions == canonical.actions
+    assert adaptive.commands["twist"].rel_standing_envs == 0.02
 
 
 def test_adaptive_runner_has_distinct_experiment_name() -> None:
     assert AdaptiveMicroduckRlCfg.experiment_name == "velocity_adaptive"
     assert AdaptiveMicroduckRlCfg.run_name == "velocity_adaptive"
-

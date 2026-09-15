@@ -2,7 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from mjlab_microduck.tasks.adaptive_curriculum import AxisConfig, CapabilityGate
+from mjlab_microduck.tasks.adaptive_curriculum import (
+    ADAPTIVE_AXIS_CONFIGS,
+    AxisConfig,
+    CapabilityGate,
+    apply_stage_to_env,
+)
 
 
 def _gate() -> CapabilityGate:
@@ -57,3 +62,29 @@ def test_missing_or_nonfinite_bucket_is_rejected() -> None:
         gate.update(0, {"zero": 1.0})
     with pytest.raises(ValueError):
         gate.update(0, {"zero": float("nan"), "forward": 1.0, "yaw": 1.0})
+
+
+def test_default_axes_match_canonical_com_endpoints() -> None:
+    assert ADAPTIVE_AXIS_CONFIGS[0].name == "com_range"
+    assert ADAPTIVE_AXIS_CONFIGS[0].stages == (0.003, 0.005, 0.010, 0.015)
+    assert ADAPTIVE_AXIS_CONFIGS[1].stages[-1] == 0.010
+
+
+def test_stage_binding_updates_live_event_manager_cfg() -> None:
+    class EventCfg:
+        def __init__(self):
+            self.params = {}
+
+    class EventManager:
+        def __init__(self):
+            self.cfg = EventCfg()
+
+        def get_term_cfg(self, name):
+            assert name == "randomize_com"
+            return self.cfg
+
+    class Env:
+        event_manager = EventManager()
+
+    apply_stage_to_env(Env(), "com_range", 0.01)
+    assert Env.event_manager.cfg.params["ranges"] == (-0.01, 0.01)
