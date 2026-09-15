@@ -31,6 +31,7 @@ from .microduck_adaptive_velocity_env_cfg import (
     make_microduck_adaptive_velocity_env_cfg,
     AdaptiveMicroduckRlCfg,
 )
+from .adaptive_runner import AdaptiveMicroduckOnPolicyRunner
 from .microduck_standup_env_cfg import (
     make_microduck_standup_env_cfg,
     MicroduckStandUpRlCfg,
@@ -103,7 +104,7 @@ register_mjlab_task(
     env_cfg=make_microduck_adaptive_velocity_env_cfg(),
     play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True),
     rl_cfg=AdaptiveMicroduckRlCfg,
-    runner_cls=MicroduckOnPolicyRunner,
+    runner_cls=AdaptiveMicroduckOnPolicyRunner,
 )
 
 # VelStand — walking + fall recovery + body pose control in one policy.

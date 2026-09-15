@@ -3,6 +3,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
+from mjlab_microduck.tasks import AdaptiveMicroduckOnPolicyRunner
 
 
 def test_adaptive_factory_is_separate_static_initial_slice() -> None:
@@ -18,3 +19,4 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
 def test_adaptive_runner_has_distinct_experiment_name() -> None:
     assert AdaptiveMicroduckRlCfg.experiment_name == "velocity_adaptive"
     assert AdaptiveMicroduckRlCfg.run_name == "velocity_adaptive"
+    assert AdaptiveMicroduckOnPolicyRunner.__name__ == "AdaptiveMicroduckOnPolicyRunner"

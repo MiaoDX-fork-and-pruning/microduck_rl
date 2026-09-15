@@ -226,9 +226,11 @@ a required architectural change.
 
 1. **Implemented:** add a pure stateful capability-gate helper and unit tests;
    keep it independent of MJLab so state transitions are deterministic.
-2. Add frozen-battery evaluation and transition logging. The current gate owns
-   the transition trace and serializable resume state; the battery adapter is
-   still pending.
+2. **Implemented:** add the runner adapter for frozen-battery evaluation
+   results. `record_capability_metrics(...)` applies one gated live-manager
+   transition at a time, and checkpoint `infos` carries the trace/state for
+   resume. The battery process that produces the metrics remains an experiment
+   harness, not an environment-side reward signal.
 3. Add a distinct adaptive Velocity task factory that starts with all axes at
    initial values, with standing fixed at `0.02` and reward-weight adaptation
    disabled for the first phase.
