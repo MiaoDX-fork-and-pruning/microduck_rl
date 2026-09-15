@@ -20,3 +20,8 @@ def test_adaptive_runner_has_distinct_experiment_name() -> None:
     assert AdaptiveMicroduckRlCfg.experiment_name == "velocity_adaptive"
     assert AdaptiveMicroduckRlCfg.run_name == "velocity_adaptive"
     assert AdaptiveMicroduckOnPolicyRunner.__name__ == "AdaptiveMicroduckOnPolicyRunner"
+
+
+def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
+    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static").adaptive_axis_mode == "all_static"
+    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="com").adaptive_axis_mode == "com"
