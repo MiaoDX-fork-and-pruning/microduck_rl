@@ -1,4 +1,4 @@
-jobName: microduck-adaptive-curriculum-control
+jobName: microduck-adaptive-curriculum-control-r2
 description: MJLab canonical fixed-schedule control from holy-ape af06b34
 accessType: PRIVATE
 imageConfig:
@@ -6,7 +6,7 @@ imageConfig:
   imageCommand: |
     set -euo pipefail
     export PYTHONUNBUFFERED=1
-    export PYTHONPATH=/ml-engine/code/src
+    export PYTHONPATH=/mnt/cloudml/source/src
     cd /mnt/cloudml/output
     /opt/microduck_rl/.venv/bin/train Mjlab-Velocity-Flat-MicroDuck --env.scene.num-envs 4096 --agent.max_iterations 4000 --agent.logger tensorboard --agent.run_name wave1-control
 queueId: '11759'
@@ -27,7 +27,7 @@ juiceFsMountConfigs:
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
-    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-control-af06b34
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-control-r2-af06b34
     mountPath: /mnt/cloudml/output
     readOnly: false
 retryConfig:
