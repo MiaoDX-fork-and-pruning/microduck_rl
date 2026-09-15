@@ -1,5 +1,5 @@
-jobName: microduck-adaptive-curriculum-pipeline-30ebb4e-r4
-description: Export-six-bucket-gate validation from holy-ape 30ebb4e
+jobName: microduck-adaptive-curriculum-gate-resume-30ebb4e-r5
+description: Resume second frozen battery window and verify adaptive transition
 accessType: PRIVATE
 imageConfig:
   imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
@@ -8,11 +8,9 @@ imageConfig:
     export PYTHONUNBUFFERED=1
     export WANDB_MODE=disabled
     export PYTHONPATH=/mnt/cloudml/source/src
-    checkpoint=$(find /mnt/cloudml/input/adaptive-run -name 'model_*.pt' -type f | sort -V | tail -n 1)
-    test -n "$checkpoint"
-    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/export.py Mjlab-Velocity-Flat-Adaptive-MicroDuck --checkpoint-file "$checkpoint" --onnx-file /mnt/cloudml/output/model_20.onnx --device cpu
-    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/run_adaptive_capability_battery.py --onnx /mnt/cloudml/output/model_20.onnx --output /mnt/cloudml/output/battery --duration-seconds 6.0
-    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/battery/capability.json --state /mnt/cloudml/output/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 20 --checkpoint "$checkpoint"
+    cp /mnt/cloudml/input/battery/capability.json /mnt/cloudml/output/capability.json
+    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/capability.json --state /mnt/cloudml/input/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 44 --checkpoint model_19.pt
+    grep -q '0.005' /mnt/cloudml/output/adaptive-stage.json
 queueId: '11759'
 priority: 5
 framework: pytorch
@@ -31,12 +29,12 @@ juiceFsMountConfigs:
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
-    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-282b01e-r3
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r4
     mountPath: /mnt/cloudml/input
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
-    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r4
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r5
     mountPath: /mnt/cloudml/output
     readOnly: false
 retryConfig:
