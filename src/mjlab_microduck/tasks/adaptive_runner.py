@@ -12,6 +12,20 @@ from .adaptive_curriculum import (
 from . import MicroduckOnPolicyRunner
 
 
+def _manager_env(env):
+    """Resolve the ManagerBasedRlEnv behind VecEnv wrappers."""
+    current = env
+    seen: set[int] = set()
+    while not hasattr(current, "event_manager"):
+        if id(current) in seen:
+            raise AttributeError("could not resolve adaptive environment event_manager")
+        seen.add(id(current))
+        current = getattr(current, "unwrapped", None)
+        if current is None:
+            raise AttributeError("adaptive environment has no event_manager")
+    return current
+
+
 class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
     """Canonical PPO runner plus explicit, checkpointed curriculum state."""
 
@@ -56,7 +70,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         )
         if transition is not None:
             apply_stage_to_env(
-                self.env,
+                _manager_env(self.env),
                 transition.axis,
                 self.capability_gate.stage_value(transition.axis),
             )
@@ -75,7 +89,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.capability_gate.load_state_dict(infos["adaptive_curriculum"])
             for axis_name, state in self.capability_gate.states.items():
                 apply_stage_to_env(
-                    self.env,
+                    _manager_env(self.env),
                     axis_name,
                     self.capability_gate.stage_value(axis_name),
                 )
