@@ -1,0 +1,45 @@
+jobName: microduck-adaptive-curriculum-pipeline-282b01e
+description: Executable adaptive train-export-six-bucket-gate pipeline from holy-ape 282b01e
+accessType: PRIVATE
+imageConfig:
+  imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+  imageCommand: |
+    set -euo pipefail
+    export PYTHONUNBUFFERED=1
+    export PYTHONPATH=/mnt/cloudml/source/src
+    cd /mnt/cloudml/output
+    /opt/microduck_rl/.venv/bin/train Mjlab-Velocity-Flat-Adaptive-MicroDuck --env.scene.num-envs 4096 --agent.max_iterations 20 --agent.save-interval 20 --agent.experiment-name /mnt/cloudml/output/adaptive-run --agent.run-name pipeline
+    checkpoint=$(find /mnt/cloudml/output/adaptive-run -name 'model_20.pt' -type f | sort | tail -n 1)
+    test -n "$checkpoint"
+    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/export.py Mjlab-Velocity-Flat-Adaptive-MicroDuck --checkpoint-file "$checkpoint" --onnx-file /mnt/cloudml/output/model_20.onnx --device cpu
+    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/run_adaptive_capability_battery.py --onnx /mnt/cloudml/output/model_20.onnx --output /mnt/cloudml/output/battery --duration-seconds 6.0
+    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/battery/capability.json --state /mnt/cloudml/output/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 20 --checkpoint "$checkpoint"
+queueId: '11759'
+priority: 5
+framework: pytorch
+resourceConfigs:
+  - nodeRole: worker
+    nodeNumber: 1
+    perNodeResourceSpec:
+      resourcePriority: GUARANTEED
+      resourceName: cloudml.ng1r49-8-8.13-107
+      resourceNumber: 1
+juiceFsMountConfigs:
+  - volume: robot-intelligent-planning-data
+    juiceFsCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/source/adaptive-curriculum/282b01e
+    mountPath: /mnt/cloudml/source
+    readOnly: true
+  - volume: robot-intelligent-planning-data
+    juiceFsCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-282b01e
+    mountPath: /mnt/cloudml/output
+    readOnly: false
+retryConfig:
+  enableRetry: false
+  maxRetryTimes: 0
+  policySets:
+    - JobFailed
+diagOptions:
+  - name: HangDetection
+    enable: false
