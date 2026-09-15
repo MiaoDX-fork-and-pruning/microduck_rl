@@ -41,6 +41,7 @@ PROFILE_SCENES = {
 }
 
 POLICY_PROFILES = {
+    "adaptive_velocity": "walk_all_collisions",
     "velocity_flat": "walk_all_collisions",
     "velstand_flat": "walk_all_collisions",
     "sitstand_flat": "walk_all_collisions",
@@ -57,6 +58,7 @@ POLICY_PROFILES = {
 }
 
 LOCOMOTION_POLICIES = {"velocity_flat", "velocity_rollers"}
+ADAPTIVE_POLICIES = {"adaptive_velocity"}
 PHASE_POLICIES = {"ground_pick_flat", "roller_crouch", "spin"}
 RECOVERY_POLICIES = {"standup_flat", "roller_standup", "roulade_flat"}
 
@@ -70,6 +72,21 @@ def sha256(path: Path) -> str:
 
 
 def command_cases(policy_id: str, smoke: bool) -> list[dict[str, Any]]:
+    if policy_id in ADAPTIVE_POLICIES:
+        buckets = (
+            ("zero", (0.0, 0.0, 0.0)),
+            ("forward", (0.12, 0.0, 0.0)),
+            ("lateral", (0.0, 0.12, 0.0)),
+            ("yaw", (0.0, 0.0, 0.8)),
+            ("turn-left", (0.08, 0.0, 0.8)),
+            ("turn-right", (0.08, 0.0, -0.8)),
+        )
+        if smoke:
+            buckets = buckets[:1]
+        return [
+            {"id": name, "bucket": name, "command": command, "input_mode": "direct_step"}
+            for name, command in buckets
+        ]
     if policy_id in LOCOMOTION_POLICIES:
         speeds = COMMAND_SPEEDS[:1] if smoke else COMMAND_SPEEDS
         modes = COMMAND_MODES[:1] if smoke else COMMAND_MODES
@@ -122,7 +139,9 @@ def contact_names(model: mujoco.MjModel, data: mujoco.MjData) -> list[str]:
 
 def requested_command(policy_id: str, case: dict[str, Any], step: int, steps: int) -> np.ndarray:
     command = np.zeros(13, dtype=np.float32)
-    if policy_id in LOCOMOTION_POLICIES:
+    if policy_id in ADAPTIVE_POLICIES:
+        command[:3] = np.asarray(case["command"], dtype=np.float32)
+    elif policy_id in LOCOMOTION_POLICIES:
         command[0] = float(case["speed"])
     elif policy_id == "sitstand_flat":
         command[0] = 1.0 if step < steps // 2 else 0.0
