@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: planned
+Status: decomposed for execution
 Date: 2026-09-15
 Related:
 
@@ -244,3 +244,19 @@ The project does not need to adopt the most sophisticated method. The chosen
 system is the smallest one that reliably produces a suitable policy under the
 fixed held-out battery and preserves the repository's sim-to-real contracts.
 The fixed schedule remains the production fallback until that result is shown.
+
+## Executable planning loop output
+
+The initial document is a roadmap, not an executor handoff. The planning loop
+produced the two bounded, reviewable implementation plans below. They resolve
+the report, axis, evaluator, checkpoint, rollback, and verification contracts
+before any matched-budget compute is requested.
+
+1. [`00-capability-signal-PLAN.md`](mjlab-adaptive-curriculum-v2/00-capability-signal-PLAN.md)
+   defines the continuous capability report and end-to-end axis isolation.
+2. [`01-runner-control-PLAN.md`](mjlab-adaptive-curriculum-v2/01-runner-control-PLAN.md)
+   makes the adaptive runner the state authority after Phase 0 passes.
+
+Phase 2 (matched-budget multi-seed experiments), Phase 3 (constrained Codex
+advisor), and Phase 4 (stronger active teachers) remain intentionally parked
+until both executable plans pass their gates.
