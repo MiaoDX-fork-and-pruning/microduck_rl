@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum Proposal
 
-Status: proposed; no production behavior changed
+Status: phase 1 implemented; adaptive experiment not yet run
 Date: 2026-09-14
 
 ## Execution boundary
@@ -224,9 +224,11 @@ a required architectural change.
 
 ## Implementation sequence
 
-1. Add a pure stateful capability-gate helper and unit tests; do not wire it to
-   training yet.
-2. Add frozen-battery evaluation and transition logging.
+1. **Implemented:** add a pure stateful capability-gate helper and unit tests;
+   keep it independent of MJLab so state transitions are deterministic.
+2. Add frozen-battery evaluation and transition logging. The current gate owns
+   the transition trace and serializable resume state; the battery adapter is
+   still pending.
 3. Add a distinct adaptive Velocity task factory that starts with all axes at
    initial values, with standing fixed at `0.02` and reward-weight adaptation
    disabled for the first phase.

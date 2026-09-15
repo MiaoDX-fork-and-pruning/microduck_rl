@@ -27,6 +27,10 @@ from .microduck_velocity_env_cfg import (
     make_microduck_velocity_env_cfg,
     MicroduckRlCfg,
 )
+from .microduck_adaptive_velocity_env_cfg import (
+    make_microduck_adaptive_velocity_env_cfg,
+    AdaptiveMicroduckRlCfg,
+)
 from .microduck_standup_env_cfg import (
     make_microduck_standup_env_cfg,
     MicroduckStandUpRlCfg,
@@ -91,6 +95,14 @@ register_mjlab_task(
     env_cfg=make_microduck_velocity_env_cfg(rough=True),
     play_env_cfg=make_microduck_velocity_env_cfg(play=True, rough=True),
     rl_cfg=MicroduckRlCfg,
+    runner_cls=MicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-Velocity-Flat-Adaptive-MicroDuck",
+    env_cfg=make_microduck_adaptive_velocity_env_cfg(),
+    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True),
+    rl_cfg=AdaptiveMicroduckRlCfg,
     runner_cls=MicroduckOnPolicyRunner,
 )
 

@@ -1,0 +1,195 @@
+"""Capability-gated curriculum state used by the MJLab adaptive experiment.
+
+The gate is deliberately independent of MJLab and torch.  An evaluator feeds it
+fixed-seed, bucket-level metrics at evaluation windows; the training adapter can
+then apply the returned one-stage transition to live manager term configs.
+"""
+
+from __future__ import annotations
+
+from dataclasses import dataclass
+from typing import Mapping
+
+
+@dataclass(frozen=True)
+class AxisConfig:
+    """Stages and hysteresis settings for one difficulty axis."""
+
+    name: str
+    stages: tuple[object, ...]
+    upper_threshold: float
+    lower_threshold: float
+    pass_windows: int = 2
+    fail_windows: int = 2
+    min_dwell_steps: int = 0
+
+    def __post_init__(self) -> None:
+        if not self.stages:
+            raise ValueError("an adaptive axis needs at least one stage")
+        if not 0.0 <= self.lower_threshold <= self.upper_threshold:
+            raise ValueError("thresholds must satisfy 0 <= lower <= upper")
+        if self.pass_windows < 1 or self.fail_windows < 1:
+            raise ValueError("pass_windows and fail_windows must be positive")
+        if self.min_dwell_steps < 0:
+            raise ValueError("min_dwell_steps cannot be negative")
+
+
+@dataclass
+class AxisState:
+    current_stage: int = 0
+    last_transition_step: int = -1
+    pass_count: int = 0
+    fail_count: int = 0
+    ema_score: float | None = None
+
+
+@dataclass(frozen=True)
+class Transition:
+    step: int
+    axis: str
+    old_stage: int
+    new_stage: int
+    score: float
+    threshold: float
+    checkpoint: str | None
+    seed: int
+
+    def as_dict(self) -> dict[str, object]:
+        return {
+            "step": self.step,
+            "axis": self.axis,
+            "old_stage": self.old_stage,
+            "new_stage": self.new_stage,
+            "score": self.score,
+            "threshold": self.threshold,
+            "checkpoint": self.checkpoint,
+            "seed": self.seed,
+        }
+
+
+class CapabilityGate:
+    """Advance or regress one axis from a conservative bucket aggregate.
+
+    ``metrics`` must contain every name in ``critical_buckets``.  Advancement
+    uses the lower-tail score and a preservation check against the best score
+    seen at the current frontier.  The controller changes at most one axis and
+    one stage per call, making its trace deterministic and easy to resume.
+    """
+
+    def __init__(
+        self,
+        axes: tuple[AxisConfig, ...],
+        *,
+        critical_buckets: tuple[str, ...],
+        ema_alpha: float = 0.25,
+        preservation_tolerance: float = 0.05,
+    ) -> None:
+        if not axes:
+            raise ValueError("at least one adaptive axis is required")
+        if not critical_buckets:
+            raise ValueError("at least one critical bucket is required")
+        if not 0.0 < ema_alpha <= 1.0:
+            raise ValueError("ema_alpha must be in (0, 1]")
+        if not 0.0 <= preservation_tolerance < 1.0:
+            raise ValueError("preservation_tolerance must be in [0, 1)")
+        names = [axis.name for axis in axes]
+        if len(set(names)) != len(names):
+            raise ValueError("axis names must be unique")
+        self.axes = {axis.name: axis for axis in axes}
+        self.axis_order = names
+        self.critical_buckets = critical_buckets
+        self.ema_alpha = ema_alpha
+        self.preservation_tolerance = preservation_tolerance
+        self.states = {axis.name: AxisState() for axis in axes}
+        self.best_metrics: dict[str, float] = {}
+        self.trace: list[Transition] = []
+
+    def update(
+        self,
+        step: int,
+        metrics: Mapping[str, float],
+        *,
+        checkpoint: str | None = None,
+        seed: int = 0,
+    ) -> Transition | None:
+        missing = [name for name in self.critical_buckets if name not in metrics]
+        if missing:
+            raise KeyError(f"missing capability buckets: {', '.join(missing)}")
+        values = {name: float(metrics[name]) for name in self.critical_buckets}
+        if any(value != value or value == float("inf") or value == float("-inf") for value in values.values()):
+            raise ValueError("capability metrics must be finite")
+        score = min(values.values())
+        previous_best = self.best_metrics.copy()
+        for name, value in values.items():
+            self.best_metrics[name] = max(self.best_metrics.get(name, value), value)
+
+        # Evaluate axes in stable order and transition only the first eligible one.
+        for axis_name in self.axis_order:
+            axis = self.axes[axis_name]
+            state = self.states[axis_name]
+            state.ema_score = score if state.ema_score is None else (
+                self.ema_alpha * score + (1.0 - self.ema_alpha) * state.ema_score
+            )
+            if state.last_transition_step >= 0 and step - state.last_transition_step < axis.min_dwell_steps:
+                continue
+            if state.ema_score >= axis.upper_threshold:
+                state.pass_count += 1
+                state.fail_count = 0
+            elif state.ema_score < axis.lower_threshold:
+                state.fail_count += 1
+                state.pass_count = 0
+            else:
+                state.pass_count = 0
+                state.fail_count = 0
+
+            preservation = all(
+                name not in previous_best
+                or value >= previous_best[name] * (1.0 - self.preservation_tolerance)
+                for name, value in values.items()
+            )
+            if state.pass_count >= axis.pass_windows and preservation and state.current_stage < len(axis.stages) - 1:
+                return self._transition(axis_name, state, step, score, axis.upper_threshold, checkpoint, seed, 1)
+            if state.fail_count >= axis.fail_windows and state.current_stage > 0:
+                return self._transition(axis_name, state, step, score, axis.lower_threshold, checkpoint, seed, -1)
+        return None
+
+    def _transition(self, axis_name: str, state: AxisState, step: int, score: float, threshold: float, checkpoint: str | None, seed: int, direction: int) -> Transition:
+        old_stage = state.current_stage
+        state.current_stage += direction
+        state.last_transition_step = step
+        state.pass_count = 0
+        state.fail_count = 0
+        transition = Transition(step, axis_name, old_stage, state.current_stage, score, threshold, checkpoint, seed)
+        self.trace.append(transition)
+        return transition
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "states": {name: vars(state).copy() for name, state in self.states.items()},
+            "best_metrics": self.best_metrics.copy(),
+            "trace": [item.as_dict() for item in self.trace],
+        }
+
+    def stage_value(self, axis_name: str) -> object:
+        """Return the live stage value an MJLab adapter should apply."""
+        if axis_name not in self.axes:
+            raise KeyError(f"unknown adaptive axis: {axis_name}")
+        state = self.states[axis_name]
+        return self.axes[axis_name].stages[state.current_stage]
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        states = payload.get("states")
+        if not isinstance(states, Mapping):
+            raise ValueError("adaptive state is missing states")
+        for name, state_payload in states.items():
+            if name not in self.states or not isinstance(state_payload, Mapping):
+                raise ValueError(f"unknown adaptive axis state: {name}")
+            self.states[name] = AxisState(**dict(state_payload))
+        best_metrics = payload.get("best_metrics", {})
+        if not isinstance(best_metrics, Mapping):
+            raise ValueError("adaptive state has invalid best_metrics")
+        self.best_metrics = {str(name): float(value) for name, value in best_metrics.items()}
+        trace = payload.get("trace", [])
+        if not isinstance(trace, list):
+            raise ValueError("adaptive state has invalid trace")
+        self.trace = [Transition(**dict(item)) for item in trace]
