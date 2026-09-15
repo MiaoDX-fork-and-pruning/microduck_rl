@@ -1,4 +1,4 @@
-jobName: microduck-adaptive-curriculum-pipeline-282b01e
+jobName: microduck-adaptive-curriculum-pipeline-282b01e-r2
 description: Executable adaptive train-export-six-bucket-gate pipeline from holy-ape 282b01e
 accessType: PRIVATE
 imageConfig:
@@ -6,9 +6,10 @@ imageConfig:
   imageCommand: |
     set -euo pipefail
     export PYTHONUNBUFFERED=1
+    export WANDB_MODE=disabled
     export PYTHONPATH=/mnt/cloudml/source/src
     cd /mnt/cloudml/output
-    /opt/microduck_rl/.venv/bin/train Mjlab-Velocity-Flat-Adaptive-MicroDuck --env.scene.num-envs 4096 --agent.max_iterations 20 --agent.save-interval 20 --agent.experiment-name /mnt/cloudml/output/adaptive-run --agent.run-name pipeline
+    /opt/microduck_rl/.venv/bin/train Mjlab-Velocity-Flat-Adaptive-MicroDuck --env.scene.num-envs 4096 --agent.max_iterations 20 --agent.save-interval 20 --agent.logger tensorboard --agent.experiment-name /mnt/cloudml/output/adaptive-run --agent.run-name pipeline
     checkpoint=$(find /mnt/cloudml/output/adaptive-run -name 'model_20.pt' -type f | sort | tail -n 1)
     test -n "$checkpoint"
     /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/export.py Mjlab-Velocity-Flat-Adaptive-MicroDuck --checkpoint-file "$checkpoint" --onnx-file /mnt/cloudml/output/model_20.onnx --device cpu
@@ -32,7 +33,7 @@ juiceFsMountConfigs:
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
-    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-282b01e
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-282b01e-r2
     mountPath: /mnt/cloudml/output
     readOnly: false
 retryConfig:
