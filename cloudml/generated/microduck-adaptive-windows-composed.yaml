@@ -22,11 +22,13 @@ resourceConfigs:
 juiceFsMountConfigs:
   - volume: robot-intelligent-planning-data
     juiceFSCluster: wlcb-cloudml
+    endpoint: wlcb-cloudml
     subPath: /dongxu/microduck_rl/source/adaptive-curriculum/6a8656d
     mountPath: /mnt/cloudml/source
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
+    endpoint: wlcb-cloudml
     subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/windows-composed-30ebb4e
     mountPath: /mnt/cloudml/output
     readOnly: false
