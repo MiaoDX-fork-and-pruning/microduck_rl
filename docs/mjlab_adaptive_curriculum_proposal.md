@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum Proposal
 
-Status: phase 1 implemented; executable train/export/battery/gate pipeline validated
+Status: phase 1 and wave-1 experiments implemented; matched-budget comparison pending
 Date: 2026-09-14
 
 ## Execution boundary
@@ -239,8 +239,14 @@ a required architectural change.
    [`status/active/mjlab-adaptive-curriculum.md`](status/active/mjlab-adaptive-curriculum.md).
    The first submitted wave had an invalid source Python path and is excluded
    from evidence; corrected r2 jobs use the mounted immutable source snapshot.
-4. Run the all-static and one-axis experiments.
-5. Add checkpoint/rollback and final-distribution anchor sampling.
-6. Run the composed adaptive experiment and final canonical fine-tune.
-7. Compare against the untouched canonical baseline and update the handoff
-   document with measured results.
+4. **Wave 1 complete:** the r2 canonical/all-static/CoM/head-CoM/composed
+   checkpoints all passed the six-bucket battery with score `1.0`; the five-window
+   CoM and composed runs also passed every window and produced reproducible gate
+   traces. Evidence and output prefixes are recorded in
+   [`status/active/mjlab-adaptive-curriculum.md`](status/active/mjlab-adaptive-curriculum.md).
+5. **Implemented:** checkpoint state and stage-file resume are exercised by the
+   multi-window driver. A negative-path rollback battery and anchor sampling are
+   still required before claiming production readiness.
+6. Run a matched-budget composed adaptive experiment and final canonical fine-tune.
+7. Compare learning curves and final-distribution anchors against the untouched
+   canonical baseline, then update the handoff document with the measured result.
