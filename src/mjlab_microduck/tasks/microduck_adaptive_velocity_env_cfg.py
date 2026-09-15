@@ -36,3 +36,15 @@ def make_microduck_adaptive_velocity_env_cfg(
 AdaptiveMicroduckRlCfg = deepcopy(MicroduckRlCfg)
 AdaptiveMicroduckRlCfg.experiment_name = "velocity_adaptive"
 AdaptiveMicroduckRlCfg.run_name = "velocity_adaptive"
+
+
+def _adaptive_rl_cfg(name: str):
+    cfg = deepcopy(AdaptiveMicroduckRlCfg)
+    cfg.experiment_name = name
+    cfg.run_name = name
+    return cfg
+
+
+AdaptiveMicroduckStaticRlCfg = _adaptive_rl_cfg("velocity_adaptive_static")
+AdaptiveMicroduckComRlCfg = _adaptive_rl_cfg("velocity_adaptive_com")
+AdaptiveMicroduckHeadComRlCfg = _adaptive_rl_cfg("velocity_adaptive_head_com")

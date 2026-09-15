@@ -1,5 +1,8 @@
 from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckRlCfg,
+    AdaptiveMicroduckComRlCfg,
+    AdaptiveMicroduckHeadComRlCfg,
+    AdaptiveMicroduckStaticRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -25,3 +28,12 @@ def test_adaptive_runner_has_distinct_experiment_name() -> None:
 def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
     assert make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static").adaptive_axis_mode == "all_static"
     assert make_microduck_adaptive_velocity_env_cfg(axis_mode="com").adaptive_axis_mode == "com"
+
+
+def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
+    names = {
+        AdaptiveMicroduckStaticRlCfg.experiment_name,
+        AdaptiveMicroduckComRlCfg.experiment_name,
+        AdaptiveMicroduckHeadComRlCfg.experiment_name,
+    }
+    assert len(names) == 3
