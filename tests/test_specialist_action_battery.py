@@ -23,6 +23,17 @@ def test_velocity_battery_has_every_speed_and_both_input_modes():
     assert {case["input_mode"] for case in cases} == set(_MODULE.COMMAND_MODES)
 
 
+def test_adaptive_battery_has_six_frozen_capability_buckets():
+    cases = _MODULE.command_cases("adaptive_velocity", smoke=False)
+    assert [case["bucket"] for case in cases] == [
+        "zero", "forward", "lateral", "yaw", "turn-left", "turn-right"
+    ]
+    np.testing.assert_allclose(
+        _MODULE.requested_command("adaptive_velocity", cases[2], 0, 100).tolist()[:3],
+        [0.0, 0.12, 0.0],
+    )
+
+
 def test_smoke_battery_is_one_direct_step_case():
     assert _MODULE.command_cases("velocity_rollers", smoke=True) == [
         {"id": "vx_0.03_direct_step", "speed": 0.03, "input_mode": "direct_step"}

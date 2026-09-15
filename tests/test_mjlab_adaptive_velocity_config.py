@@ -3,6 +3,8 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckComRlCfg,
     AdaptiveMicroduckHeadComRlCfg,
     AdaptiveMicroduckStaticRlCfg,
+    AdaptiveMicroduckStandingRlCfg,
+    AdaptiveMicroduckActionRateRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -35,5 +37,14 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckStaticRlCfg.experiment_name,
         AdaptiveMicroduckComRlCfg.experiment_name,
         AdaptiveMicroduckHeadComRlCfg.experiment_name,
+        AdaptiveMicroduckStandingRlCfg.experiment_name,
+        AdaptiveMicroduckActionRateRlCfg.experiment_name,
     }
-    assert len(names) == 3
+    assert len(names) == 5
+
+
+def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
+    standing = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="standing")
+    action_rate = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="action_rate")
+    assert list(standing.curriculum) == ["standing_envs"]
+    assert list(action_rate.curriculum) == ["action_rate_weight"]

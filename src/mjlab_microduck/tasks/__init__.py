@@ -33,6 +33,8 @@ from .microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckStaticRlCfg,
     AdaptiveMicroduckComRlCfg,
     AdaptiveMicroduckHeadComRlCfg,
+    AdaptiveMicroduckStandingRlCfg,
+    AdaptiveMicroduckActionRateRlCfg,
 )
 from .adaptive_runner import AdaptiveMicroduckOnPolicyRunner
 from .microduck_standup_env_cfg import (
@@ -115,6 +117,22 @@ register_mjlab_task(
     env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="head_com"),
     play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="head_com"),
     rl_cfg=AdaptiveMicroduckHeadComRlCfg,
+    runner_cls=AdaptiveMicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-Velocity-Flat-Adaptive-Standing-MicroDuck",
+    env_cfg=make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="standing"),
+    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, diagnostic_mode="standing"),
+    rl_cfg=AdaptiveMicroduckStandingRlCfg,
+    runner_cls=AdaptiveMicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-Velocity-Flat-Adaptive-ActionRate-MicroDuck",
+    env_cfg=make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="action_rate"),
+    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, diagnostic_mode="action_rate"),
+    rl_cfg=AdaptiveMicroduckActionRateRlCfg,
     runner_cls=AdaptiveMicroduckOnPolicyRunner,
 )
 
