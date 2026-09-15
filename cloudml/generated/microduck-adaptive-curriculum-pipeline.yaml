@@ -1,4 +1,4 @@
-jobName: microduck-adaptive-curriculum-gate-resume-30ebb4e-r5
+jobName: microduck-adaptive-curriculum-gate-resume-30ebb4e-r6
 description: Resume second frozen battery window and verify adaptive transition
 accessType: PRIVATE
 imageConfig:
@@ -9,7 +9,8 @@ imageConfig:
     export WANDB_MODE=disabled
     export PYTHONPATH=/mnt/cloudml/source/src
     cp /mnt/cloudml/input/battery/capability.json /mnt/cloudml/output/capability.json
-    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/capability.json --state /mnt/cloudml/input/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 44 --checkpoint model_19.pt
+    cp /mnt/cloudml/input/adaptive-state.json /mnt/cloudml/output/adaptive-state.json
+    /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/capability.json --state /mnt/cloudml/output/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 44 --checkpoint model_19.pt
     grep -q '0.005' /mnt/cloudml/output/adaptive-stage.json
 queueId: '11759'
 priority: 5
@@ -34,7 +35,7 @@ juiceFsMountConfigs:
     readOnly: true
   - volume: robot-intelligent-planning-data
     juiceFsCluster: wlcb-cloudml
-    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r5
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r6
     mountPath: /mnt/cloudml/output
     readOnly: false
 retryConfig:
