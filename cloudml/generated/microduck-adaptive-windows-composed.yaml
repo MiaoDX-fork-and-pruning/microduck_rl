@@ -1,0 +1,40 @@
+jobName: microduck-adaptive-windows-composed-30ebb4e
+description: Five-window composed adaptive training with frozen six-bucket gates
+accessType: PRIVATE
+imageConfig:
+  imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+  imageCommand: |
+    set -euo pipefail
+    export PYTHONUNBUFFERED=1
+    export WANDB_MODE=disabled
+    export PYTHONPATH=/mnt/cloudml/source/src
+    /bin/bash /mnt/cloudml/source/scripts/run_adaptive_windows.sh Mjlab-Velocity-Flat-Adaptive-MicroDuck /mnt/cloudml/output 5 100
+queueId: '11759'
+priority: 5
+framework: pytorch
+resourceConfigs:
+  - nodeRole: worker
+    nodeNumber: 1
+    perNodeResourceSpec:
+      resourcePriority: GUARANTEED
+      resourceName: cloudml.ng1r49-8-8.13-107
+      resourceNumber: 1
+juiceFsMountConfigs:
+  - volume: robot-intelligent-planning-data
+    juiceFSCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/source/adaptive-curriculum/30ebb4e
+    mountPath: /mnt/cloudml/source
+    readOnly: true
+  - volume: robot-intelligent-planning-data
+    juiceFsCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/windows-composed-30ebb4e
+    mountPath: /mnt/cloudml/output
+    readOnly: false
+retryConfig:
+  enableRetry: false
+  maxRetryTimes: 0
+  policySets:
+    - JobFailed
+diagOptions:
+  - name: HangDetection
+    enable: false
