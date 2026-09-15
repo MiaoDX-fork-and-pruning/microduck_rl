@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum Proposal
 
-Status: phase 1 implemented; adaptive experiment not yet run
+Status: phase 1 implemented; wave 1 experiments running
 Date: 2026-09-14
 
 ## Execution boundary
@@ -234,6 +234,9 @@ a required architectural change.
 3. Add a distinct adaptive Velocity task factory that starts with all axes at
    initial values, with standing fixed at `0.02` and reward-weight adaptation
    disabled for the first phase.
+   **Implemented:** the factory and four explicit wave-1 task branches are
+   registered; job state is tracked in
+   [`status/active/mjlab-adaptive-curriculum.md`](status/active/mjlab-adaptive-curriculum.md).
 4. Run the all-static and one-axis experiments.
 5. Add checkpoint/rollback and final-distribution anchor sampling.
 6. Run the composed adaptive experiment and final canonical fine-tune.
