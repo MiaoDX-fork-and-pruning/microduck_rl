@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum Proposal
 
-Status: phase 1 implemented; wave 1 r2 experiments running
+Status: phase 1 implemented; executable train/export/battery/gate pipeline validated
 Date: 2026-09-14
 
 ## Execution boundary

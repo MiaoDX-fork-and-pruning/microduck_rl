@@ -1,12 +1,12 @@
 # MJLab Adaptive Curriculum Wave 1
 
-- Status: ACTIVE
-- Source commit: `af06b34` on `origin/holy-ape`
-- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/af06b34`
+- Status: ACTIVE; executable pipeline validated
+- Source commit: `30ebb4e` on `origin/holy-ape`
+- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/30ebb4e`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
-- Current slice: Wave 1 r2 training jobs submitted; waiting for terminal results.
-- Next action: poll job state/logs, then run frozen battery on completed checkpoints.
+- Current slice: pipeline validation succeeded; long Wave 1 r2 jobs remain running.
+- Next action: collect terminal control/static/one-axis checkpoints and run the same battery.
 - Stop condition: do not compose or fine-tune until control, static, and one-axis
   results have complete metrics and reproducible artifacts.
 
@@ -31,6 +31,21 @@ jobs use `/mnt/cloudml/source/src` and the following IDs:
 | CoM-only | `t-20260915111715-offvh` | `.../wave1-com-r2-af06b34` | running |
 | head-CoM-only | `t-20260915111716-5vmue` | `.../wave1-headcom-r2-af06b34` | running |
 | composed | `t-20260915111718-nhoyf` | `.../wave1-composed-r2-af06b34` | running |
+
+## Executable validation
+
+The train/export/battery/gate chain was run on CloudML job
+`t-20260915121317-8bi9e` (source `30ebb4e`). It trained 20 iterations, exported
+`model_19.pt` to ONNX, and ran all six frozen buckets. Results were
+`zero=1.0`, `forward=1.0`, `lateral=1.0`, `yaw=1.0`, `turn-left=1.0`, and
+`turn-right=1.0`; all traces were finite with 61D observations and 14D actions.
+The first window correctly held at CoM stage `0.003` because the gate requires
+two consecutive passing windows. Resume job `t-20260915122019-jgdmg` restored
+the state and produced the recorded transition `com_range: 0.003 -> 0.005` at
+step 44 with score `1.0`.
+
+The validation output is under
+`/dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r4/`.
 
 Monitoring command:
 
