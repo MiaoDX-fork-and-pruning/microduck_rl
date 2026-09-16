@@ -7,6 +7,7 @@ from mjlab_microduck.tasks.adaptive_curriculum import (
     AxisConfig,
     CapabilityGate,
     apply_stage_to_env,
+    GateOutcome,
 )
 
 
@@ -62,6 +63,15 @@ def test_missing_or_nonfinite_bucket_is_rejected() -> None:
         gate.update(0, {"zero": 1.0})
     with pytest.raises(ValueError):
         gate.update(0, {"zero": float("nan"), "forward": 1.0, "yaw": 1.0})
+
+
+def test_decision_api_distinguishes_hold_and_preservation_failure() -> None:
+    gate = _gate()
+    assert gate.decide(0, {"zero": 0.9, "forward": 0.9, "yaw": 0.9}).outcome == GateOutcome.HOLD
+    gate.decide(1, {"zero": 0.9, "forward": 0.9, "yaw": 0.9})
+    gate.decide(20, {"zero": 0.8, "forward": 0.9, "yaw": 0.9})
+    decision = gate.decide(21, {"zero": 0.8, "forward": 0.9, "yaw": 0.9})
+    assert decision.outcome == GateOutcome.PRESERVATION_FAILURE
 
 
 def test_default_axes_match_canonical_com_endpoints() -> None:

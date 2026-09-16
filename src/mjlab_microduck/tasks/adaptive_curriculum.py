@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Mapping
+from enum import StrEnum
+
 
 
 @dataclass(frozen=True)
@@ -67,6 +69,21 @@ class Transition:
         }
 
 
+class GateOutcome(StrEnum):
+    HOLD = "hold"
+    ADVANCE = "advance"
+    REGRESS = "regress"
+    PRESERVATION_FAILURE = "preservation_failure"
+    EVALUATION_ERROR = "evaluation_error"
+
+
+@dataclass(frozen=True)
+class GateDecision:
+    outcome: GateOutcome
+    transition: Transition | None = None
+    reason: str | None = None
+
+
 class CapabilityGate:
     """Advance or regress one axis from a conservative bucket aggregate.
 
@@ -81,6 +98,7 @@ class CapabilityGate:
         axes: tuple[AxisConfig, ...],
         *,
         critical_buckets: tuple[str, ...],
+        axis_mode: str | None = None,
         ema_alpha: float = 0.25,
         preservation_tolerance: float = 0.05,
     ) -> None:
@@ -97,6 +115,7 @@ class CapabilityGate:
             raise ValueError("axis names must be unique")
         self.axes = {axis.name: axis for axis in axes}
         self.axis_order = names
+        self.axis_mode = axis_mode
         self.critical_buckets = critical_buckets
         self.ema_alpha = ema_alpha
         self.preservation_tolerance = preservation_tolerance
@@ -112,6 +131,17 @@ class CapabilityGate:
         checkpoint: str | None = None,
         seed: int = 0,
     ) -> Transition | None:
+        decision = self.decide(step, metrics, checkpoint=checkpoint, seed=seed)
+        return decision.transition
+
+    def decide(
+        self,
+        step: int,
+        metrics: Mapping[str, float],
+        *,
+        checkpoint: str | None = None,
+        seed: int = 0,
+    ) -> GateDecision:
         missing = [name for name in self.critical_buckets if name not in metrics]
         if missing:
             raise KeyError(f"missing capability buckets: {', '.join(missing)}")
@@ -147,11 +177,13 @@ class CapabilityGate:
                 or value >= previous_best[name] * (1.0 - self.preservation_tolerance)
                 for name, value in values.items()
             )
-            if state.pass_count >= axis.pass_windows and preservation and state.current_stage < len(axis.stages) - 1:
-                return self._transition(axis_name, state, step, score, axis.upper_threshold, checkpoint, seed, 1)
+            if state.pass_count >= axis.pass_windows and not preservation:
+                return GateDecision(GateOutcome.PRESERVATION_FAILURE, reason="frontier bucket regressed")
+            if state.pass_count >= axis.pass_windows and state.current_stage < len(axis.stages) - 1:
+                return GateDecision(GateOutcome.ADVANCE, self._transition(axis_name, state, step, score, axis.upper_threshold, checkpoint, seed, 1))
             if state.fail_count >= axis.fail_windows and state.current_stage > 0:
-                return self._transition(axis_name, state, step, score, axis.lower_threshold, checkpoint, seed, -1)
-        return None
+                return GateDecision(GateOutcome.REGRESS, self._transition(axis_name, state, step, score, axis.lower_threshold, checkpoint, seed, -1))
+        return GateDecision(GateOutcome.HOLD)
 
     def _transition(self, axis_name: str, state: AxisState, step: int, score: float, threshold: float, checkpoint: str | None, seed: int, direction: int) -> Transition:
         old_stage = state.current_stage
@@ -165,6 +197,8 @@ class CapabilityGate:
 
     def state_dict(self) -> dict[str, object]:
         return {
+            "axis_mode": self.axis_mode,
+            "enabled_axes": list(self.axis_order),
             "states": {name: vars(state).copy() for name, state in self.states.items()},
             "best_metrics": self.best_metrics.copy(),
             "trace": [item.as_dict() for item in self.trace],
@@ -178,6 +212,10 @@ class CapabilityGate:
         return self.axes[axis_name].stages[state.current_stage]
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if ("axis_mode" in payload and payload.get("axis_mode") != self.axis_mode) or (
+            "enabled_axes" in payload and list(payload.get("enabled_axes", ())) != list(self.axis_order)
+        ):
+            raise ValueError("adaptive state axis mode/allowlist mismatch")
         states = payload.get("states")
         if not isinstance(states, Mapping):
             raise ValueError("adaptive state is missing states")

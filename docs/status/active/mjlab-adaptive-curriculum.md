@@ -1,16 +1,80 @@
-# MJLab Adaptive Curriculum Wave 1
+# MJLab Adaptive Curriculum v2
 
-- Status: Wave 1 executable experiments complete; long-horizon comparison pending
-- Source commit: `c72423f` on `origin/holy-ape`
-- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/c72423f`
+- Status: Phase 1 replay gate and production evaluator smoke passed; campaign r4
+  is complete. The matched-budget decision gate rejects adaptive improvement,
+  and the current recipe does not produce a battery-qualified policy.
+- Latest campaign source commit: `8b9fa3d`
+- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/8b9fa3d`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
-- Current slice: five-window CoM and composed adaptive runs, plus the completed r2
-  controls, have frozen-battery evidence.
-- Next action: use the measured results to plan a long-horizon matched-budget run;
-  do not treat the 500-iteration adaptive windows as a production training claim.
-- Stop condition: do not compose or fine-tune until control, static, and one-axis
-  results have complete metrics and reproducible artifacts.
+- Current slice: strict v2 reports, runner evaluator seam, provenance validation,
+  decision classification, checkpoint metadata, RNG capture, and explicit rollback
+  boundary are implemented.
+- Next action: retain fixed as the comparison control, record the negative /
+  inconclusive result, and do not select any r4 checkpoint for deployment.
+  Further training requires a separately approved change to the recipe or
+  evaluation contract; the canonical task and thresholds remain unchanged.
+- Stop condition: adaptive is not accepted unless a new, complete matched-budget
+  campaign meets the same held-out gate without changing the canonical task.
+
+## Current evidence summary (2026-09-18 status recheck)
+
+The Phase 1 replay gate and runner-owned production evaluator are complete. The
+immutable r4 source is `8b9fa3d`; every branch used 4000 iterations at 4096
+environments (`393,216,000` transitions) and the held-out seed set
+`adaptive-default-20260915`. All 15 jobs completed with valid final checkpoint,
+ONNX, and six-bucket reports. Every report has finite 61D observations and 14D
+actions, and its checkpoint/source/report hashes agree.
+
+The decision gate did not accept any branch. Fixed lower-tail scores for seeds
+17/23/29 were `0.0`, `0.0`, and `0.001775`; all-static scores were `0.0` for
+all three seeds. CoM, head-CoM, and composed each scored `0.0` for all three
+seeds. Thus adaptive does not match or exceed fixed on this held-out battery,
+and fixed itself also fails the required aggregate pass criterion. The evidence
+supports retaining fixed as the control reference while declaring the current
+recipe unable to produce a qualified policy. It does not support an adaptive
+superiority claim or a deployment choice.
+
+For CoM seeds 17/23/29, runner state remained at `com_range=0.003` with 16
+hold events and no known-good transition. This confirms the adaptive controller
+failed closed under the observed capability reports; it is not evidence that a
+different curriculum stage would have passed.
+
+Final artifacts are under
+`/dongxu/microduck_rl/runs/adaptive-curriculum/campaign-8b9fa3d-r4/<branch>-s<seed>/`.
+The held-out `lower_tail_score` comparison is:
+
+| branch | seed 17 | seed 23 | seed 29 |
+| --- | ---: | ---: | ---: |
+| fixed | 0.000000 | 0.000000 | 0.001775 |
+| all-static | 0.000000 | 0.000000 | 0.000000 |
+| CoM | 0.000000 | 0.000000 | 0.000000 |
+| head-CoM | 0.000000 | 0.000000 | 0.000000 |
+| composed | 0.000000 | 0.000000 | 0.000000 |
+
+Every cell has `passed=0` and `valid=1`. The local audit workspace is
+`/tmp/r4-monitor/`.
+
+Historical wave-1 scores below are retained as historical records; they do not
+establish current v2 held-out quality or a matched-budget adaptive advantage.
+The queue currently reports 18 free R49 GUARANTEED GPUs, so the older statement
+that resources are fully occupied is not current evidence of a blocker.
+
+Campaign r3 was rejected before training because its gate seed range overlapped
+the held-out range; those eight jobs are retained as startup audit records.
+Campaign r4 used gate seed `20260815` and held-out seed `20260915`. All 15 jobs
+used queue `11759` and the primary GUARANTEED resource; no alternate queue was
+used. A local enabled evaluator smoke completed PPO updates, created
+runner-owned reports and adaptive checkpoints, and exposed/fixed CUDA mapped
+RNG restoration before r4 submission. The final CloudML IDs were
+`t-20260918151752-gxlxx`, `t-20260918151754-gtcis`,
+`t-20260918151755-9ya5b`, `t-20260918151756-6uwmq`,
+`t-20260918151758-laop4`, `t-20260918151759-o34nb`,
+`t-20260918151818-gjpbj`, `t-20260918151819-jhbxt`,
+`t-20260918171555-vdzur`, `t-20260918171601-dw4wg`,
+`t-20260918172039-wuccw`, `t-20260918172040-nwvph`,
+`t-20260918172041-yd4xj`, `t-20260918172043-kiwno`, and
+`t-20260918172044-4agde`.
 
 ## Jobs
 
@@ -85,3 +149,63 @@ Monitoring command:
 
 No production task or canonical schedule was modified. The standing/action-rate
 diagnostic branch is parked until its independent controller is implemented.
+
+## v2 implementation evidence
+
+- Capability report validation recomputes bucket components, scores, validity,
+  pass flags, and aggregate from raw evidence. Malformed, non-finite, missing, or
+  mismatched traces fail closed.
+- Runner validates report schema, checkpoint existence and SHA256, task axis mode,
+  and enabled-axis allowlist. Evaluator exceptions become `evaluation_error` holds.
+- Gate outcomes are typed as `hold`, `advance`, `regress`, or
+  `preservation_failure`; runner records the causal event and applies only the
+  allowed live EventManager axis.
+- Checkpoint metadata co-locates gate state, stage values, evaluator schema and
+  iteration/env-step counters, known-good checkpoint, evaluation events, and RNG
+  state. Explicit rollback rejects a checkpoint other than the recorded known-good.
+- Verification: 27 focused tests pass, Ruff and diff checks pass, adaptive 64-env /
+  5-iteration smoke passes with 61D observations, 14D actions, BAM M6, and no NaN.
+
+## Phase 1 replay gate and matched-budget campaign (2026-09-18)
+
+The missing fake-runner checkpoint tests were added and passed. The replay gate
+now covers PPO-like policy state, gate trace, live EventManager ranges, Python /
+NumPy / Torch RNG restoration, incompatible-axis rejection, and explicit
+known-good rollback. The focused suite passes 31 tests; Ruff, `git diff --check`,
+the canonical-task diff guard, and the adaptive 64-env / 5-iteration smoke all
+pass. The implementation is committed as `b6788e3`.
+
+An immutable source snapshot for that commit was uploaded to
+`/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`. The first campaign
+submission exposed two operational issues and is retained for audit: a top-level
+`--seed` was rejected (the CLI requires `--agent.seed`), and the initial CoM /
+composed commands had evaluation disabled and therefore represented only the
+initial static slice. Those four jobs were explicitly stopped before producing
+evidence. The corrected r2 campaign uses `--agent.seed`; all-static s17 is
+running as `t-20260918100626-bfpsl`, while all-static s23 is
+`t-20260918100627-j3snt`. Corrected CoM/composed jobs were stopped and will be
+re-submitted with the staged battery/resume harness after quota release. No
+matched-budget policy result or adaptive improvement claim has been made.
+
+The corrected all-static jobs subsequently completed the full 4000-iteration
+budget successfully: `t-20260918100626-bfpsl` (seed 17, completed 12:03:18)
+and `t-20260918100627-j3snt` (seed 23, completed 12:00:54). Each output
+contains `model_3999.pt` and an auto-exported ONNX, but neither has yet been
+run through the held-out six-bucket battery. R49 GUARANTEED and
+GUARANTEED_PUBLIC quota remains fully occupied, so no additional branch/seed
+has been submitted. These are static-branch artifacts only and do not establish
+an adaptive advantage.
+
+The two all-static final ONNX files were then checked with the frozen six-bucket
+battery using held-out seed set `adaptive-default-20260915`. Both runs produced
+six 300-step traces with finite 61D observations and 14D actions. The validated
+capability reports nevertheless failed the aggregate gate (`lower_tail_score=0`,
+`passed=0`) because forward/lateral/turn tracking remained above the configured
+thresholds. Seed 17 metrics were `zero=0.4502, forward=0, lateral=0.0112,
+yaw=0.1300, turn-left=0, turn-right=0`; seed 23 metrics were `zero=0.8542,
+forward=0, lateral=0, yaw=0.0513, turn-left=0, turn-right=0`. Reports and traces
+are in the local monitor workspace under `/tmp/adaptive-battery/results/`; ONNX
+SHA256 values are `8554fd59ac917b130ac908a3bdcd969cdf4727968d715b4f31b32fb4142d934e`
+(seed 17) and `976750347999dd418fe337367cd0847e2fa5a173ea1d346624dd93d43add42ee`
+(seed 23). This is static-branch evidence only and does not support an adaptive
+improvement claim.
