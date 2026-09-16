@@ -179,6 +179,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
             if self.current_learning_iteration > 0 and self.current_learning_iteration % self.evaluation_interval == 0:
                 checkpoint = os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt")
+                # Evaluation always consumes the exact post-update state at this
+                # boundary, even when save_interval differs or logging is disabled.
+                if not os.path.exists(checkpoint):
+                    self.save(checkpoint)
                 self._evaluate_window(checkpoint)
         if self.logger.writer is not None:
             self.save(os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt"))
