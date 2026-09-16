@@ -8,6 +8,7 @@ from .capability import (
     canonical_sha256,
     raw_metrics_from_trace,
 )
+from .protocol import FrozenCapabilityEvaluator
 
 __all__ = [
     "BUCKETS",
@@ -16,4 +17,5 @@ __all__ = [
     "resolve_enabled_axes",
     "canonical_sha256",
     "raw_metrics_from_trace",
+    "FrozenCapabilityEvaluator",
 ]

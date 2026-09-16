@@ -8,6 +8,7 @@ from typing import Mapping
 
 import numpy as np
 import torch
+from pathlib import Path
 
 from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
@@ -43,6 +44,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.evaluation_interval = int(getattr(env.cfg, "adaptive_evaluation_interval", 0))
         self.evaluator = None
         self.evaluation_seed = int(getattr(env.cfg, "adaptive_evaluation_seed", 0))
+        self.evaluation_events: list[dict[str, object]] = []
+        self.last_known_good_checkpoint: str | None = None
         if not axis_configs:
             self.capability_gate = None
             return
@@ -53,6 +56,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             ema_alpha=0.25,
             preservation_tolerance=0.05,
         )
+
+    def set_evaluator(self, evaluator) -> None:
+        """Inject a synchronous evaluator (used by production adapters/tests)."""
+        self.evaluator = evaluator
 
     def _rng_state(self) -> dict[str, object]:
         return {
@@ -72,16 +79,25 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
     def _evaluate_window(self, checkpoint_path: str) -> None:
         if self.evaluation_interval <= 0 or self.evaluator is None or self.capability_gate is None:
             return
-        report = self.evaluator.evaluate(
-            checkpoint_path=checkpoint_path,
-            task_id=getattr(self.env.cfg, "task_id", "adaptive_velocity"),
-            axis_mode=self.capability_gate.axis_mode,
-            curriculum_state=self.capability_gate.state_dict(),
-            iteration=self.current_learning_iteration,
-            seed_set_id=str(self.evaluation_seed),
+        try:
+            report = self.evaluator.evaluate(
+                checkpoint_path=Path(checkpoint_path),
+                task_id=getattr(self.env.cfg, "task_id", "adaptive_velocity"),
+                axis_mode=self.capability_gate.axis_mode,
+                curriculum_state=self.capability_gate.state_dict(),
+                iteration=self.current_learning_iteration,
+                seed_set_id=str(self.evaluation_seed),
+            )
+            metrics = report.to_gate_metrics() if hasattr(report, "to_gate_metrics") else report["metrics"]
+        except Exception as exc:
+            self.evaluation_events.append({"kind": "evaluation_error", "error": repr(exc), "iteration": self.current_learning_iteration})
+            return
+        self.record_capability_metrics(
+            metrics,
+            step=self.current_learning_iteration,
+            checkpoint=checkpoint_path,
+            seed=self.evaluation_seed,
         )
-        metrics = report.to_gate_metrics() if hasattr(report, "to_gate_metrics") else report["metrics"]
-        self.record_capability_metrics(metrics, step=self.current_learning_iteration, checkpoint=checkpoint_path, seed=self.evaluation_seed)
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
         """Run the normal runner in explicit iteration windows when enabled.
@@ -114,7 +130,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                         from rsl_rl.utils import check_nan
 
                         check_nan(obs, rewards, dones)
-                    obs, rewards, dones = obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    obs, rewards, dones = (
+                        obs.to(self.device),
+                        rewards.to(self.device),
+                        dones.to(self.device),
+                    )
                     self.alg.process_env_step(obs, rewards, dones, extras)
                     intrinsic = self.alg.intrinsic_rewards if self.cfg["algorithm"].get("rnd_cfg") else None
                     self.logger.process_env_step(rewards, dones, extras, intrinsic)
@@ -158,12 +178,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             checkpoint=checkpoint,
             seed=seed,
         )
+        self.evaluation_events.append({"kind": "transition" if transition else "hold", "step": self.current_learning_iteration if step is None else step, "checkpoint": checkpoint})
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
                 transition.axis,
                 self.capability_gate.stage_value(transition.axis),
             )
+            self.last_known_good_checkpoint = checkpoint
         return transition
 
     def save(self, path: str, infos: dict | None = None) -> None:
@@ -171,6 +193,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         payload["adaptive_curriculum"] = (
             None if self.capability_gate is None else self.capability_gate.state_dict()
         )
+        if payload["adaptive_curriculum"] is not None:
+            payload["adaptive_curriculum"] = dict(payload["adaptive_curriculum"])
+            payload["adaptive_curriculum"].update({
+                "version": 1,
+                "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
+                "last_known_good_checkpoint": self.last_known_good_checkpoint,
+                "evaluation_events": list(self.evaluation_events),
+            })
         payload["adaptive_rng_state"] = self._rng_state()
         super().save(path, payload)
 
@@ -179,11 +209,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         if infos and infos.get("adaptive_curriculum") and self.capability_gate is not None:
             self.capability_gate.load_state_dict(infos["adaptive_curriculum"])
             for axis_name, state in self.capability_gate.states.items():
-                    apply_stage_to_env(
+                apply_stage_to_env(
                     _manager_env(self.env),
                     axis_name,
                     self.capability_gate.stage_value(axis_name),
-                    )
+                )
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
         return infos

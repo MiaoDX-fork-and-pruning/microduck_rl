@@ -35,6 +35,11 @@ def make_microduck_adaptive_velocity_env_cfg(
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
+    cfg.adaptive_evaluation_interval = 0
+    cfg.adaptive_evaluation_seed = 20260915
+    cfg.adaptive_evaluator_schema_version = 2
+    cfg.adaptive_seed_set_id = "default-v1"
+    cfg.adaptive_evaluation_timeout_s = 900
     if diagnostic_mode is not None:
         if diagnostic_mode not in {"standing", "action_rate"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
