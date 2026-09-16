@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import random
+import hashlib
 from typing import Mapping
 
 import numpy as np
@@ -88,6 +89,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 iteration=self.current_learning_iteration,
                 seed_set_id=str(self.evaluation_seed),
             )
+            self._validate_report(report, checkpoint_path)
             metrics = report.to_gate_metrics() if hasattr(report, "to_gate_metrics") else report["metrics"]
         except Exception as exc:
             self.evaluation_events.append({"kind": "evaluation_error", "error": repr(exc), "iteration": self.current_learning_iteration})
@@ -98,6 +100,27 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             checkpoint=checkpoint_path,
             seed=self.evaluation_seed,
         )
+
+    def _validate_report(self, report, checkpoint_path: str) -> None:
+        """Fail closed when an evaluator returns the wrong artifact/report."""
+        payload = getattr(report, "payload", report)
+        if not isinstance(payload, Mapping):
+            raise ValueError("evaluator returned a non-mapping report")
+        if payload.get("schema_version") != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
+            raise ValueError("capability report schema mismatch")
+        metadata = payload.get("metadata", {})
+        if not isinstance(metadata, Mapping):
+            raise ValueError("capability report metadata missing")
+        expected = Path(checkpoint_path)
+        if metadata.get("checkpoint") and str(metadata["checkpoint"]) != str(expected):
+            raise ValueError("capability report checkpoint mismatch")
+        if expected.exists() and metadata.get("checkpoint_sha256"):
+            digest = hashlib.sha256(expected.read_bytes()).hexdigest()
+            if metadata["checkpoint_sha256"] != digest:
+                raise ValueError("capability report checkpoint hash mismatch")
+        mode = self.capability_gate.axis_mode
+        if payload.get("axis_mode") != mode or tuple(payload.get("enabled_axes", ())) != tuple(self.capability_gate.axis_order):
+            raise ValueError("capability report axis contract mismatch")
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
         """Run the normal runner in explicit iteration windows when enabled.
