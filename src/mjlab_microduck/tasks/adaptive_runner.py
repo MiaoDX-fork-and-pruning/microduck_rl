@@ -121,6 +121,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         mode = self.capability_gate.axis_mode
         if payload.get("axis_mode") != mode or tuple(payload.get("enabled_axes", ())) != tuple(self.capability_gate.axis_order):
             raise ValueError("capability report axis contract mismatch")
+        if not expected.exists():
+            raise ValueError("evaluated checkpoint does not exist")
+        if not metadata.get("checkpoint_sha256"):
+            raise ValueError("capability report checkpoint hash is missing")
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
         """Run the normal runner in explicit iteration windows when enabled.

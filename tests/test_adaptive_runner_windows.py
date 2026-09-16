@@ -51,3 +51,10 @@ def test_report_validator_rejects_wrong_axis(tmp_path):
     report = _report(tmp_path / "model.pt", mode="all_static")
     with pytest.raises(ValueError, match="axis contract"):
         runner._validate_report(report, str(tmp_path / "model.pt"))
+
+
+def test_report_validator_requires_existing_checkpoint(tmp_path):
+    runner = _runner(tmp_path)
+    report = _report(tmp_path / "missing.pt")
+    with pytest.raises(ValueError, match="does not exist"):
+        runner._validate_report(report, str(tmp_path / "missing.pt"))
