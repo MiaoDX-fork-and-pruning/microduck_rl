@@ -172,13 +172,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Consume one frozen battery window and apply at most one transition."""
         if self.capability_gate is None:
             return None
-        transition = self.capability_gate.update(
+        decision = self.capability_gate.decide(
             self.current_learning_iteration if step is None else step,
             metrics,
             checkpoint=checkpoint,
             seed=seed,
         )
-        self.evaluation_events.append({"kind": "transition" if transition else "hold", "step": self.current_learning_iteration if step is None else step, "checkpoint": checkpoint})
+        transition = decision.transition
+        self.evaluation_events.append({"kind": decision.outcome.value, "step": self.current_learning_iteration if step is None else step, "checkpoint": checkpoint, "reason": decision.reason})
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
@@ -207,7 +208,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
         infos = super().load(path, load_cfg, strict, map_location)
         if infos and infos.get("adaptive_curriculum") and self.capability_gate is not None:
-            self.capability_gate.load_state_dict(infos["adaptive_curriculum"])
+            adaptive_state = infos["adaptive_curriculum"]
+            if adaptive_state.get("version", 1) != 1:
+                raise ValueError("unsupported adaptive checkpoint version")
+            self.capability_gate.load_state_dict(adaptive_state)
+            self.last_known_good_checkpoint = adaptive_state.get("last_known_good_checkpoint")
+            self.evaluation_events = list(adaptive_state.get("evaluation_events", []))
             for axis_name, state in self.capability_gate.states.items():
                 apply_stage_to_env(
                     _manager_env(self.env),
@@ -216,4 +222,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 )
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
+        return infos
+
+    def rollback(self, checkpoint_path: str):
+        """Restore the complete trainer and curriculum state from a known-good checkpoint."""
+        if not checkpoint_path:
+            raise ValueError("rollback requires an explicit checkpoint path")
+        infos = self.load(checkpoint_path)
+        self.evaluation_events.append({"kind": "rollback", "checkpoint": checkpoint_path})
         return infos
