@@ -236,6 +236,18 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         payload["adaptive_rng_state"] = self._rng_state()
         super().save(path, payload)
 
+    def adaptive_checkpoint_info(self) -> dict[str, object]:
+        """Return the co-located adaptive metadata for audit and checkpoint tests."""
+        state = None if self.capability_gate is None else dict(self.capability_gate.state_dict())
+        if state is not None:
+            state.update({
+                "version": 1,
+                "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
+                "last_known_good_checkpoint": self.last_known_good_checkpoint,
+                "evaluation_events": list(self.evaluation_events),
+            })
+        return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
+
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
         infos = super().load(path, load_cfg, strict, map_location)
         if infos and infos.get("adaptive_curriculum") and self.capability_gate is not None:
