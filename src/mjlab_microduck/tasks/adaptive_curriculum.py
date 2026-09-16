@@ -11,6 +11,7 @@ from dataclasses import dataclass
 from typing import Mapping
 
 
+
 @dataclass(frozen=True)
 class AxisConfig:
     """Stages and hysteresis settings for one difficulty axis."""
@@ -81,6 +82,7 @@ class CapabilityGate:
         axes: tuple[AxisConfig, ...],
         *,
         critical_buckets: tuple[str, ...],
+        axis_mode: str | None = None,
         ema_alpha: float = 0.25,
         preservation_tolerance: float = 0.05,
     ) -> None:
@@ -97,6 +99,7 @@ class CapabilityGate:
             raise ValueError("axis names must be unique")
         self.axes = {axis.name: axis for axis in axes}
         self.axis_order = names
+        self.axis_mode = axis_mode
         self.critical_buckets = critical_buckets
         self.ema_alpha = ema_alpha
         self.preservation_tolerance = preservation_tolerance
@@ -165,6 +168,8 @@ class CapabilityGate:
 
     def state_dict(self) -> dict[str, object]:
         return {
+            "axis_mode": self.axis_mode,
+            "enabled_axes": list(self.axis_order),
             "states": {name: vars(state).copy() for name, state in self.states.items()},
             "best_metrics": self.best_metrics.copy(),
             "trace": [item.as_dict() for item in self.trace],
@@ -178,6 +183,10 @@ class CapabilityGate:
         return self.axes[axis_name].stages[state.current_stage]
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if ("axis_mode" in payload and payload.get("axis_mode") != self.axis_mode) or (
+            "enabled_axes" in payload and list(payload.get("enabled_axes", ())) != list(self.axis_order)
+        ):
+            raise ValueError("adaptive state axis mode/allowlist mismatch")
         states = payload.get("states")
         if not isinstance(states, Mapping):
             raise ValueError("adaptive state is missing states")

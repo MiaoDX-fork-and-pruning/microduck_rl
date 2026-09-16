@@ -2,13 +2,19 @@
 
 from __future__ import annotations
 
+import os
+import random
 from typing import Mapping
+
+import numpy as np
+import torch
 
 from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
     CapabilityGate,
     apply_stage_to_env,
 )
+from mjlab_microduck.evaluation.capability import resolve_enabled_axes
 from . import MicroduckOnPolicyRunner
 
 
@@ -32,24 +38,108 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
     def __init__(self, env, train_cfg: dict, log_dir=None, device="cpu", **kwargs):
         super().__init__(env, train_cfg, log_dir, device, **kwargs)
         mode = getattr(env.cfg, "adaptive_axis_mode", "composed")
-        axis_names = {
-            "all_static": (),
-            "com": ("com_range",),
-            "head_com": ("head_com_range",),
-            "composed": ("com_range", "head_com_range"),
-        }.get(mode)
-        if axis_names is None:
-            raise ValueError(f"unsupported adaptive axis mode: {mode}")
+        axis_names = resolve_enabled_axes(mode)
         axis_configs = tuple(axis for axis in ADAPTIVE_AXIS_CONFIGS if axis.name in axis_names)
+        self.evaluation_interval = int(getattr(env.cfg, "adaptive_evaluation_interval", 0))
+        self.evaluator = None
+        self.evaluation_seed = int(getattr(env.cfg, "adaptive_evaluation_seed", 0))
         if not axis_configs:
             self.capability_gate = None
             return
         self.capability_gate = CapabilityGate(
             axis_configs,
             critical_buckets=("zero", "forward", "lateral", "yaw", "turn-left", "turn-right"),
+            axis_mode=mode,
             ema_alpha=0.25,
             preservation_tolerance=0.05,
         )
+
+    def _rng_state(self) -> dict[str, object]:
+        return {
+            "python": random.getstate(),
+            "numpy": np.random.get_state(),
+            "torch": torch.get_rng_state(),
+            "torch_cuda": torch.cuda.get_rng_state_all() if torch.cuda.is_available() else None,
+        }
+
+    def _restore_rng_state(self, state: Mapping[str, object]) -> None:
+        random.setstate(state["python"])
+        np.random.set_state(state["numpy"])
+        torch.set_rng_state(state["torch"])
+        if state.get("torch_cuda") is not None and torch.cuda.is_available():
+            torch.cuda.set_rng_state_all(state["torch_cuda"])
+
+    def _evaluate_window(self, checkpoint_path: str) -> None:
+        if self.evaluation_interval <= 0 or self.evaluator is None or self.capability_gate is None:
+            return
+        report = self.evaluator.evaluate(
+            checkpoint_path=checkpoint_path,
+            task_id=getattr(self.env.cfg, "task_id", "adaptive_velocity"),
+            axis_mode=self.capability_gate.axis_mode,
+            curriculum_state=self.capability_gate.state_dict(),
+            iteration=self.current_learning_iteration,
+            seed_set_id=str(self.evaluation_seed),
+        )
+        metrics = report.to_gate_metrics() if hasattr(report, "to_gate_metrics") else report["metrics"]
+        self.record_capability_metrics(metrics, step=self.current_learning_iteration, checkpoint=checkpoint_path, seed=self.evaluation_seed)
+
+    def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
+        """Run the normal runner in explicit iteration windows when enabled.
+
+        Calling the installed runner once per iteration keeps the stock PPO
+        lifecycle intact while giving the adaptive evaluator a deterministic
+        checkpoint boundary. The default interval is zero, so canonical-like
+        adaptive runs use the inherited implementation unchanged.
+        """
+        if self.evaluation_interval <= 0 or self.evaluator is None:
+            return super().learn(num_learning_iterations, init_at_random_ep_len)
+        # The installed RSL-RL runner closes its writer at the end of learn(),
+        # so windows are implemented here rather than by repeatedly calling
+        # super().learn(1).
+        if init_at_random_ep_len:
+            self.env.episode_length_buf = torch.randint_like(
+                self.env.episode_length_buf, high=int(self.env.max_episode_length)
+            )
+        obs = self.env.get_observations().to(self.device)
+        self.alg.train_mode()
+        self.logger.init_logging_writer()
+        start_it = self.current_learning_iteration
+        total_it = start_it + num_learning_iterations
+        for it in range(start_it, total_it):
+            with torch.inference_mode():
+                for _ in range(self.cfg["num_steps_per_env"]):
+                    actions = self.alg.act(obs)
+                    obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
+                    if self.cfg.get("check_for_nan", True):
+                        from rsl_rl.utils import check_nan
+
+                        check_nan(obs, rewards, dones)
+                    obs, rewards, dones = obs.to(self.device), rewards.to(self.device), dones.to(self.device)
+                    self.alg.process_env_step(obs, rewards, dones, extras)
+                    intrinsic = self.alg.intrinsic_rewards if self.cfg["algorithm"].get("rnd_cfg") else None
+                    self.logger.process_env_step(rewards, dones, extras, intrinsic)
+                self.alg.compute_returns(obs)
+            loss_dict = self.alg.update()
+            self.current_learning_iteration = it
+            self.logger.log(
+                it=it,
+                start_it=start_it,
+                total_it=total_it,
+                collect_time=0.0,
+                learn_time=0.0,
+                loss_dict=loss_dict,
+                learning_rate=self.alg.learning_rate,
+                action_std=self.alg.get_policy().output_std,
+                rnd_weight=self.alg.rnd.weight if self.cfg["algorithm"].get("rnd_cfg") else None,
+            )
+            if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
+                self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
+            if self.current_learning_iteration > 0 and self.current_learning_iteration % self.evaluation_interval == 0:
+                checkpoint = os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt")
+                self._evaluate_window(checkpoint)
+        if self.logger.writer is not None:
+            self.save(os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt"))
+            self.logger.stop_logging_writer()
 
     def record_capability_metrics(
         self,
@@ -81,6 +171,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         payload["adaptive_curriculum"] = (
             None if self.capability_gate is None else self.capability_gate.state_dict()
         )
+        payload["adaptive_rng_state"] = self._rng_state()
         super().save(path, payload)
 
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
@@ -88,9 +179,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         if infos and infos.get("adaptive_curriculum") and self.capability_gate is not None:
             self.capability_gate.load_state_dict(infos["adaptive_curriculum"])
             for axis_name, state in self.capability_gate.states.items():
-                apply_stage_to_env(
+                    apply_stage_to_env(
                     _manager_env(self.env),
                     axis_name,
                     self.capability_gate.stage_value(axis_name),
-                )
+                    )
+        if infos and infos.get("adaptive_rng_state"):
+            self._restore_rng_state(infos["adaptive_rng_state"])
         return infos

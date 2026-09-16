@@ -13,6 +13,7 @@ from pathlib import Path
 from mjlab.envs import ManagerBasedRlEnvCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
+from mjlab_microduck.evaluation.capability import resolve_enabled_axes
 
 
 def make_microduck_adaptive_velocity_env_cfg(
@@ -30,8 +31,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     # manager changes after a frozen evaluation window.
     for name in list(cfg.curriculum):
         del cfg.curriculum[name]
-    if axis_mode not in {"all_static", "com", "head_com", "composed"}:
-        raise ValueError(f"unsupported adaptive axis mode: {axis_mode}")
+    resolve_enabled_axes(axis_mode)
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
@@ -51,6 +51,8 @@ def make_microduck_adaptive_velocity_env_cfg(
         if not isinstance(stages, dict):
             raise ValueError("adaptive stage file must contain a stages object")
         for axis_name, stage_value in stages.items():
+            if axis_name not in resolve_enabled_axes(axis_mode):
+                raise ValueError(f"adaptive stage file axis {axis_name!r} is disabled by mode {axis_mode!r}")
             event_name = {"com_range": "randomize_com", "head_com_range": "randomize_head_com"}.get(axis_name)
             if event_name is None or event_name not in cfg.events:
                 raise ValueError(f"adaptive stage file contains unknown axis: {axis_name}")
