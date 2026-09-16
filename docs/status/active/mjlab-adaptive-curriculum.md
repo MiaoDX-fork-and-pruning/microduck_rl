@@ -1,14 +1,15 @@
-# MJLab Adaptive Curriculum Wave 1
+# MJLab Adaptive Curriculum v2
 
-- Status: Wave 1 executable experiments complete; long-horizon comparison pending
+- Status: Phase 0 capability contract and Phase 1 runner-control contract implemented and verified; matched-budget comparison pending
 - Source commit: `c72423f` on `origin/holy-ape`
 - Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/c72423f`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
-- Current slice: five-window CoM and composed adaptive runs, plus the completed r2
-  controls, have frozen-battery evidence.
-- Next action: use the measured results to plan a long-horizon matched-budget run;
-  do not treat the 500-iteration adaptive windows as a production training claim.
+- Current slice: strict v2 reports, runner evaluator seam, provenance validation,
+  decision classification, checkpoint metadata, RNG capture, and explicit rollback
+  boundary are implemented.
+- Next action: add full fake-runner save/load replay tests before any matched-budget
+  long-horizon run; do not treat smoke as a policy-quality claim.
 - Stop condition: do not compose or fine-tune until control, static, and one-axis
   results have complete metrics and reproducible artifacts.
 
@@ -85,3 +86,19 @@ Monitoring command:
 
 No production task or canonical schedule was modified. The standing/action-rate
 diagnostic branch is parked until its independent controller is implemented.
+
+## v2 implementation evidence
+
+- Capability report validation recomputes bucket components, scores, validity,
+  pass flags, and aggregate from raw evidence. Malformed, non-finite, missing, or
+  mismatched traces fail closed.
+- Runner validates report schema, checkpoint existence and SHA256, task axis mode,
+  and enabled-axis allowlist. Evaluator exceptions become `evaluation_error` holds.
+- Gate outcomes are typed as `hold`, `advance`, `regress`, or
+  `preservation_failure`; runner records the causal event and applies only the
+  allowed live EventManager axis.
+- Checkpoint metadata co-locates gate state, stage values, evaluator schema and
+  iteration/env-step counters, known-good checkpoint, evaluation events, and RNG
+  state. Explicit rollback rejects a checkpoint other than the recorded known-good.
+- Verification: 27 focused tests pass, Ruff and diff checks pass, adaptive 64-env /
+  5-iteration smoke passes with 61D observations, 14D actions, BAM M6, and no NaN.
