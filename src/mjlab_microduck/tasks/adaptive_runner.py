@@ -249,6 +249,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
                 "last_known_good_checkpoint": self.last_known_good_checkpoint,
                 "evaluation_events": list(self.evaluation_events),
+                "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
+                "evaluation_iteration": self.current_learning_iteration,
+                "env_step": self.current_learning_iteration * int(self.cfg.get("num_steps_per_env", 24)),
             })
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
 

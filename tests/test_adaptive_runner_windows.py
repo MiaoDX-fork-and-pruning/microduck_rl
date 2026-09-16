@@ -65,3 +65,14 @@ def test_rollback_requires_recorded_known_good_checkpoint(tmp_path):
     runner.last_known_good_checkpoint = str(tmp_path / "good.pt")
     with pytest.raises(ValueError, match="known-good"):
         runner.rollback(str(tmp_path / "other.pt"))
+
+
+def test_checkpoint_info_colocates_version_stage_and_rng(tmp_path):
+    runner = _runner(tmp_path)
+    runner.cfg = {"num_steps_per_env": 24}
+    info = runner.adaptive_checkpoint_info()
+    state = info["adaptive_curriculum"]
+    assert state["version"] == 1
+    assert state["stage_values"]["com_range"] == 0.003
+    assert state["evaluation_iteration"] == 1
+    assert "python" in info["adaptive_rng_state"]
