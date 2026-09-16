@@ -52,3 +52,39 @@ def test_axis_modes_are_explicit_and_hash_is_deterministic():
     report = build_capability_report(_raw(), metadata=META, axis_mode="com")
     assert report.payload["enabled_axes"] == ["com_range"]
     assert report.sha256() == report.sha256()
+
+
+def test_trace_scoring_distinguishes_stationary_and_wrong_signed_yaw() -> None:
+    trace = {
+        "trunk_linear_velocity_m_s": [[1.0, 0.0, 0.0]] * 4,
+        "trunk_angular_velocity_rad_s": [[0.0, 0.0, 1.0]] * 4,
+        "trunk_tilt_rad": [0.05] * 4,
+        "trunk_position_m": [[0.0, 0.0, 0.2], [0.01, 0.0, 0.2], [0.02, 0.0, 0.2], [0.03, 0.0, 0.2]],
+    }
+    from mjlab_microduck.evaluation.capability import raw_metrics_from_trace
+    good = raw_metrics_from_trace(trace, bucket="forward", commanded=[[1.0, 0.0, 0.0]] * 4)
+    stationary = raw_metrics_from_trace({**trace, "trunk_linear_velocity_m_s": [[0.0, 0.0, 0.0]] * 4}, bucket="forward", commanded=[[1.0, 0.0, 0.0]] * 4)
+    wrong_yaw = raw_metrics_from_trace(trace, bucket="yaw", commanded=[[0.0, 0.0, -1.0]] * 4)
+    assert good["tracking_error_m_s"] < stationary["tracking_error_m_s"]
+    assert wrong_yaw["angular_tracking_error_rad_s"] > 1.9
+
+
+def test_trace_scoring_invalid_shape_nan_and_missing_position() -> None:
+    from mjlab_microduck.evaluation.capability import raw_metrics_from_trace
+    base = {"trunk_linear_velocity_m_s": [[0.0, 0.0, 0.0]], "trunk_angular_velocity_rad_s": [[0.0, 0.0, 0.0]], "trunk_tilt_rad": [0.0]}
+    assert raw_metrics_from_trace(base, bucket="zero")["zero_drift_m"] is None
+    bad = {**base, "trunk_angular_velocity_rad_s": [[float("nan"), 0.0, 0.0]]}
+    assert raw_metrics_from_trace(bad, bucket="yaw", commanded=[[0.0, 0.0, 0.0]])["angular_tracking_error_rad_s"] is None
+    mismatch = {**base, "trunk_linear_velocity_m_s": [[0.0, 0.0, 0.0], [0.0, 0.0, 0.0]]}
+    assert raw_metrics_from_trace(mismatch, bucket="forward", commanded=[[0.0, 0.0, 0.0]])["tracking_error_m_s"] is None
+
+
+def test_from_dict_rejects_forged_component_and_aggregate() -> None:
+    report = build_capability_report(_raw(), metadata=META)
+    forged = {**report.payload, "buckets": {**report.payload["buckets"], "forward": {**report.payload["buckets"]["forward"], "score": 1.0}}}
+    import pytest
+    with pytest.raises(ValueError, match="does not match"):
+        type(report).from_dict(forged)
+    forged_aggregate = {**report.payload, "aggregate": {**report.payload["aggregate"], "lower_tail_score": 0.0}}
+    with pytest.raises(ValueError, match="aggregate"):
+        type(report).from_dict(forged_aggregate)

@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import hashlib
 import json
 import math
+from numbers import Real
 from typing import Any, Mapping
 
 BUCKETS = ("zero", "forward", "lateral", "yaw", "turn-left", "turn-right")
@@ -39,7 +40,7 @@ def resolve_enabled_axes(axis_mode: str) -> tuple[str, ...]:
 
 
 def _finite(v: Any) -> bool:
-    return isinstance(v, (int, float)) and math.isfinite(float(v))
+    return isinstance(v, Real) and math.isfinite(float(v))
 
 
 def _clean(v: Any) -> Any:
@@ -47,7 +48,10 @@ def _clean(v: Any) -> Any:
         return {str(k): _clean(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_clean(x) for x in v]
-    return None if isinstance(v, float) and not math.isfinite(v) else v
+    if isinstance(v, Real):
+        value = float(v)
+        return value if math.isfinite(value) else None
+    return v
 
 
 def canonical_sha256(v: Any) -> str:
@@ -123,6 +127,8 @@ class CapabilityReport:
 
     @classmethod
     def from_dict(cls, payload: Mapping[str, Any]) -> "CapabilityReport":
+        if not isinstance(payload, Mapping):
+            raise ValueError("capability report must be a mapping")
         if payload.get("schema_version") != 2:
             raise ValueError("capability report schema_version must be 2")
         for k in ("metadata", "axis_mode", "enabled_axes", "buckets", "aggregate"):
@@ -133,18 +139,37 @@ class CapabilityReport:
             raise ValueError("enabled_axes does not match axis_mode")
         if tuple(payload["buckets"]) != BUCKETS:
             raise ValueError("report must contain canonical buckets")
+        evaluator_config = payload.get("evaluator_config", {})
+        thresholds = dict(DEFAULT_THRESHOLDS)
+        if isinstance(evaluator_config, Mapping) and isinstance(
+            evaluator_config.get("thresholds"), Mapping
+        ):
+            for key, value in evaluator_config["thresholds"].items():
+                if key in thresholds and _finite(value) and float(value) > 0:
+                    thresholds[key] = float(value)
+        expected_buckets: dict[str, dict[str, Any]] = {}
         for n in BUCKETS:
             b = payload["buckets"][n]
-            if (
-                not isinstance(b, Mapping)
-                or not _finite(b.get("score"))
-                or not 0 <= b["score"] <= 1
-            ):
-                raise ValueError(f"invalid bucket score: {n}")
-            if b.get("valid") and any(
-                not _finite(v) for v in b.get("components", {}).values()
-            ):
-                raise ValueError(f"non-finite components: {n}")
+            if not isinstance(b, Mapping) or not isinstance(b.get("raw"), Mapping):
+                raise ValueError(f"missing raw bucket evidence: {n}")
+            expected = _bucket(b["raw"], n, thresholds)
+            # Raw evidence is the source of truth.  Reject forged aggregates,
+            # components, validity, or pass flags rather than silently trusting them.
+            for key in ("components", "score", "passed", "valid"):
+                if key not in b or canonical_sha256(b[key]) != canonical_sha256(expected[key]):
+                    raise ValueError(f"bucket {n} {key} does not match raw evidence")
+            expected_buckets[n] = expected
+        aggregate = payload["aggregate"]
+        if not isinstance(aggregate, Mapping):
+            raise ValueError("invalid capability aggregate")
+        expected_aggregate = {
+            "lower_tail_score": min(x["score"] for x in expected_buckets.values()),
+            "critical_buckets": list(BUCKETS),
+            "passed": bool(all(x["passed"] for x in expected_buckets.values())),
+            "valid": bool(all(x["valid"] for x in expected_buckets.values())),
+        }
+        if canonical_sha256(dict(aggregate)) != canonical_sha256(expected_aggregate):
+            raise ValueError("aggregate does not match bucket evidence")
         return cls(_clean(dict(payload)))
 
     def canonical_json(self) -> str:
@@ -219,9 +244,14 @@ def raw_metrics_from_trace(
         if bucket in ("yaw", "turn-left", "turn-right")
         else "tracking_error_m_s"
     )
-    if len(vel) == 0 or len(tilt) == 0:
+    try:
+        lengths = {len(x) for x in (vel, ang, tilt)}
+    except TypeError:
+        lengths = set()
+    if not lengths or lengths != {next(iter(lengths))} or next(iter(lengths)) == 0:
         return {"survival_fraction": 0.0, "tilt_p95_rad": None, key: None}
-    if any(not _finite(y) for row in list(vel) + list(ang) for y in row) or any(
+    if any(not isinstance(row, (list, tuple)) or len(row) < 3 or
+           any(not _finite(y) for y in row[:3]) for row in list(vel) + list(ang)) or any(
         not _finite(x) for x in tilt
     ):
         return {"survival_fraction": 0.0, "tilt_p95_rad": None, key: None}
@@ -234,7 +264,10 @@ def raw_metrics_from_trace(
         pos = trace.get("trunk_position_m", trace.get("trunk_position", []))
         raw[key] = (
             float(math.hypot(pos[-1][0] - pos[0][0], pos[-1][1] - pos[0][1]))
-            if len(pos) >= 2
+            if len(pos) == len(tilt) and len(pos) >= 2 and all(
+                isinstance(row, (list, tuple)) and len(row) >= 2 and
+                all(_finite(v) for v in row[:2]) for row in pos
+            )
             else None
         )
     elif commanded is None:
@@ -242,7 +275,13 @@ def raw_metrics_from_trace(
     else:
         idx = 2 if key.startswith("angular") else 1 if bucket == "lateral" else 0
         observed = ang if idx == 2 else vel
-        raw[key] = sum(
-            abs(float(c[idx]) - float(o[idx])) for c, o in zip(commanded, observed)
-        ) / max(1, len(observed))
+        if len(commanded) != len(observed) or any(
+            not isinstance(row, (list, tuple)) or len(row) <= idx or not _finite(row[idx])
+            for row in commanded
+        ):
+            raw[key] = None
+        else:
+            raw[key] = sum(
+                abs(float(c[idx]) - float(o[idx])) for c, o in zip(commanded, observed)
+            ) / len(observed)
     return raw
