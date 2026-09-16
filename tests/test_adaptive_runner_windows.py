@@ -58,3 +58,10 @@ def test_report_validator_requires_existing_checkpoint(tmp_path):
     report = _report(tmp_path / "missing.pt")
     with pytest.raises(ValueError, match="does not exist"):
         runner._validate_report(report, str(tmp_path / "missing.pt"))
+
+
+def test_rollback_requires_recorded_known_good_checkpoint(tmp_path):
+    runner = _runner(tmp_path)
+    runner.last_known_good_checkpoint = str(tmp_path / "good.pt")
+    with pytest.raises(ValueError, match="known-good"):
+        runner.rollback(str(tmp_path / "other.pt"))

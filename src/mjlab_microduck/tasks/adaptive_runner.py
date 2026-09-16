@@ -100,6 +100,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             checkpoint=checkpoint_path,
             seed=self.evaluation_seed,
         )
+        self.last_known_good_checkpoint = checkpoint_path
 
     def _validate_report(self, report, checkpoint_path: str) -> None:
         """Fail closed when an evaluator returns the wrong artifact/report."""
@@ -232,6 +233,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
                 "last_known_good_checkpoint": self.last_known_good_checkpoint,
                 "evaluation_events": list(self.evaluation_events),
+                "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
+                "evaluation_iteration": self.current_learning_iteration,
+                "env_step": self.current_learning_iteration * int(self.cfg.get("num_steps_per_env", 24)),
             })
         payload["adaptive_rng_state"] = self._rng_state()
         super().save(path, payload)
@@ -257,6 +261,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.capability_gate.load_state_dict(adaptive_state)
             self.last_known_good_checkpoint = adaptive_state.get("last_known_good_checkpoint")
             self.evaluation_events = list(adaptive_state.get("evaluation_events", []))
+            stored_schema = adaptive_state.get("evaluation_schema_version", 2)
+            expected_schema = int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2))
+            if int(stored_schema) != expected_schema:
+                raise ValueError("adaptive checkpoint evaluator schema mismatch")
             for axis_name, state in self.capability_gate.states.items():
                 apply_stage_to_env(
                     _manager_env(self.env),
@@ -271,6 +279,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Restore the complete trainer and curriculum state from a known-good checkpoint."""
         if not checkpoint_path:
             raise ValueError("rollback requires an explicit checkpoint path")
+        if self.last_known_good_checkpoint and checkpoint_path != self.last_known_good_checkpoint:
+            raise ValueError("rollback checkpoint is not the recorded known-good checkpoint")
         infos = self.load(checkpoint_path)
         self.evaluation_events.append({"kind": "rollback", "checkpoint": checkpoint_path})
         return infos
