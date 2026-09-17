@@ -3,6 +3,7 @@ phase: "MJLab Adaptive Curriculum v2 / 01"
 plan: "runner-control"
 type: implementation
 wave: 2
+status: validation_pending
 depends_on:
   - "MJLab Adaptive Curriculum v2 / 00"
 requirements:
@@ -197,3 +198,10 @@ runner rollback semantics. Inactive axes are never touched.
 - Phase 2 is the first phase permitted to request long cluster experiments.
 
 </success_criteria>
+
+## Current status
+
+The typed evaluator seam, cadence hook, provenance validation, typed gate
+decisions, checkpoint metadata, RNG capture, and explicit rollback boundary are
+implemented. The remaining gate is dedicated fake-runner save/load replay proof
+for PPO state, live ranges, RNG, and transition trace.

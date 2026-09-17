@@ -3,6 +3,7 @@ phase: "MJLab Adaptive Curriculum v2 / 00"
 plan: "capability-signal"
 type: implementation
 wave: 1
+status: complete
 depends_on: []
 requirements:
   - ACV2-SIGNAL-01
@@ -212,3 +213,9 @@ mode/allowlist fails closed. Inactive axes are absent, not reset to stage zero.
 - Phase 1 remains disabled until this plan's tests and smoke pass.
 
 </success_criteria>
+
+## Current status
+
+Implemented and verified. The v2 report is strict raw-evidence-derived,
+continuous, hashed, and axis-scoped. Remaining work belongs to runner replay
+validation and matched-budget training.

@@ -1,6 +1,6 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: decomposed for execution
+Status: Phase 0 complete; Phase 1 replay validation pending; Phase 2 ready after Phase 1 gate
 Date: 2026-09-15
 Related:
 
@@ -257,6 +257,6 @@ before any matched-budget compute is requested.
 2. [`01-runner-control-PLAN.md`](mjlab-adaptive-curriculum-v2/01-runner-control-PLAN.md)
    makes the adaptive runner the state authority after Phase 0 passes.
 
-Phase 2 (matched-budget multi-seed experiments), Phase 3 (constrained Codex
-advisor), and Phase 4 (stronger active teachers) remain intentionally parked
-until both executable plans pass their gates.
+Phase 2 (matched-budget multi-seed experiments) is the next active campaign
+after the Phase 1 replay gate. Phase 3 (constrained Codex advisor) and Phase 4
+(stronger active teachers) remain parked until matched-budget evidence exists.

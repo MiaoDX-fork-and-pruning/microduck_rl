@@ -8,8 +8,9 @@
 - Current slice: strict v2 reports, runner evaluator seam, provenance validation,
   decision classification, checkpoint metadata, RNG capture, and explicit rollback
   boundary are implemented.
-- Next action: add full fake-runner save/load replay tests before any matched-budget
-  long-horizon run; do not treat smoke as a policy-quality claim.
+- Next action: complete fake-runner save/load replay tests, then execute the new
+  `02-matched-budget-evaluation-PLAN.md` campaign; do not treat smoke as a
+  policy-quality claim.
 - Stop condition: do not compose or fine-tune until control, static, and one-axis
   results have complete metrics and reproducible artifacts.
 
