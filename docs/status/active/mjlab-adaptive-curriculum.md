@@ -1,7 +1,7 @@
 # MJLab Adaptive Curriculum v2
 
 - Status: Phase 1 fake-runner replay gate passed; production evaluator integration and matched-budget comparison incomplete. Latest all-static policies fail the v2 battery; adaptive policy quality remains inconclusive.
-- Latest campaign source commit: `b6788e3` (production evaluator edits remain uncommitted and are not campaign evidence)
+- Latest campaign source commit: `0890b74` (campaign r3 startup rejected overlapping gate/held-out seed sets; no policy evidence)
 - Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
@@ -31,7 +31,7 @@ not constructed by the training entrypoint. Its integration is work in progress.
 
 Historical wave-1 scores below are retained as historical records; they do not
 establish current v2 held-out quality or a matched-budget adaptive advantage.
-The queue currently reports 17 free R49 GUARANTEED GPUs, so the older statement
+The queue currently reports 18 free R49 GUARANTEED GPUs, so the older statement
 that resources are fully occupied is not current evidence of a blocker.
 
 ## Jobs

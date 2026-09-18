@@ -27,7 +27,7 @@ def main() -> int:
     parser.add_argument("--iterations", type=int, default=4000)
     parser.add_argument("--num-envs", type=int, default=4096)
     parser.add_argument("--gate-interval", type=int, default=250)
-    parser.add_argument("--gate-seed", type=int, default=20260916)
+    parser.add_argument("--gate-seed", type=int, default=20260815)
     parser.add_argument("--heldout-seed", type=int, default=20260915)
     args = parser.parse_args()
     if set(range(args.gate_seed, args.gate_seed + 6)) & set(range(args.heldout_seed, args.heldout_seed + 6)):
