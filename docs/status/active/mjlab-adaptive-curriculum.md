@@ -25,13 +25,16 @@ completed with final checkpoints, exports, and held-out reports. All three have
 finite traces but `lower_tail_score=0` and `passed=0`; this is static-branch
 evidence, not an adaptive-curriculum conclusion.
 
-Five other r4 jobs remain running (fixed 17/23/29 and CoM 17/23), and two more
-are deploying (`com-s29`, `head-com-s17`). The remaining head-CoM seeds 23/29
-and composed seeds 17/23/29 await capacity. CoM seed 17 has reached the final
-checkpoint and started its final evaluation; its latest completed valid report
-has finite 61D/14D traces but aggregate `lower_tail_score=0`, so the
-`com_range` stage stayed at `0.003` after repeated holds. This is an observed
-training signal, not yet a final held-out decision.
+Seven r4 jobs have completed: all-static 17/23/29, fixed 23/29, and CoM 17/23.
+The fixed 23/29 and CoM 17/23 final held-out reports are valid and finite but
+all fail the aggregate decision gate (`lower_tail_score` respectively
+`0.0`, `0.001775`, `0.0`, `0.0`; `passed=0`). Both completed CoM runners stayed
+at `com_range=0.003` with 16 consecutive hold events and no known-good adaptive
+transition. Fixed seed 17, CoM seed 29, head-CoM 17/23/29, and composed 17/23/29
+are still running or deploying; all remaining manifests have now been accepted.
+These partial results show that the current recipe has not yet produced a
+qualified policy, but do not by themselves establish the final adaptive-vs-fixed
+decision.
 
 Historical wave-1 scores below are retained as historical records; they do not
 establish current v2 held-out quality or a matched-budget adaptive advantage.
