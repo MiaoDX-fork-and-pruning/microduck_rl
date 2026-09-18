@@ -1,8 +1,8 @@
 # MJLab Adaptive Curriculum v2
 
-- Status: Phase 1 fake-runner replay gate passed; production evaluator integration and matched-budget comparison incomplete. Latest all-static policies fail the v2 battery; adaptive policy quality remains inconclusive.
-- Latest campaign source commit: `0890b74` (campaign r3 startup rejected overlapping gate/held-out seed sets; no policy evidence)
-- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`
+- Status: Phase 1 replay gate and production evaluator smoke passed; matched-budget comparison is running in campaign r4. No policy conclusion yet.
+- Latest campaign source commit: `8b9fa3d`
+- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/8b9fa3d`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
 - Current slice: strict v2 reports, runner evaluator seam, provenance validation,
@@ -33,6 +33,15 @@ Historical wave-1 scores below are retained as historical records; they do not
 establish current v2 held-out quality or a matched-budget adaptive advantage.
 The queue currently reports 18 free R49 GUARANTEED GPUs, so the older statement
 that resources are fully occupied is not current evidence of a blocker.
+
+Campaign r3 was rejected before training because its gate seed range overlapped
+the held-out range; those eight jobs are retained as startup audit records.
+Campaign r4 uses gate seed `20260815` and held-out seed `20260915`, and has eight
+accepted jobs currently running: fixed 17/23/29, all-static 17/23/29, and CoM
+17/23. The remaining CoM seed 29, head-CoM 17/23/29, and composed 17/23/29
+await resource release. A local enabled evaluator smoke completed PPO updates,
+created three runner-owned reports and adaptive checkpoints, and exposed/fixed
+CUDA mapped RNG restoration before r4 submission.
 
 ## Jobs
 
