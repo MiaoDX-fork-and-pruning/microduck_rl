@@ -1,6 +1,8 @@
 # MJLab Adaptive Curriculum v2
 
-- Status: Phase 1 replay gate and production evaluator smoke passed; matched-budget comparison is running in campaign r4. No policy conclusion yet.
+- Status: Phase 1 replay gate and production evaluator smoke passed; campaign r4
+  is complete. The matched-budget decision gate rejects adaptive improvement,
+  and the current recipe does not produce a battery-qualified policy.
 - Latest campaign source commit: `8b9fa3d`
 - Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/8b9fa3d`
 - Workspace/context: CloudML workspace `10076`, Executor context
@@ -8,34 +10,50 @@
 - Current slice: strict v2 reports, runner evaluator seam, provenance validation,
   decision classification, checkpoint metadata, RNG capture, and explicit rollback
   boundary are implemented.
-- Next action: finish the r4 five-branch, three-seed campaign, then audit final
-  checkpoint/export/battery hashes and compare held-out lower-tail capability.
-  Gate seeds must remain disjoint from held-out battery seeds. Do not use the
-  external staged shell harness as runner-owned evidence.
-- Stop condition: do not claim adaptive improvement or select a deployment
-  policy until fixed and all adaptive branches have complete matched-budget,
-  multi-seed held-out artifacts.
+- Next action: retain fixed as the comparison control, record the negative /
+  inconclusive result, and do not select any r4 checkpoint for deployment.
+  Further training requires a separately approved change to the recipe or
+  evaluation contract; the canonical task and thresholds remain unchanged.
+- Stop condition: adaptive is not accepted unless a new, complete matched-budget
+  campaign meets the same held-out gate without changing the canonical task.
 
 ## Current evidence summary (2026-09-18 status recheck)
 
 The Phase 1 replay gate and runner-owned production evaluator are complete. The
-current r4 source is immutable at `8b9fa3d`, with 4000 iterations at 4096
-environments and three seeds per branch. Three all-static jobs have now
-completed with final checkpoints, exports, and held-out reports. All three have
-finite traces but `lower_tail_score=0` and `passed=0`; this is static-branch
-evidence, not an adaptive-curriculum conclusion.
+immutable r4 source is `8b9fa3d`; every branch used 4000 iterations at 4096
+environments (`393,216,000` transitions) and the held-out seed set
+`adaptive-default-20260915`. All 15 jobs completed with valid final checkpoint,
+ONNX, and six-bucket reports. Every report has finite 61D observations and 14D
+actions, and its checkpoint/source/report hashes agree.
 
-Eight r4 jobs have completed: all-static 17/23/29, fixed 17/23/29, and CoM
-17/23.
-The fixed 23/29 and CoM 17/23 final held-out reports are valid and finite but
-all fail the aggregate decision gate (`lower_tail_score` respectively
-`0.0`, `0.001775`, `0.0`, `0.0`; `passed=0`). Both completed CoM runners stayed
-at `com_range=0.003` with 16 consecutive hold events and no known-good adaptive
-transition. Fixed seed 17, CoM seed 29, head-CoM 17/23/29, and composed 17/23/29
-are still running or deploying; all remaining manifests have now been accepted.
-These partial results show that the current recipe has not yet produced a
-qualified policy, but do not by themselves establish the final adaptive-vs-fixed
-decision.
+The decision gate did not accept any branch. Fixed lower-tail scores for seeds
+17/23/29 were `0.0`, `0.0`, and `0.001775`; all-static scores were `0.0` for
+all three seeds. CoM, head-CoM, and composed each scored `0.0` for all three
+seeds. Thus adaptive does not match or exceed fixed on this held-out battery,
+and fixed itself also fails the required aggregate pass criterion. The evidence
+supports retaining fixed as the control reference while declaring the current
+recipe unable to produce a qualified policy. It does not support an adaptive
+superiority claim or a deployment choice.
+
+For CoM seeds 17/23/29, runner state remained at `com_range=0.003` with 16
+hold events and no known-good transition. This confirms the adaptive controller
+failed closed under the observed capability reports; it is not evidence that a
+different curriculum stage would have passed.
+
+Final artifacts are under
+`/dongxu/microduck_rl/runs/adaptive-curriculum/campaign-8b9fa3d-r4/<branch>-s<seed>/`.
+The held-out `lower_tail_score` comparison is:
+
+| branch | seed 17 | seed 23 | seed 29 |
+| --- | ---: | ---: | ---: |
+| fixed | 0.000000 | 0.000000 | 0.001775 |
+| all-static | 0.000000 | 0.000000 | 0.000000 |
+| CoM | 0.000000 | 0.000000 | 0.000000 |
+| head-CoM | 0.000000 | 0.000000 | 0.000000 |
+| composed | 0.000000 | 0.000000 | 0.000000 |
+
+Every cell has `passed=0` and `valid=1`. The local audit workspace is
+`/tmp/r4-monitor/`.
 
 Historical wave-1 scores below are retained as historical records; they do not
 establish current v2 held-out quality or a matched-budget adaptive advantage.
@@ -44,11 +62,19 @@ that resources are fully occupied is not current evidence of a blocker.
 
 Campaign r3 was rejected before training because its gate seed range overlapped
 the held-out range; those eight jobs are retained as startup audit records.
-Campaign r4 uses gate seed `20260815` and held-out seed `20260915`. The two
-newly accepted jobs use queue `11759` and the primary GUARANTEED resource; no
-alternate queue is used. A local enabled evaluator smoke completed PPO updates,
-created runner-owned reports and adaptive checkpoints, and exposed/fixed CUDA
-mapped RNG restoration before r4 submission.
+Campaign r4 used gate seed `20260815` and held-out seed `20260915`. All 15 jobs
+used queue `11759` and the primary GUARANTEED resource; no alternate queue was
+used. A local enabled evaluator smoke completed PPO updates, created
+runner-owned reports and adaptive checkpoints, and exposed/fixed CUDA mapped
+RNG restoration before r4 submission. The final CloudML IDs were
+`t-20260918151752-gxlxx`, `t-20260918151754-gtcis`,
+`t-20260918151755-9ya5b`, `t-20260918151756-6uwmq`,
+`t-20260918151758-laop4`, `t-20260918151759-o34nb`,
+`t-20260918151818-gjpbj`, `t-20260918151819-jhbxt`,
+`t-20260918171555-vdzur`, `t-20260918171601-dw4wg`,
+`t-20260918172039-wuccw`, `t-20260918172040-nwvph`,
+`t-20260918172041-yd4xj`, `t-20260918172043-kiwno`, and
+`t-20260918172044-4agde`.
 
 ## Jobs
 
