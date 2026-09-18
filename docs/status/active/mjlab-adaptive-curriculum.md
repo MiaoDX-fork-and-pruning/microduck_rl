@@ -25,7 +25,8 @@ completed with final checkpoints, exports, and held-out reports. All three have
 finite traces but `lower_tail_score=0` and `passed=0`; this is static-branch
 evidence, not an adaptive-curriculum conclusion.
 
-Seven r4 jobs have completed: all-static 17/23/29, fixed 23/29, and CoM 17/23.
+Eight r4 jobs have completed: all-static 17/23/29, fixed 17/23/29, and CoM
+17/23.
 The fixed 23/29 and CoM 17/23 final held-out reports are valid and finite but
 all fail the aggregate decision gate (`lower_tail_score` respectively
 `0.0`, `0.001775`, `0.0`, `0.0`; `passed=0`). Both completed CoM runners stayed
