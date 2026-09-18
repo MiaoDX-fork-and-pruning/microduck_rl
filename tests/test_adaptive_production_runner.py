@@ -215,6 +215,7 @@ def test_command_evaluator_writes_checkpoint_scoped_report_with_provenance(tmp_p
         """
 import argparse
 import hashlib
+import json
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report
 
 p = argparse.ArgumentParser()
@@ -409,12 +410,9 @@ def test_preservation_failure_rolls_back_policy_rng_and_keeps_chronological_audi
             self.calls += 1
             if self.calls == 1:
                 return _report(candidate, mode="com", low=False)
-            regressed = _report(candidate, mode="com", low=False).payload
             # Preserve validity while making one frontier bucket regress by
-            # more than the 5% tolerance used by the gate.
-            bucket = regressed["buckets"]["zero"]
-            bucket["raw"]["zero_drift_m"] = 0.01
-            # Rebuild the report so its derived evidence remains canonical.
+            # more than the 5% tolerance used by the gate. Rebuild the report
+            # so all derived evidence remains canonical.
             raw = _raw(low=False)
             raw["zero"]["zero_drift_m"] = 0.01
             return _report_with_raw(candidate, raw, mode="com")

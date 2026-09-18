@@ -36,6 +36,8 @@ def main() -> int:
     source = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
     output.mkdir(parents=True, exist_ok=True)
+    smoke_dir = output / "smoke"
+    smoke_dir.mkdir(parents=True, exist_ok=True)
     training = output / "training"
     if training.exists():
         raise FileExistsError(f"refusing to mix runs in {training}")
