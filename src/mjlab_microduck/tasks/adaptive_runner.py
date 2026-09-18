@@ -126,9 +126,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
     def _restore_rng_state(self, state: Mapping[str, object]) -> None:
         random.setstate(state["python"])
         np.random.set_state(state["numpy"])
-        torch.set_rng_state(state["torch"])
+        # Checkpoints loaded with map_location=cuda move every tensor in the
+        # metadata too; the CPU generator only accepts a CPU ByteTensor.
+        torch.set_rng_state(state["torch"].detach().cpu())
         if state.get("torch_cuda") is not None and torch.cuda.is_available():
-            torch.cuda.set_rng_state_all(state["torch_cuda"])
+            torch.cuda.set_rng_state_all(
+                [item.detach().cpu() for item in state["torch_cuda"]]
+            )
 
     def _evaluate_window(self, checkpoint_path: str) -> None:
         if self.evaluation_interval <= 0 or self.evaluator is None or self.capability_gate is None:

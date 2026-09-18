@@ -131,6 +131,17 @@ def test_save_load_replays_transition_live_range_and_rng(tmp_path, fake_parent_i
     assert runner.env.event_manager.cfg.params["ranges"] == expected_range
 
 
+def test_load_restores_cpu_rng_when_checkpoint_loaded_on_cuda_map_location(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "cuda-map.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_rng_state"]["torch"] = payload["infos"]["adaptive_rng_state"]["torch"].cuda() if torch.cuda.is_available() else payload["infos"]["adaptive_rng_state"]["torch"]
+    torch.save(payload, checkpoint)
+    runner.load(str(checkpoint), map_location="cuda:0")
+    assert isinstance(torch.get_rng_state(), torch.Tensor)
+
+
 def test_load_rejects_incompatible_axis_state_without_partial_apply(tmp_path, fake_parent_io):
     runner = _runner()
     checkpoint = tmp_path / "bad.pt"
