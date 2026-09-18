@@ -17,6 +17,6 @@ def test_protocol_is_runtime_checkable_by_structural_usage() -> None:
                           "policy_format": "onnx", "seed_set_id": "seed", "generated_at": "now"},
             )
     result = Fake().evaluate(checkpoint_path=Path("p"), task_id="x", axis_mode="composed",
-                             curriculum_state={}, iteration=1, seed_set_id="seed")
+                             curriculum_state={}, iteration=1, seed_set_id="seed", evaluation_seed=7)
     assert result.payload["schema_version"] == 2
     assert FrozenCapabilityEvaluator is not None

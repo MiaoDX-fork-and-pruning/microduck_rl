@@ -18,4 +18,5 @@ class FrozenCapabilityEvaluator(Protocol):
         curriculum_state: Mapping[str, object],
         iteration: int,
         seed_set_id: str,
+        evaluation_seed: int | None = None,
     ) -> CapabilityReport: ...

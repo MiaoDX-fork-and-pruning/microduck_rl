@@ -1,18 +1,38 @@
 # MJLab Adaptive Curriculum v2
 
-- Status: Phase 0 capability contract and Phase 1 runner-control contract implemented and verified; matched-budget comparison pending
-- Source commit: `c72423f` on `origin/holy-ape`
-- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/c72423f`
+- Status: Phase 1 fake-runner replay gate passed; production evaluator integration and matched-budget comparison incomplete. Latest all-static policies fail the v2 battery; adaptive policy quality remains inconclusive.
+- Latest campaign source commit: `b6788e3` (production evaluator edits remain uncommitted and are not campaign evidence)
+- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`
 - Workspace/context: CloudML workspace `10076`, Executor context
 - Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
 - Current slice: strict v2 reports, runner evaluator seam, provenance validation,
   decision classification, checkpoint metadata, RNG capture, and explicit rollback
   boundary are implemented.
-- Next action: complete fake-runner save/load replay tests, then execute the new
-  `02-matched-budget-evaluation-PLAN.md` campaign; do not treat smoke as a
-  policy-quality claim.
+- Next action: finish and verify runner-owned production evaluation, including
+  failed-battery handling, durable artifacts, provenance, and rollback; then run
+  the five-branch, three-seed campaign. Gate seeds must be disjoint from held-out
+  battery seeds. Do not use the external staged shell harness as runner-owned evidence.
 - Stop condition: do not compose or fine-tune until control, static, and one-axis
   results have complete metrics and reproducible artifacts.
+
+## Current evidence summary (2026-09-18 status recheck)
+
+CloudML confirms the two r2 all-static jobs succeeded and the four r2 CoM /
+composed jobs are stopped. There is no running or queued job in the matched
+campaign listing. The latest campaign has two completed all-static seeds and
+zero valid completed fixed, CoM, head-CoM, or composed seeds. The initial fixed
+submissions failed at CLI startup; that is not a policy-learning failure.
+
+Both all-static final policies fail the v2 six-bucket aggregate with
+`lower_tail_score=0`, despite finite 61D/14D traces. This establishes failure
+against the current static-branch battery, not failure of adaptive curriculum.
+The production evaluator was disabled in the submitted adaptive runs and was
+not constructed by the training entrypoint. Its integration is work in progress.
+
+Historical wave-1 scores below are retained as historical records; they do not
+establish current v2 held-out quality or a matched-budget adaptive advantage.
+The queue currently reports 17 free R49 GUARANTEED GPUs, so the older statement
+that resources are fully occupied is not current evidence of a blocker.
 
 ## Jobs
 

@@ -6,6 +6,7 @@ an evaluator or training adapter owns feeding it frozen battery metrics.
 """
 
 from copy import deepcopy
+from dataclasses import dataclass, fields
 import json
 import os
 from pathlib import Path
@@ -16,6 +17,21 @@ from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_
 from mjlab_microduck.evaluation.capability import resolve_enabled_axes
 
 
+@dataclass(kw_only=True)
+class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
+    """Persist adaptive launch settings in MJLab's dataclass configuration."""
+
+    task_id: str = "Mjlab-Velocity-Flat-Adaptive-MicroDuck"
+    adaptive_axis_mode: str = "composed"
+    adaptive_evaluation_interval: int = 0
+    adaptive_evaluation_seed: int = 20260916
+    adaptive_evaluator_schema_version: int = 2
+    adaptive_seed_set_id: str = "adaptive-gate-20260916"
+    adaptive_evaluation_timeout_s: int = 900
+    adaptive_source_sha: str = ""
+    adaptive_evaluator_config_sha256: str = ""
+
+
 def make_microduck_adaptive_velocity_env_cfg(
     play: bool = False,
     rough: bool = False,
@@ -24,7 +40,8 @@ def make_microduck_adaptive_velocity_env_cfg(
 ) -> ManagerBasedRlEnvCfg:
     """Return the static initial slice used by adaptive curriculum experiments."""
 
-    cfg = make_microduck_velocity_env_cfg(play=play, rough=rough)
+    base = make_microduck_velocity_env_cfg(play=play, rough=rough)
+    cfg = AdaptiveVelocityEnvCfg(**{field.name: getattr(base, field.name) for field in fields(base)})
     canonical_curriculum = deepcopy(cfg.curriculum)
     # The canonical factory owns the initial command/DR/reward values. Remove
     # only its wall-clock curriculum terms; the adaptive adapter applies live
@@ -35,11 +52,21 @@ def make_microduck_adaptive_velocity_env_cfg(
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
-    cfg.adaptive_evaluation_interval = 0
-    cfg.adaptive_evaluation_seed = 20260915
+    cfg.task_id = {
+        "all_static": "Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck",
+        "com": "Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck",
+        "head_com": "Mjlab-Velocity-Flat-Adaptive-HeadCoM-MicroDuck",
+        "composed": "Mjlab-Velocity-Flat-Adaptive-MicroDuck",
+    }[axis_mode]
+    cfg.adaptive_source_sha = os.environ.get("MICRODUCK_SOURCE_SHA", "")
+    cfg.adaptive_evaluator_config_sha256 = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_CONFIG_SHA256", "")
+    cfg.adaptive_evaluation_interval = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "0"))
+    cfg.adaptive_evaluation_seed = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_SEED", "20260916"))
     cfg.adaptive_evaluator_schema_version = 2
-    cfg.adaptive_seed_set_id = "default-v1"
+    cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
+    if cfg.adaptive_evaluation_interval < 0:
+        raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
         if diagnostic_mode not in {"standing", "action_rate"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
