@@ -366,7 +366,7 @@ def test_evaluator_exception_is_audited_and_never_known_good(monkeypatch, tmp_pa
 
 def test_evaluated_checkpoint_stays_immutable_and_hold_saves_post_decision_state(
     monkeypatch, tmp_path
-): 
+):
     runner = _runner()
     runner.current_learning_iteration = 2
     runner.completed_iterations = 2
