@@ -133,3 +133,17 @@ run through the held-out six-bucket battery. R49 GUARANTEED and
 GUARANTEED_PUBLIC quota remains fully occupied, so no additional branch/seed
 has been submitted. These are static-branch artifacts only and do not establish
 an adaptive advantage.
+
+The two all-static final ONNX files were then checked with the frozen six-bucket
+battery using held-out seed set `adaptive-default-20260915`. Both runs produced
+six 300-step traces with finite 61D observations and 14D actions. The validated
+capability reports nevertheless failed the aggregate gate (`lower_tail_score=0`,
+`passed=0`) because forward/lateral/turn tracking remained above the configured
+thresholds. Seed 17 metrics were `zero=0.4502, forward=0, lateral=0.0112,
+yaw=0.1300, turn-left=0, turn-right=0`; seed 23 metrics were `zero=0.8542,
+forward=0, lateral=0, yaw=0.0513, turn-left=0, turn-right=0`. Reports and traces
+are in the local monitor workspace under `/tmp/adaptive-battery/results/`; ONNX
+SHA256 values are `8554fd59ac917b130ac908a3bdcd969cdf4727968d715b4f31b32fb4142d934e`
+(seed 17) and `976750347999dd418fe337367cd0847e2fa5a173ea1d346624dd93d43add42ee`
+(seed 23). This is static-branch evidence only and does not support an adaptive
+improvement claim.
