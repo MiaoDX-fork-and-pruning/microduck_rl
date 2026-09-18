@@ -124,3 +124,12 @@ running as `t-20260918100626-bfpsl`, while all-static s23 is
 `t-20260918100627-j3snt`. Corrected CoM/composed jobs were stopped and will be
 re-submitted with the staged battery/resume harness after quota release. No
 matched-budget policy result or adaptive improvement claim has been made.
+
+The corrected all-static jobs subsequently completed the full 4000-iteration
+budget successfully: `t-20260918100626-bfpsl` (seed 17, completed 12:03:18)
+and `t-20260918100627-j3snt` (seed 23, completed 12:00:54). Each output
+contains `model_3999.pt` and an auto-exported ONNX, but neither has yet been
+run through the held-out six-bucket battery. R49 GUARANTEED and
+GUARANTEED_PUBLIC quota remains fully occupied, so no additional branch/seed
+has been submitted. These are static-branch artifacts only and do not establish
+an adaptive advantage.
