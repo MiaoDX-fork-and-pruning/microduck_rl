@@ -103,3 +103,24 @@ diagnostic branch is parked until its independent controller is implemented.
   state. Explicit rollback rejects a checkpoint other than the recorded known-good.
 - Verification: 27 focused tests pass, Ruff and diff checks pass, adaptive 64-env /
   5-iteration smoke passes with 61D observations, 14D actions, BAM M6, and no NaN.
+
+## Phase 1 replay gate and matched-budget campaign (2026-09-18)
+
+The missing fake-runner checkpoint tests were added and passed. The replay gate
+now covers PPO-like policy state, gate trace, live EventManager ranges, Python /
+NumPy / Torch RNG restoration, incompatible-axis rejection, and explicit
+known-good rollback. The focused suite passes 31 tests; Ruff, `git diff --check`,
+the canonical-task diff guard, and the adaptive 64-env / 5-iteration smoke all
+pass. The implementation is committed as `b6788e3`.
+
+An immutable source snapshot for that commit was uploaded to
+`/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`. The first campaign
+submission exposed two operational issues and is retained for audit: a top-level
+`--seed` was rejected (the CLI requires `--agent.seed`), and the initial CoM /
+composed commands had evaluation disabled and therefore represented only the
+initial static slice. Those four jobs were explicitly stopped before producing
+evidence. The corrected r2 campaign uses `--agent.seed`; all-static s17 is
+running as `t-20260918100626-bfpsl`, while all-static s23 is
+`t-20260918100627-j3snt`. Corrected CoM/composed jobs were stopped and will be
+re-submitted with the staged battery/resume harness after quota release. No
+matched-budget policy result or adaptive improvement claim has been made.
