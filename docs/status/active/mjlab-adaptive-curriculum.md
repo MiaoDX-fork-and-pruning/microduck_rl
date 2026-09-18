@@ -8,26 +8,30 @@
 - Current slice: strict v2 reports, runner evaluator seam, provenance validation,
   decision classification, checkpoint metadata, RNG capture, and explicit rollback
   boundary are implemented.
-- Next action: finish and verify runner-owned production evaluation, including
-  failed-battery handling, durable artifacts, provenance, and rollback; then run
-  the five-branch, three-seed campaign. Gate seeds must be disjoint from held-out
-  battery seeds. Do not use the external staged shell harness as runner-owned evidence.
-- Stop condition: do not compose or fine-tune until control, static, and one-axis
-  results have complete metrics and reproducible artifacts.
+- Next action: finish the r4 five-branch, three-seed campaign, then audit final
+  checkpoint/export/battery hashes and compare held-out lower-tail capability.
+  Gate seeds must remain disjoint from held-out battery seeds. Do not use the
+  external staged shell harness as runner-owned evidence.
+- Stop condition: do not claim adaptive improvement or select a deployment
+  policy until fixed and all adaptive branches have complete matched-budget,
+  multi-seed held-out artifacts.
 
 ## Current evidence summary (2026-09-18 status recheck)
 
-CloudML confirms the two r2 all-static jobs succeeded and the four r2 CoM /
-composed jobs are stopped. There is no running or queued job in the matched
-campaign listing. The latest campaign has two completed all-static seeds and
-zero valid completed fixed, CoM, head-CoM, or composed seeds. The initial fixed
-submissions failed at CLI startup; that is not a policy-learning failure.
+The Phase 1 replay gate and runner-owned production evaluator are complete. The
+current r4 source is immutable at `8b9fa3d`, with 4000 iterations at 4096
+environments and three seeds per branch. Three all-static jobs have now
+completed with final checkpoints, exports, and held-out reports. All three have
+finite traces but `lower_tail_score=0` and `passed=0`; this is static-branch
+evidence, not an adaptive-curriculum conclusion.
 
-Both all-static final policies fail the v2 six-bucket aggregate with
-`lower_tail_score=0`, despite finite 61D/14D traces. This establishes failure
-against the current static-branch battery, not failure of adaptive curriculum.
-The production evaluator was disabled in the submitted adaptive runs and was
-not constructed by the training entrypoint. Its integration is work in progress.
+Five other r4 jobs remain running (fixed 17/23/29 and CoM 17/23), and two more
+are deploying (`com-s29`, `head-com-s17`). The remaining head-CoM seeds 23/29
+and composed seeds 17/23/29 await capacity. CoM seed 17 has reached the final
+checkpoint and started its final evaluation; its latest completed valid report
+has finite 61D/14D traces but aggregate `lower_tail_score=0`, so the
+`com_range` stage stayed at `0.003` after repeated holds. This is an observed
+training signal, not yet a final held-out decision.
 
 Historical wave-1 scores below are retained as historical records; they do not
 establish current v2 held-out quality or a matched-budget adaptive advantage.
@@ -36,12 +40,11 @@ that resources are fully occupied is not current evidence of a blocker.
 
 Campaign r3 was rejected before training because its gate seed range overlapped
 the held-out range; those eight jobs are retained as startup audit records.
-Campaign r4 uses gate seed `20260815` and held-out seed `20260915`, and has eight
-accepted jobs currently running: fixed 17/23/29, all-static 17/23/29, and CoM
-17/23. The remaining CoM seed 29, head-CoM 17/23/29, and composed 17/23/29
-await resource release. A local enabled evaluator smoke completed PPO updates,
-created three runner-owned reports and adaptive checkpoints, and exposed/fixed
-CUDA mapped RNG restoration before r4 submission.
+Campaign r4 uses gate seed `20260815` and held-out seed `20260915`. The two
+newly accepted jobs use queue `11759` and the primary GUARANTEED resource; no
+alternate queue is used. A local enabled evaluator smoke completed PPO updates,
+created runner-owned reports and adaptive checkpoints, and exposed/fixed CUDA
+mapped RNG restoration before r4 submission.
 
 ## Jobs
 
