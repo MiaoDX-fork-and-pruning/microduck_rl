@@ -282,7 +282,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Restore the complete trainer and curriculum state from a known-good checkpoint."""
         if not checkpoint_path:
             raise ValueError("rollback requires an explicit checkpoint path")
-        if self.last_known_good_checkpoint and checkpoint_path != self.last_known_good_checkpoint:
+        if not self.last_known_good_checkpoint:
+            raise ValueError("rollback requires a recorded known-good checkpoint")
+        if checkpoint_path != self.last_known_good_checkpoint:
             raise ValueError("rollback checkpoint is not the recorded known-good checkpoint")
         infos = self.load(checkpoint_path)
         self.evaluation_events.append({"kind": "rollback", "checkpoint": checkpoint_path})
