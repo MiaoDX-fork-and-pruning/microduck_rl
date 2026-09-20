@@ -93,6 +93,12 @@ A bounded 2000-iteration all-static diagnostic is now running: seed 17, 4096
 environments, `/tmp/adaptive-repaired-2000/pilot.log`. It is the next direct
 test of whether the surviving canonical standing curriculum can consolidate
 zero-command behavior after the 500-iteration partial-learning result.
+Its checkpoint `model_500.pt` is available under
+`/tmp/logs/rsl_rl/adaptive_repaired_static_2000/2026-09-20_17-59-03_ownership-repair-s17/`.
+At the native six-bucket gate it improved forward tracking to 0.064 m/s,
+yaw to 0.483 rad/s, and turn-left to 0.456 rad/s, while zero drift remained
+0.087 m and lateral error 0.136 m/s; aggregate remains 0.0. Training is still
+live around iteration 700, so this is an intermediate diagnostic result.
 
 The runner end-to-end smoke also passed: native held-out and separately named
 CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
