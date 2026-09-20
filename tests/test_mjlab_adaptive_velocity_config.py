@@ -15,7 +15,7 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
     canonical = make_microduck_velocity_env_cfg()
     adaptive = make_microduck_adaptive_velocity_env_cfg()
     assert adaptive is not canonical
-    assert adaptive.curriculum == {}
+    assert set(adaptive.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
     assert adaptive.observations == canonical.observations
     assert adaptive.actions == canonical.actions
     assert adaptive.commands["twist"].rel_standing_envs == 0.02
@@ -28,8 +28,17 @@ def test_adaptive_runner_has_distinct_experiment_name() -> None:
 
 
 def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
-    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static").adaptive_axis_mode == "all_static"
-    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="com").adaptive_axis_mode == "com"
+    canonical = make_microduck_velocity_env_cfg()
+    all_static = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    com = make_microduck_adaptive_velocity_env_cfg(axis_mode="com")
+    head = make_microduck_adaptive_velocity_env_cfg(axis_mode="head_com")
+    composed = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert all_static.adaptive_axis_mode == "all_static"
+    assert com.adaptive_axis_mode == "com"
+    assert set(all_static.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
+    assert set(com.curriculum) == set(canonical.curriculum) - {"com_range"}
+    assert set(head.curriculum) == set(canonical.curriculum) - {"head_com_range"}
+    assert set(composed.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
 
 
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:

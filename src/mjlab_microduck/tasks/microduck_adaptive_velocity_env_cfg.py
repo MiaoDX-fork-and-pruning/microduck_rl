@@ -43,12 +43,22 @@ def make_microduck_adaptive_velocity_env_cfg(
     base = make_microduck_velocity_env_cfg(play=play, rough=rough)
     cfg = AdaptiveVelocityEnvCfg(**{field.name: getattr(base, field.name) for field in fields(base)})
     canonical_curriculum = deepcopy(cfg.curriculum)
-    # The canonical factory owns the initial command/DR/reward values. Remove
-    # only its wall-clock curriculum terms; the adaptive adapter applies live
-    # manager changes after a frozen evaluation window.
-    for name in list(cfg.curriculum):
-        del cfg.curriculum[name]
-    resolve_enabled_axes(axis_mode)
+    # Preserve canonical curricula unless the adaptive controller explicitly
+    # owns that axis.  The controller mutates the live EventManager ranges for
+    # the selected DR axes; all standing, smoothing, command, pose, terrain,
+    # and reward schedules remain canonical and continue to run normally.
+    enabled_axes = resolve_enabled_axes(axis_mode)
+    owned_curriculum = {
+        "com": {"com_range"},
+        "head_com": {"head_com_range"},
+        "composed": {"com_range", "head_com_range"},
+        "all_static": {"com_range", "head_com_range"},
+    }[axis_mode]
+    cfg.curriculum = {
+        name: term
+        for name, term in canonical_curriculum.items()
+        if name not in owned_curriculum
+    }
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
@@ -83,7 +93,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         if not isinstance(stages, dict):
             raise ValueError("adaptive stage file must contain a stages object")
         for axis_name, stage_value in stages.items():
-            if axis_name not in resolve_enabled_axes(axis_mode):
+            if axis_name not in enabled_axes:
                 raise ValueError(f"adaptive stage file axis {axis_name!r} is disabled by mode {axis_mode!r}")
             event_name = {"com_range": "randomize_com", "head_com_range": "randomize_head_com"}.get(axis_name)
             if event_name is None or event_name not in cfg.events:
