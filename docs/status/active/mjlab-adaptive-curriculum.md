@@ -112,6 +112,21 @@ does not produce a usable policy; next work should be a single-axis diagnostic
 (push robustness or explicit lateral command sampling), still before any
 multi-seed campaign.
 
+The explicit-lateral single-seed pilot is implemented as
+`Mjlab-Velocity-Flat-Adaptive-Lateral-MicroDuck` (commit `edf6a3f`). It keeps
+the canonical standing/action-rate/pose curricula and adds a 20% pure-lateral
+command bucket; a 1024-env reset probe measured 18.75% pure-lateral samples.
+The required 64-env/5-iteration smoke and focused config tests passed. Its
+500-iteration seed-17 checkpoint is under
+`/tmp/logs/rsl_rl/adaptive_lateral_pilot/2026-09-20_19-16-59_lateral-bucket-s17/`.
+Native held-out evaluation is valid but still fails: zero drift 0.103 m,
+forward error 0.055 m/s, lateral error 0.138 m/s, yaw error 0.629 rad/s,
+turn-left 0.731 rad/s, and turn-right 0.673 rad/s. The lateral bucket did
+increase mean lateral velocity from 0.001 m/s in the static model-1999 trace
+to 0.040 m/s, but with large oscillation and no gate improvement. Resume this
+same seed to 2000 iterations before rejecting the recipe; do not start a
+multi-seed campaign from the 500-iteration result.
+
 The runner end-to-end smoke also passed: native held-out and separately named
 CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
 both are negative valid reports. The first smoke exposed and fixed the live
