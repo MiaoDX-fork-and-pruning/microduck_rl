@@ -12,8 +12,10 @@ import os
 from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.managers import CurriculumTermCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
+from . import mdp as microduck_mdp
 from mjlab_microduck.evaluation.capability import resolve_enabled_axes
 
 
@@ -84,7 +86,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking"}:
+        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "push"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
@@ -97,8 +99,23 @@ def make_microduck_adaptive_velocity_env_cfg(
             cfg.commands["twist"].rel_lateral_envs = 0.20
             cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Lateral-MicroDuck"
         else:
-            cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
-            cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
+            if diagnostic_mode == "tracking":
+                cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
+            else:
+                cfg.curriculum["push_strength"] = CurriculumTermCfg(
+                    func=microduck_mdp.push_curriculum,
+                    params={
+                        "event_name": "push_robot",
+                        "push_stages": [
+                            {"step": 0, "velocity_range": {"x": (-0.10, 0.10), "y": (-0.10, 0.10)}},
+                            {"step": 500 * 24, "velocity_range": {"x": (-0.15, 0.15), "y": (-0.15, 0.15)}},
+                            {"step": 1000 * 24, "velocity_range": {"x": (-0.22, 0.22), "y": (-0.22, 0.22)}},
+                            {"step": 1500 * 24, "velocity_range": {"x": (-0.30, 0.30), "y": (-0.30, 0.30)}},
+                        ],
+                    },
+                )
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck"
         cfg.adaptive_axis_mode = "all_static"
 
     stage_file = os.environ.get("MICRODUCK_ADAPTIVE_STAGE_FILE")
@@ -136,3 +153,4 @@ AdaptiveMicroduckStandingRlCfg = _adaptive_rl_cfg("velocity_adaptive_standing_di
 AdaptiveMicroduckActionRateRlCfg = _adaptive_rl_cfg("velocity_adaptive_action_rate_diagnostic")
 AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diagnostic")
 AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
+AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")

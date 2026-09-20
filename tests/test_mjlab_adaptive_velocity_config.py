@@ -7,6 +7,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckActionRateRlCfg,
     AdaptiveMicroduckLateralRlCfg,
     AdaptiveMicroduckTrackingRlCfg,
+    AdaptiveMicroduckPushRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -52,8 +53,9 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckActionRateRlCfg.experiment_name,
         AdaptiveMicroduckLateralRlCfg.experiment_name,
         AdaptiveMicroduckTrackingRlCfg.experiment_name,
+        AdaptiveMicroduckPushRlCfg.experiment_name,
     }
-    assert len(names) == 7
+    assert len(names) == 8
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -106,3 +108,13 @@ def test_tracking_reward_separates_stationary_from_accurate_motion() -> None:
     assert reward[0] < 0.74
     assert reward[1] > 1.92
     assert reward[2] == 2.0
+
+
+def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    push = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="push")
+    assert push.task_id == "Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck"
+    assert set(push.curriculum) == set(base.curriculum) | {"push_strength"}
+    assert push.events["push_robot"].params["velocity_range"] == {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}
+    assert push.rewards == base.rewards
+    assert push.commands == base.commands
