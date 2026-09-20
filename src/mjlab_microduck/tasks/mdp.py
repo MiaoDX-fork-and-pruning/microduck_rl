@@ -4529,9 +4529,11 @@ class VelocityCommandCommandOnly(UniformVelocityCommand):
         # turning. Mirrors the base rel_forward_envs mechanism.
         p = getattr(self.cfg, "rel_turn_in_place_envs", 0.0)
         r = torch.empty(len(env_ids), device=self.device)
+        turn_mask = torch.zeros_like(self.is_standing_env)
         if p > 0.0:
             turn_ids = env_ids[r.uniform_(0.0, 1.0) < p]
             if len(turn_ids) > 0:
+                turn_mask[turn_ids] = True
                 self.vel_command_b[turn_ids, 0] = 0.0
                 self.vel_command_b[turn_ids, 1] = 0.0
                 lo, hi = self.cfg.ranges.ang_vel_z
@@ -4552,7 +4554,18 @@ class VelocityCommandCommandOnly(UniformVelocityCommand):
         p_lateral = getattr(self.cfg, "rel_lateral_envs", 0.0)
         if p_lateral <= 0.0:
             return
-        lateral_ids = env_ids[r.uniform_(0.0, 1.0) < p_lateral]
+        # Preserve canonical standing/turn/forward buckets. The diagnostic
+        # probability is conditional on the remaining ordinary-motion pool,
+        # so enabling lateral practice does not silently remove those lessons.
+        candidates = env_ids[
+            ~self.is_standing_env[env_ids]
+            & ~self.is_forward_env[env_ids]
+            & ~turn_mask[env_ids]
+        ]
+        if len(candidates) == 0:
+            return
+        conditional_p = min(1.0, p_lateral / max(1e-6, 1.0 - p))
+        lateral_ids = candidates[r[: len(candidates)].uniform_(0.0, 1.0) < conditional_p]
         if len(lateral_ids) == 0:
             return
         self.vel_command_b[lateral_ids, 0] = 0.0

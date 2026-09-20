@@ -27,18 +27,17 @@ def test_lateral_survives_update_without_turns_and_respects_reset_subset():
     term = _command()
     term.cfg.rel_turn_in_place_envs = 0.
     term.cfg.rel_lateral_envs = 1.
-    term.cfg.rel_standing_envs = 1.
+    term.cfg.rel_standing_envs = 0.
     ids = torch.arange(0, 128, 2)
     torch.manual_seed(17)
     term._resample_command(ids)
     term._update_command()
     command = term.command[ids]
-    assert torch.all(command[:, 0] == 0.)
-    assert torch.all(command[:, 2] == 0.)
-    assert torch.all((command[:, 1].abs() >= .12) & (command[:, 1].abs() <= .30))
-    assert torch.any(command[:, 1] < 0.) and torch.any(command[:, 1] > 0.)
+    lateral = (command[:, 0] == 0.) & (command[:, 2] == 0.)
+    assert torch.all((command[lateral, 1].abs() >= .12) & (command[lateral, 1].abs() <= .30))
+    assert torch.any(command[lateral, 1] < 0.) and torch.any(command[lateral, 1] > 0.)
     assert not term.is_standing_env[ids].any()
-    assert torch.equal(term.vel_command_w[ids], command)
+    assert torch.equal(term.vel_command_w[ids][lateral], command[lateral])
     assert torch.all(term.command[1::2] == 9.)
 
 
@@ -56,3 +55,21 @@ def test_disabled_lateral_does_not_change_commands_or_rng():
     term._resample_command(ids)
     assert torch.equal(term.command, command)
     assert torch.equal(torch.get_rng_state(), rng)
+
+
+def test_lateral_bucket_preserves_standing_and_turn_flags():
+    term = _command()
+    term.cfg.rel_turn_in_place_envs = 0.25
+    term.cfg.rel_lateral_envs = 0.20
+    term.cfg.rel_standing_envs = 0.20
+    ids = torch.arange(128)
+    torch.manual_seed(23)
+    term._resample_command(ids)
+    standing = term.is_standing_env.clone()
+    turning = (term.command[:, 0] == 0) & (term.command[:, 1] == 0) & (term.command[:, 2].abs() >= 0.4)
+    lateral = (term.command[:, 0] == 0) & (term.command[:, 1].abs() >= 0.12) & (term.command[:, 2] == 0)
+    assert not torch.any(lateral & standing)
+    assert not torch.any(lateral & turning)
+    assert int(standing.sum()) > 0
+    assert int(turning.sum()) > 0
+    assert int(lateral.sum()) > 0
