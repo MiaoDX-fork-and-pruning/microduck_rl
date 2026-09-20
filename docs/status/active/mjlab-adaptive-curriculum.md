@@ -89,6 +89,11 @@ yaw error 0.637 rad/s; forward improved to 0.054 m/s. This is evidence of
 partial learning, not a usable policy or a matched-budget result. The pilot's
 64-env/5-iteration smoke and standard normalizer-baked export passed.
 
+A bounded 2000-iteration all-static diagnostic is now running: seed 17, 4096
+environments, `/tmp/adaptive-repaired-2000/pilot.log`. It is the next direct
+test of whether the surviving canonical standing curriculum can consolidate
+zero-command behavior after the 500-iteration partial-learning result.
+
 The runner end-to-end smoke also passed: native held-out and separately named
 CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
 both are negative valid reports. The first smoke exposed and fixed the live
