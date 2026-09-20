@@ -9,31 +9,30 @@
 
 ## Current experiment and next decision
 
-Lateral sampling did not solve native tracking. `edf6a3f` adds a diagnostic
-20% lateral override. Its 500-update pilot completed; the same seed 17 resumed
-from model 499 and is currently running as PID 3106039, with log
-`/tmp/adaptive-lateral-pilot/resume3.log` and run directory
-`/tmp/logs/rsl_rl/adaptive_lateral_pilot/2026-09-20_19-41-08_lateral-bucket-s17-resume/`.
-Authoritative progress is the process/log, not this capsule. Resume requested
-2000 ADDITIONAL updates: final label will be 2498, actual total 2500 updates.
-Model 2000 has env step 48048 (2002 updates); use env step / 24 for budgets.
-Environment counters/curricula restore, but episodes/startup DR restart.
-This is diagnostic evidence, not a matched-budget campaign.
-Endpoint model 2498 native report `/tmp/adaptive-lateral-pilot/native-2498/`
-still fails: zero drift 0.0860 m, forward 0.0918 m/s, lateral 0.1597 m/s,
-yaw 0.2283 rad/s, and turn-left/right 0.1656/0.1755 rad/s. Mean lateral
-velocity is only 0.023 m/s (last 50 steps 0.037 m/s), so the apparent
-1500/2000 improvement was not stable lateral locomotion.
+The push robustness diagnostic is the active bounded experiment. Its fresh
+500-update seed-17 pilot completed at
+`/tmp/logs/rsl_rl/adaptive_push_pilot/2026-09-20_21-37-28_push-curriculum-s17/`;
+the held-out native report is `/tmp/adaptive-push-pilot/native-499/`. It is
+valid and NaN-free but fails the usability gate: zero drift 0.0837 m, forward
+error 0.0638 m/s, lateral error 0.1716 m/s, yaw error 0.2027 rad/s, and
+turn-left/right errors 0.2351/0.1884 rad/s. The push curriculum had reached
+only +/-0.15 m/s at that checkpoint, so a single 500-update failure does not
+identify the endpoint behavior.
 
-Next: finish this run and evaluate its endpoint. Then run one fresh seed-17,
-4096-env, 500-update `Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck` pilot.
-It changes only linear tracking std from sqrt(0.1) to 0.12 m/s compared with
-Adaptive-Static; command sampling and all other curricula/rewards remain fixed.
-Hypothesis: broad velocity reward makes standing at a nonzero lateral command
-cheaper than developing a stable gait. Do not infer success from total reward.
-Require raw native forward/lateral velocity and error, falls, and all six scores.
-Keep goal active until native usability, calibration, and required export/transfer
-proofs are complete; do not stop because a diagnostic report was produced.
+The same checkpoint is now resuming for 1500 additional updates (total
+2000), with explicit run directory
+`/tmp/logs/rsl_rl/adaptive_push_pilot/2026-09-20_22-07-55_push-curriculum-s17-resume1500/`.
+The native endpoint battery is queued by `/tmp/adaptive-push-followup.log` and
+will write `/tmp/adaptive-push-pilot/native-1999-resume/` after
+`model_1999.pt` exists. This is diagnostic evidence, not a matched-budget
+campaign. Require raw native forward/lateral velocity and error, falls, and all
+six scores before deciding whether push robustness is useful.
+
+If the 2000-update push endpoint still fails, continue with one bounded recipe
+diagnostic selected from the measured failure mode; do not start a five-branch
+or multi-seed campaign. Keep the goal active until native usability,
+calibration, and required export/transfer proofs are complete; do not stop
+because a diagnostic report was produced.
 
 ## Latest diagnostic evidence
 
@@ -70,6 +69,8 @@ proofs are complete; do not stop because a diagnostic report was produced.
   67 mm spawn-relative offset. Actor has no absolute position input. The old
   no-push test changed RNG consumption; it is not a clean causal comparison.
   Preserve thresholds; future push diagnostics must retain RNG draws/timers.
+- Push pilot report `/tmp/adaptive-push-pilot/native-499/` is valid but still
+  fails all-static usability; the total-2000 continuation is in progress.
 
 ## Proven foundations and remaining gates
 
