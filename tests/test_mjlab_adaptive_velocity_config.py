@@ -5,6 +5,9 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckStaticRlCfg,
     AdaptiveMicroduckStandingRlCfg,
     AdaptiveMicroduckActionRateRlCfg,
+    AdaptiveMicroduckLateralRlCfg,
+    AdaptiveMicroduckTrackingRlCfg,
+    AdaptiveMicroduckPushRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -15,7 +18,7 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
     canonical = make_microduck_velocity_env_cfg()
     adaptive = make_microduck_adaptive_velocity_env_cfg()
     assert adaptive is not canonical
-    assert adaptive.curriculum == {}
+    assert set(adaptive.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
     assert adaptive.observations == canonical.observations
     assert adaptive.actions == canonical.actions
     assert adaptive.commands["twist"].rel_standing_envs == 0.02
@@ -28,8 +31,17 @@ def test_adaptive_runner_has_distinct_experiment_name() -> None:
 
 
 def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
-    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static").adaptive_axis_mode == "all_static"
-    assert make_microduck_adaptive_velocity_env_cfg(axis_mode="com").adaptive_axis_mode == "com"
+    canonical = make_microduck_velocity_env_cfg()
+    all_static = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    com = make_microduck_adaptive_velocity_env_cfg(axis_mode="com")
+    head = make_microduck_adaptive_velocity_env_cfg(axis_mode="head_com")
+    composed = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert all_static.adaptive_axis_mode == "all_static"
+    assert com.adaptive_axis_mode == "com"
+    assert set(all_static.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
+    assert set(com.curriculum) == set(canonical.curriculum) - {"com_range"}
+    assert set(head.curriculum) == set(canonical.curriculum) - {"head_com_range"}
+    assert set(composed.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
 
 
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
@@ -39,8 +51,11 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckHeadComRlCfg.experiment_name,
         AdaptiveMicroduckStandingRlCfg.experiment_name,
         AdaptiveMicroduckActionRateRlCfg.experiment_name,
+        AdaptiveMicroduckLateralRlCfg.experiment_name,
+        AdaptiveMicroduckTrackingRlCfg.experiment_name,
+        AdaptiveMicroduckPushRlCfg.experiment_name,
     }
-    assert len(names) == 5
+    assert len(names) == 8
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -48,3 +63,78 @@ def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
     action_rate = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="action_rate")
     assert list(standing.curriculum) == ["standing_envs"]
     assert list(action_rate.curriculum) == ["action_rate_weight"]
+
+
+def test_lateral_diagnostic_adds_explicit_command_bucket() -> None:
+    lateral = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral")
+    assert lateral.adaptive_axis_mode == "all_static"
+    assert lateral.commands["twist"].rel_lateral_envs == 0.20
+    assert "standing_envs" in lateral.curriculum
+    assert "action_rate_weight" in lateral.curriculum
+
+
+def test_tracking_diagnostic_changes_only_linear_reward_width() -> None:
+    from copy import deepcopy
+    from mjlab.tasks.registry import load_env_cfg
+
+    baseline = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    tracking = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck")
+    assert tracking.task_id == "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
+    assert tracking.adaptive_axis_mode == "all_static"
+    assert tracking.observations == baseline.observations
+    assert tracking.actions == baseline.actions
+    assert tracking.commands == baseline.commands
+    assert tracking.events == baseline.events
+    assert tracking.curriculum == baseline.curriculum
+    expected = deepcopy(baseline.rewards)
+    expected["track_linear_velocity"].params["std"] = 0.12
+    assert tracking.rewards == expected
+    assert baseline.rewards["track_linear_velocity"].params["std"] ** 2 > 0.099
+
+
+def test_tracking_reward_separates_stationary_from_accurate_motion() -> None:
+    from types import SimpleNamespace
+    import torch
+
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="tracking")
+    term = cfg.rewards["track_linear_velocity"]
+    command = torch.tensor([[0., 0.12, 0.]]).repeat(3, 1)
+    actual = torch.tensor([[0., 0., 0.], [0., 0.096, 0.], [0., 0.12, 0.]])
+    env = SimpleNamespace(
+        command_manager=SimpleNamespace(get_command=lambda _: command),
+        scene={"robot": SimpleNamespace(data=SimpleNamespace(root_link_lin_vel_b=actual))},
+    )
+    reward = term.func(env, **term.params) * term.weight
+    assert reward[0] < 0.74
+    assert reward[1] > 1.92
+    assert reward[2] == 2.0
+
+
+def test_acquisition_diagnostic_freezes_other_wall_clock_curricula() -> None:
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="all_static", diagnostic_mode="acquisition"
+    )
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
+    assert cfg.commands["twist"].rel_lateral_envs == 0.20
+    assert list(cfg.curriculum) == ["tracking_std"]
+    assert cfg.curriculum["tracking_std"].params["std_stages"][-1]["std"] == 0.12
+    assert cfg.rewards["track_linear_velocity"].params["std"] ** 2 > 0.099
+
+
+def test_acquisition_lateral_preserves_anchor_buckets() -> None:
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="all_static", diagnostic_mode="acquisition_lateral"
+    )
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
+    assert cfg.commands["twist"].rel_lateral_envs == 0.50
+    assert list(cfg.curriculum) == ["tracking_std"]
+
+
+def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    push = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="push")
+    assert push.task_id == "Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck"
+    assert set(push.curriculum) == set(base.curriculum) | {"push_strength"}
+    assert push.events["push_robot"].params["velocity_range"] == {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}
+    assert push.rewards == base.rewards
+    assert push.commands == base.commands

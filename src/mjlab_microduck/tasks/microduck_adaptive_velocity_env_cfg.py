@@ -12,9 +12,29 @@ import os
 from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
+from mjlab.managers import CurriculumTermCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
+from . import mdp as microduck_mdp
 from mjlab_microduck.evaluation.capability import resolve_enabled_axes
+
+
+# At a 0.12 m/s command the canonical std=sqrt(0.1) awards a stationary
+# robot 86.6% of the tracking maximum. Test a sharper signal separately
+# from command sampling; do not change the canonical reward or product gate.
+DIAGNOSTIC_LINEAR_TRACKING_STD = 0.12
+
+# Acquisition diagnostic: keep the early walking signal reachable, then tighten
+# the absolute tracking target only after a gait has had time to form. A fixed
+# 0.12 m/s std makes the initial ±0.3/±0.4 m/s command support too sparse for
+# this low-torque biped and causes early falls; the staged signal removes the
+# stationary lateral-reward loophole without making iteration zero impossible.
+ACQUISITION_TRACKING_STD_STAGES = (
+    {"step": 0, "std": 0.31622776601683794},
+    {"step": 500 * 24, "std": 0.22},
+    {"step": 1000 * 24, "std": 0.16},
+    {"step": 1500 * 24, "std": 0.12},
+)
 
 
 @dataclass(kw_only=True)
@@ -43,12 +63,22 @@ def make_microduck_adaptive_velocity_env_cfg(
     base = make_microduck_velocity_env_cfg(play=play, rough=rough)
     cfg = AdaptiveVelocityEnvCfg(**{field.name: getattr(base, field.name) for field in fields(base)})
     canonical_curriculum = deepcopy(cfg.curriculum)
-    # The canonical factory owns the initial command/DR/reward values. Remove
-    # only its wall-clock curriculum terms; the adaptive adapter applies live
-    # manager changes after a frozen evaluation window.
-    for name in list(cfg.curriculum):
-        del cfg.curriculum[name]
-    resolve_enabled_axes(axis_mode)
+    # Preserve canonical curricula unless the adaptive controller explicitly
+    # owns that axis.  The controller mutates the live EventManager ranges for
+    # the selected DR axes; all standing, smoothing, command, pose, terrain,
+    # and reward schedules remain canonical and continue to run normally.
+    enabled_axes = resolve_enabled_axes(axis_mode)
+    owned_curriculum = {
+        "com": {"com_range"},
+        "head_com": {"head_com_range"},
+        "composed": {"com_range", "head_com_range"},
+        "all_static": {"com_range", "head_com_range"},
+    }[axis_mode]
+    cfg.curriculum = {
+        name: term
+        for name, term in canonical_curriculum.items()
+        if name not in owned_curriculum
+    }
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
@@ -68,12 +98,68 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate"}:
+        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "acquisition", "acquisition_lateral", "push"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
-        else:
+        elif diagnostic_mode == "action_rate":
             cfg.curriculum = {"action_rate_weight": canonical_curriculum["action_rate_weight"]}
+        elif diagnostic_mode == "lateral":
+            # Preserve the canonical standing/action-rate/pose schedules while
+            # adding an explicit pure-lateral command bucket. This is a
+            # bounded recipe diagnostic and leaves the product task unchanged.
+            cfg.commands["twist"].rel_lateral_envs = 0.20
+            cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Lateral-MicroDuck"
+        else:
+            if diagnostic_mode == "tracking":
+                cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
+            elif diagnostic_mode == "acquisition":
+                # Keep only the tracking-signal curriculum in this diagnostic.
+                # Canonical action-rate, standing, and head-pose schedules are
+                # deliberately frozen at their initial values so the experiment
+                # tests acquisition rather than several simultaneous taxes.
+                cfg.commands["twist"].rel_lateral_envs = 0.20
+                cfg.curriculum = {
+                    "tracking_std": CurriculumTermCfg(
+                        func=microduck_mdp.velocity_tracking_std_curriculum,
+                        params={
+                            "reward_name": "track_linear_velocity",
+                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
+                        },
+                    )
+                }
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
+            elif diagnostic_mode == "acquisition_lateral":
+                # Same acquisition contract, but allocate half of the
+                # ordinary-motion pool to explicit lateral commands. Standing,
+                # turn-in-place, and forward anchors remain intact in the
+                # command sampler; this isolates exposure from reward changes.
+                cfg.commands["twist"].rel_lateral_envs = 0.50
+                cfg.curriculum = {
+                    "tracking_std": CurriculumTermCfg(
+                        func=microduck_mdp.velocity_tracking_std_curriculum,
+                        params={
+                            "reward_name": "track_linear_velocity",
+                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
+                        },
+                    )
+                }
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
+            else:
+                cfg.curriculum["push_strength"] = CurriculumTermCfg(
+                    func=microduck_mdp.push_curriculum,
+                    params={
+                        "event_name": "push_robot",
+                        "push_stages": [
+                            {"step": 0, "velocity_range": {"x": (-0.10, 0.10), "y": (-0.10, 0.10)}},
+                            {"step": 500 * 24, "velocity_range": {"x": (-0.15, 0.15), "y": (-0.15, 0.15)}},
+                            {"step": 1000 * 24, "velocity_range": {"x": (-0.22, 0.22), "y": (-0.22, 0.22)}},
+                            {"step": 1500 * 24, "velocity_range": {"x": (-0.30, 0.30), "y": (-0.30, 0.30)}},
+                        ],
+                    },
+                )
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck"
         cfg.adaptive_axis_mode = "all_static"
 
     stage_file = os.environ.get("MICRODUCK_ADAPTIVE_STAGE_FILE")
@@ -83,7 +169,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         if not isinstance(stages, dict):
             raise ValueError("adaptive stage file must contain a stages object")
         for axis_name, stage_value in stages.items():
-            if axis_name not in resolve_enabled_axes(axis_mode):
+            if axis_name not in enabled_axes:
                 raise ValueError(f"adaptive stage file axis {axis_name!r} is disabled by mode {axis_mode!r}")
             event_name = {"com_range": "randomize_com", "head_com_range": "randomize_head_com"}.get(axis_name)
             if event_name is None or event_name not in cfg.events:
@@ -109,3 +195,8 @@ AdaptiveMicroduckComRlCfg = _adaptive_rl_cfg("velocity_adaptive_com")
 AdaptiveMicroduckHeadComRlCfg = _adaptive_rl_cfg("velocity_adaptive_head_com")
 AdaptiveMicroduckStandingRlCfg = _adaptive_rl_cfg("velocity_adaptive_standing_diagnostic")
 AdaptiveMicroduckActionRateRlCfg = _adaptive_rl_cfg("velocity_adaptive_action_rate_diagnostic")
+AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diagnostic")
+AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
+AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
+AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
+AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
