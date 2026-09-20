@@ -101,8 +101,16 @@ error is 0.148 m/s; model 1500 regresses to zero drift 0.079 m, forward
 The same model 1000 at the training initial CoM distribution (±3 mm) still
 fails (zero drift 0.089 m, lateral 0.136 m/s), so the final evaluator's
 larger ±15/±10 mm distribution is not the sole cause. Training is live around
-iteration 1600; evaluate model 1999 when it appears before selecting the next
-bounded recipe diagnostic.
+iteration 1600; the run completed at model 1999. Its native final-distribution
+report is `/tmp/adaptive-repaired-2000/native-1999/native_capability.json`:
+zero drift 0.072 m, forward error 0.103 m/s, lateral error 0.119 m/s, yaw
+error 0.301 rad/s, turn-left 0.257 rad/s, and turn-right 0.257 rad/s. All
+episodes survived and tilt stayed below 0.132 rad, but aggregate remains 0.0
+because zero drift and lateral tracking miss the continuous six-bucket product
+gate. The bounded recipe test therefore confirms partial native learning but
+does not produce a usable policy; next work should be a single-axis diagnostic
+(push robustness or explicit lateral command sampling), still before any
+multi-seed campaign.
 
 The runner end-to-end smoke also passed: native held-out and separately named
 CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
