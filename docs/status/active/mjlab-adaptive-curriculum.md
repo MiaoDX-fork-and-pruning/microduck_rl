@@ -127,6 +127,17 @@ to 0.040 m/s, but with large oscillation and no gate improvement. Resume this
 same seed to 2000 iterations before rejecting the recipe; do not start a
 multi-seed campaign from the 500-iteration result.
 
+The lateral pilot has a sampling confound: its 20% lateral override replaces
+some turn and standing samples. Read-only replay measured effective turn at
+about 12% instead of 15% and standing at about 68% of the configured value;
+with `rel_lateral_envs=0`, the old command tensors and Torch RNG state remain
+bit-for-bit unchanged. The pilot is therefore diagnostic evidence only. Its
+resume was verified from checkpoint state: model 499 had env step 12000 and
+model 1000 had env step 24048; the current resume command is continuing toward
+2499 total update labels, not a fresh matched 2000-iteration run. A corrected
+mutually-exclusive sampler or a fresh from-scratch pilot is required before
+attributing any improvement to lateral exposure.
+
 The runner end-to-end smoke also passed: native held-out and separately named
 CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
 both are negative valid reports. The first smoke exposed and fixed the live
