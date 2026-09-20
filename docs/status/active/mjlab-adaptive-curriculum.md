@@ -19,6 +19,11 @@ Authoritative progress is the process/log, not this capsule. Resume requested
 Model 2000 has env step 48048 (2002 updates); use env step / 24 for budgets.
 Environment counters/curricula restore, but episodes/startup DR restart.
 This is diagnostic evidence, not a matched-budget campaign.
+Endpoint model 2498 native report `/tmp/adaptive-lateral-pilot/native-2498/`
+still fails: zero drift 0.0860 m, forward 0.0918 m/s, lateral 0.1597 m/s,
+yaw 0.2283 rad/s, and turn-left/right 0.1656/0.1755 rad/s. Mean lateral
+velocity is only 0.023 m/s (last 50 steps 0.037 m/s), so the apparent
+1500/2000 improvement was not stable lateral locomotion.
 
 Next: finish this run and evaluate its endpoint. Then run one fresh seed-17,
 4096-env, 500-update `Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck` pilot.
@@ -52,6 +57,11 @@ proofs are complete; do not stop because a diagnostic report was produced.
   instead of 15%; standing is 68% of its configured fraction. Do not claim an
   isolated lateral exposure effect. Disabling lateral preserves old command
   tensors and Torch RNG exactly in the 200k-draw CPU audit.
+- Independent paired push replay `/tmp/adaptive-push-paired/v3/` used two
+  processes with identical reset and pre-push traces. Applying the sampled kick
+  left 0.0671 m endpoint offset while applying zero kick left 0.00258 m; both
+  final local speeds were about 0.001 m/s. Endpoint drift therefore measures a
+  persistent post-kick displacement and does not imply continued idle motion.
 - All-static trains CoM at +/-3 mm; final evaluator uses +/-15/10 mm.
   Initial-distribution model-1000 diagnostic also failed, but used a different
   evaluation seed, so it is not a paired CoM intervention.
