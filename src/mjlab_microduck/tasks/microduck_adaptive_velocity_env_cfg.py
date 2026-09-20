@@ -78,12 +78,17 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate"}:
+        if diagnostic_mode not in {"standing", "action_rate", "lateral"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
-        else:
+        elif diagnostic_mode == "action_rate":
             cfg.curriculum = {"action_rate_weight": canonical_curriculum["action_rate_weight"]}
+        else:
+            # Preserve the canonical standing/action-rate/pose schedules while
+            # adding an explicit pure-lateral command bucket. This is a
+            # bounded recipe diagnostic and leaves the product task unchanged.
+            cfg.commands["twist"].rel_lateral_envs = 0.20
         cfg.adaptive_axis_mode = "all_static"
 
     stage_file = os.environ.get("MICRODUCK_ADAPTIVE_STAGE_FILE")
@@ -119,3 +124,4 @@ AdaptiveMicroduckComRlCfg = _adaptive_rl_cfg("velocity_adaptive_com")
 AdaptiveMicroduckHeadComRlCfg = _adaptive_rl_cfg("velocity_adaptive_head_com")
 AdaptiveMicroduckStandingRlCfg = _adaptive_rl_cfg("velocity_adaptive_standing_diagnostic")
 AdaptiveMicroduckActionRateRlCfg = _adaptive_rl_cfg("velocity_adaptive_action_rate_diagnostic")
+AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diagnostic")

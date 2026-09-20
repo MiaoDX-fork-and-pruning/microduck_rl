@@ -5,6 +5,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckStaticRlCfg,
     AdaptiveMicroduckStandingRlCfg,
     AdaptiveMicroduckActionRateRlCfg,
+    AdaptiveMicroduckLateralRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -48,8 +49,9 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckHeadComRlCfg.experiment_name,
         AdaptiveMicroduckStandingRlCfg.experiment_name,
         AdaptiveMicroduckActionRateRlCfg.experiment_name,
+        AdaptiveMicroduckLateralRlCfg.experiment_name,
     }
-    assert len(names) == 5
+    assert len(names) == 6
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -57,3 +59,11 @@ def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
     action_rate = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="action_rate")
     assert list(standing.curriculum) == ["standing_envs"]
     assert list(action_rate.curriculum) == ["action_rate_weight"]
+
+
+def test_lateral_diagnostic_adds_explicit_command_bucket() -> None:
+    lateral = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral")
+    assert lateral.adaptive_axis_mode == "all_static"
+    assert lateral.commands["twist"].rel_lateral_envs == 0.20
+    assert "standing_envs" in lateral.curriculum
+    assert "action_rate_weight" in lateral.curriculum

@@ -4528,24 +4528,46 @@ class VelocityCommandCommandOnly(UniformVelocityCommand):
         # spinning on the spot was effectively untrained → slow/unstable real-robot
         # turning. Mirrors the base rel_forward_envs mechanism.
         p = getattr(self.cfg, "rel_turn_in_place_envs", 0.0)
-        if p <= 0.0:
-            return
         r = torch.empty(len(env_ids), device=self.device)
-        turn_ids = env_ids[r.uniform_(0.0, 1.0) < p]
-        if len(turn_ids) == 0:
+        if p > 0.0:
+            turn_ids = env_ids[r.uniform_(0.0, 1.0) < p]
+            if len(turn_ids) > 0:
+                self.vel_command_b[turn_ids, 0] = 0.0
+                self.vel_command_b[turn_ids, 1] = 0.0
+                lo, hi = self.cfg.ranges.ang_vel_z
+                maxr = max(abs(lo), abs(hi))
+                rr = torch.empty(len(turn_ids), device=self.device)
+                sign = torch.where(rr.uniform_(0.0, 1.0) < 0.5, -1.0, 1.0)
+                mag = torch.empty(len(turn_ids), device=self.device).uniform_(0.4 * maxr, maxr)
+                self.vel_command_b[turn_ids, 2] = sign * mag
+                # These envs must actually turn — un-mark them as standing
+                # (which would zero the command) and refresh the world-frame copy.
+                self.is_standing_env[turn_ids] = False
+                self.vel_command_w[turn_ids] = self.vel_command_b[turn_ids]
+
+        # Opt-in pure lateral bucket for the adaptive recipe diagnostic. The
+        # ordinary independent x/y sampler rarely produces this command, so a
+        # policy can fail the runtime's lateral command while tracking diagonal
+        # motion acceptably. The canonical velocity recipe leaves this at 0.
+        p_lateral = getattr(self.cfg, "rel_lateral_envs", 0.0)
+        if p_lateral <= 0.0:
             return
-        self.vel_command_b[turn_ids, 0] = 0.0
-        self.vel_command_b[turn_ids, 1] = 0.0
-        lo, hi = self.cfg.ranges.ang_vel_z
-        maxr = max(abs(lo), abs(hi))
-        rr = torch.empty(len(turn_ids), device=self.device)
-        sign = torch.where(rr.uniform_(0.0, 1.0) < 0.5, -1.0, 1.0)
-        mag = torch.empty(len(turn_ids), device=self.device).uniform_(0.4 * maxr, maxr)
-        self.vel_command_b[turn_ids, 2] = sign * mag
-        # These envs must actually turn — un-mark them as standing (which would
-        # zero the command) and refresh the world-frame reference copy.
-        self.is_standing_env[turn_ids] = False
-        self.vel_command_w[turn_ids] = self.vel_command_b[turn_ids]
+        lateral_ids = env_ids[r.uniform_(0.0, 1.0) < p_lateral]
+        if len(lateral_ids) == 0:
+            return
+        self.vel_command_b[lateral_ids, 0] = 0.0
+        max_y = max(abs(self.cfg.ranges.lin_vel_y[0]), abs(self.cfg.ranges.lin_vel_y[1]))
+        magnitude = torch.empty(len(lateral_ids), device=self.device).uniform_(0.4 * max_y, max_y)
+        sign = torch.where(
+            torch.empty(len(lateral_ids), device=self.device).uniform_(0.0, 1.0) < 0.5,
+            -1.0,
+            1.0,
+        )
+        self.vel_command_b[lateral_ids, 1] = magnitude * sign
+        self.vel_command_b[lateral_ids, 2] = 0.0
+        self.is_standing_env[lateral_ids] = False
+        self.is_forward_env[lateral_ids] = False
+        self.vel_command_w[lateral_ids] = self.vel_command_b[lateral_ids]
 
     def _debug_vis_impl(self, visualizer: "DebugVisualizer") -> None:
         batch = visualizer.env_idx
@@ -4583,6 +4605,8 @@ class VelocityCommandCommandOnlyCfg(UniformVelocityCommandCfg):
     # Fraction of envs commanded to turn in place (lin=0, |ang| forced to
     # [0.4·max, max]) each resample. 0 = disabled (base uniform sampling only).
     rel_turn_in_place_envs: float = 0.0
+    # Fraction of envs receiving pure lateral commands. Opt-in diagnostic only.
+    rel_lateral_envs: float = 0.0
 
     def build(self, env: ManagerBasedRlEnv) -> "VelocityCommandCommandOnly":
         return VelocityCommandCommandOnly(self, env)
