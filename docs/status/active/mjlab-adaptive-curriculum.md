@@ -1,211 +1,96 @@
 # MJLab Adaptive Curriculum v2
 
-- Status: Phase 1 replay gate and production evaluator smoke passed; campaign r4
-  is complete. The matched-budget decision gate rejects adaptive improvement,
-  and the current recipe does not produce a battery-qualified policy.
-- Latest campaign source commit: `8b9fa3d`
-- Source snapshot: JuiceFS `/dongxu/microduck_rl/source/adaptive-curriculum/8b9fa3d`
-- Workspace/context: CloudML workspace `10076`, Executor context
-- Queue/resource: `11759`, `cloudml.ng1r49-8-8.13-107`, 1 GPU, GUARANTEED
-- Current slice: strict v2 reports, runner evaluator seam, provenance validation,
-  decision classification, checkpoint metadata, RNG capture, and explicit rollback
-  boundary are implemented.
-- Next action: retain fixed as the comparison control, record the negative /
-  inconclusive result, and do not select any r4 checkpoint for deployment.
-  Further training requires a separately approved change to the recipe or
-  evaluation contract; the canonical task and thresholds remain unchanged.
-- Stop condition: adaptive is not accepted unless a new, complete matched-budget
-  campaign meets the same held-out gate without changing the canonical task.
+- Status: **ACTIVE**, Phase 2A diagnostic repair. No usable adaptive policy has
+  been established; the overall goal remains active.
+- Owner: this adaptive curriculum session (`/root`). Latest user intent:
+  continue all directly executable experiments without unnecessary pauses.
+- Scope: [Phase 2A plan](../../plans/mjlab-adaptive-curriculum-v2/02a-diagnostic-repair-PLAN.md).
+  Keep the canonical task and unrelated IsaacLab work unchanged.
+- Current slice: validate native schema-v2 evaluator, regenerate the existing
+  fixed/all-static checkpoint ladder, prove seeded replay and ONNX parity.
+- No external blocker for these local experiments. Available local RTX 3090;
+  r4 checkpoints are in `/tmp/r4-monitor/`.
 
-## Current evidence summary (2026-09-18 status recheck)
+## Evidence boundary
 
-The Phase 1 replay gate and runner-owned production evaluator are complete. The
-immutable r4 source is `8b9fa3d`; every branch used 4000 iterations at 4096
-environments (`393,216,000` transitions) and the held-out seed set
-`adaptive-default-20260915`. All 15 jobs completed with valid final checkpoint,
-ONNX, and six-bucket reports. Every report has finite 61D observations and 14D
-actions, and its checkpoint/source/report hashes agree.
+The old native v1 ladder, final reports, calibration and manifest are
+**superseded**. Their boolean thresholds were not the canonical continuous
+CapabilityReport v2 gate; seed labels did not prove applied reset noise.
+The previous “3/4 native endpoints pass” and “manifest valid” claims are
+withdrawn. The strict audit artifacts are `/tmp/adaptive-phase2a-audit-manifest.json`
+and `/tmp/adaptive-phase2a-audit-calibration.json`, both incomplete.
 
-The decision gate did not accept any branch. Fixed lower-tail scores for seeds
-17/23/29 were `0.0`, `0.0`, and `0.001775`; all-static scores were `0.0` for
-all three seeds. CoM, head-CoM, and composed each scored `0.0` for all three
-seeds. Thus adaptive does not match or exceed fixed on this held-out battery,
-and fixed itself also fails the required aggregate pass criterion. The evidence
-supports retaining fixed as the control reference while declaring the current
-recipe unable to produce a qualified policy. It does not support an adaptive
-superiority claim or a deployment choice.
+Adaptive config ownership is repaired: only the selected CoM curricula are
+removed; canonical standing/action-rate/command/pose curricula survive.
+Ownership/runner tests pass 27/27; native/evidence tests pass 26/26.
+Ownership repair is committed as `e22532e`.
+Canonical source task is unchanged. These implementation checks alone do not
+prove a working policy.
 
-For CoM seeds 17/23/29, runner state remained at `com_range=0.003` with 16
-hold events and no known-good transition. This confirms the adaptive controller
-failed closed under the observed capability reports; it is not evidence that a
-different curriculum stage would have passed.
+Native evaluator now uses the actual training MJLab/BAM task and baked actor
+normalizer, consumes seeded reset/DR, preserves terminal states, and builds
+canonical v2 scores from trace metrics including zero drift and tilt. It
+asserts the 61D/14D ABI, frozen command slots and live reference CoM ranges.
+Fresh-environment CUDA replay passes exactly across all 19 trace fields in
+all six 300-step buckets (`/tmp/adaptive-native-isolated-replay/a` and `b`).
+ONNX parity passes on both streams. Disjoint gate-seed run `c` is available
+for consumed-state comparison. Targeted reset probe confirmed stale BAM
+qfrc state and reward peak-height carryover; per-bucket environment construction
+removes both without changing the canonical task. Evidence:
+`/tmp/adaptive-bam-reset-probe/compute.json`.
 
-Final artifacts are under
-`/dongxu/microduck_rl/runs/adaptive-curriculum/campaign-8b9fa3d-r4/<branch>-s<seed>/`.
-The held-out `lower_tail_score` comparison is:
+Authoritative ladder is `/tmp/adaptive-native-isolated-ladder/` and is complete: 16/16
+reports are valid, but every lower-tail score is 0.0. Fixed and all-static
+old checkpoints therefore do not meet the native gate at any tested index.
+Earlier cross-bucket v2 traces are diagnostic only; validator now rejects them,
+noncanonical command amplitudes and seed hashes inconsistent with actual state.
+Focused suite: 63 passed; ownership JUnit:
+`/tmp/adaptive-native-isolated-replay/ownership.xml`.
 
-| branch | seed 17 | seed 23 | seed 29 |
-| --- | ---: | ---: | ---: |
-| fixed | 0.000000 | 0.000000 | 0.001775 |
-| all-static | 0.000000 | 0.000000 | 0.000000 |
-| CoM | 0.000000 | 0.000000 | 0.000000 |
-| head-CoM | 0.000000 | 0.000000 | 0.000000 |
-| composed | 0.000000 | 0.000000 | 0.000000 |
 
-Every cell has `passed=0` and `valid=1`. The local audit workspace is
-`/tmp/r4-monitor/`.
+Initial 300-step CUDA diagnostic endpoints at `/tmp/adaptive-native-v2-final/`
+(fixed17/static17, evaluation seed 17) both finish all buckets without falling
+but fail the canonical gate. These are diagnostic seeds, not held-out evidence.
+Fixed17 forward error is 0.1187 m/s for a 0.12 m/s target; static17 lateral
+error is 0.1473 m/s. Full disjoint-seed ladder is the next required evidence.
 
-Historical wave-1 scores below are retained as historical records; they do not
-establish current v2 held-out quality or a matched-budget adaptive advantage.
-The queue currently reports 18 free R49 GUARANTEED GPUs, so the older statement
-that resources are fully occupied is not current evidence of a blocker.
+The old CPU/XML-position-actuator ladder has lower-tail 0 throughout and is
+only a transfer rehearsal. CPU failure does not establish native failure, and
+finite native traces do not establish a CPU actuator root cause.
 
-Campaign r3 was rejected before training because its gate seed range overlapped
-the held-out range; those eight jobs are retained as startup audit records.
-Campaign r4 used gate seed `20260815` and held-out seed `20260915`. All 15 jobs
-used queue `11759` and the primary GUARANTEED resource; no alternate queue was
-used. A local enabled evaluator smoke completed PPO updates, created
-runner-owned reports and adaptive checkpoints, and exposed/fixed CUDA mapped
-RNG restoration before r4 submission. The final CloudML IDs were
-`t-20260918151752-gxlxx`, `t-20260918151754-gtcis`,
-`t-20260918151755-9ya5b`, `t-20260918151756-6uwmq`,
-`t-20260918151758-laop4`, `t-20260918151759-o34nb`,
-`t-20260918151818-gjpbj`, `t-20260918151819-jhbxt`,
-`t-20260918171555-vdzur`, `t-20260918171601-dw4wg`,
-`t-20260918172039-wuccw`, `t-20260918172040-nwvph`,
-`t-20260918172041-yd4xj`, `t-20260918172043-kiwno`, and
-`t-20260918172044-4agde`.
+## Next proof and continuation
 
-## Jobs
+1. Same checkpoint/seed replay: compare every array in all six traces; different
+   seeds must change consumed reset/DR fields. Reports include actual seed and
+   consumed-state hashes. Use disjoint gate/held-out seed ranges.
+2. Evaluate fixed and all-static training seeds 17/23 at checkpoint indices
+   500/1000/2000/3999, 300 steps per bucket. `model_3999.pt` is the zero-indexed
+   endpoint of 4000 training iterations. Validate every report against raw traces.
+3. Export via `scripts/export.py`; compare ONNX/native actions on the same six
+   observation streams. Treat native learning, export parity and CPU actuator
+   transfer as distinct questions.
+4. Use validated curves and temporal gate replay to assess EMA/dwell/preservation
+   and curriculum thresholds; preserve product thresholds unless a measured
+   semantic/unit error is demonstrated. Do not invent calibration from quantiles.
+5. If native fails, run bounded recipe/command/reward diagnostics before another
+   campaign; if native passes but CPU fails, isolate the transfer discrepancy.
 
-| Branch | Task | Job ID | Output prefix | Initial state |
-| --- | --- | --- | --- | --- |
-| canonical control | `Mjlab-Velocity-Flat-MicroDuck` | `t-20260915111321-9fhk9` | `.../wave1-control-af06b34` | deploying |
-| all-static | `Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck` | `t-20260915111322-9jxop` | `.../wave1-static-af06b34` | deploying |
-| CoM-only | `Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck` | `t-20260915111323-hg7uj` | `.../wave1-com-af06b34` | deploying |
-| head-CoM-only | `Mjlab-Velocity-Flat-Adaptive-HeadCoM-MicroDuck` | `t-20260915111325-wvmsz` | `.../wave1-headcom-af06b34` | deploying |
-| composed | `Mjlab-Velocity-Flat-Adaptive-MicroDuck` | `t-20260915111325-06cfm` | `.../wave1-composed-af06b34` | enqueued |
+Verification inventory: focused adaptive config, checkpoint battery, production
+runner, checkpoint resume, rollback, native battery and Phase 2A evidence tests;
+Ruff on owned scripts; `git diff --check`; actual native runs and ONNX parity.
 
-The first wave used an invalid `/ml-engine/code/src` Python path and must not be
-used as experiment evidence. Those jobs are retained for audit. Corrected r2
-jobs use `/mnt/cloudml/source/src` and the following IDs:
+No new five-branch multi-seed campaign until the Phase 2A evidence gates pass.
+That restriction is not a reason to stop existing-checkpoint diagnostics.
+A bounded corrected all-static pilot completed: seed 17, 4096 environments,
+500 iterations, `/tmp/adaptive-repaired-pilot/pilot.log`. Its endpoint
+`model_499.pt` is evaluated at `/tmp/adaptive-repaired-pilot/native-final/` and
+still fails the native gate: zero drift 0.082 m, lateral error 0.141 m/s,
+yaw error 0.637 rad/s; forward improved to 0.054 m/s. This is evidence of
+partial learning, not a usable policy or a matched-budget result. The pilot's
+64-env/5-iteration smoke and standard normalizer-baked export passed.
 
-| Branch | Job ID | Output prefix | State at submission |
-| --- | --- | --- | --- |
-| canonical control | `t-20260915111713-zyhn4` | `.../wave1-control-r2-af06b34` | running |
-| all-static | `t-20260915111714-w8bwd` | `.../wave1-static-r2-af06b34` | deploying |
-| CoM-only | `t-20260915111715-offvh` | `.../wave1-com-r2-af06b34` | running |
-| head-CoM-only | `t-20260915111716-5vmue` | `.../wave1-headcom-r2-af06b34` | running |
-| composed | `t-20260915111718-nhoyf` | `.../wave1-composed-r2-af06b34` | running |
-
-## Executable validation
-
-The train/export/battery/gate chain was run on CloudML job
-`t-20260915121317-8bi9e` (source `30ebb4e`). It trained 20 iterations, exported
-`model_19.pt` to ONNX, and ran all six frozen buckets. Results were
-`zero=1.0`, `forward=1.0`, `lateral=1.0`, `yaw=1.0`, `turn-left=1.0`, and
-`turn-right=1.0`; all traces were finite with 61D observations and 14D actions.
-The first window correctly held at CoM stage `0.003` because the gate requires
-two consecutive passing windows. Resume job `t-20260915122019-jgdmg` restored
-the state and produced the recorded transition `com_range: 0.003 -> 0.005` at
-step 44 with score `1.0`.
-
-The validation output is under
-`/dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r4/`.
-
-## Completed wave-1 experiments
-
-The five-window jobs used 100 PPO iterations per window, exported each window's
-checkpoint, ran the same six-bucket battery, and resumed from the previous
-checkpoint. Both jobs succeeded:
-
-| Branch | Job ID | Output prefix | Battery result | Gate trace |
-| --- | --- | --- | --- | --- |
-| CoM-only windows | `t-20260915131425-nkqpf` | `.../windows-com-c72423f` | 5/5 windows score `1.0`; all finite | `com_range 0.003 -> 0.005` at step 200; `head_com_range 0.003 -> 0.005` at step 300 |
-| composed windows | `t-20260915131432-mxfji` | `.../windows-composed-c72423f` | 5/5 windows score `1.0`; all finite | same two transitions at steps 200 and 300 |
-
-The terminal adaptive stage is `com_range=0.005` and `head_com_range=0.005`.
-Across all adaptive windows, every bucket (`zero`, `forward`, `lateral`, `yaw`,
-`turn-left`, `turn-right`) passed with `finite_61d_14d=true`.
-
-The completed r2 4000-iteration checkpoints were evaluated by job
-`t-20260915134239-e5rt8`. Its output is
-`/dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-battery-c72423f/`.
-Canonical control, all-static, CoM-only, head-CoM-only, and composed each scored
-`1.0` on all six buckets, with finite 61D/14D traces. Maximum tilt across the
-five terminal policies was `0.0766 rad` (head-CoM-only); minimum final height
-was `0.1159 m` (all-static).
-
-These results validate the battery and resumable gate mechanics and show no
-wave-1 held-out regression. They do not establish a matched-budget training
-advantage because the adaptive window runs total 500 iterations while the r2
-controls total 4000 iterations.
-
-Monitoring command:
-
-```bash
-/home/mi/executor/exe compute cloudml cml -- custom_train describe <JOB_ID>
-```
-
-No production task or canonical schedule was modified. The standing/action-rate
-diagnostic branch is parked until its independent controller is implemented.
-
-## v2 implementation evidence
-
-- Capability report validation recomputes bucket components, scores, validity,
-  pass flags, and aggregate from raw evidence. Malformed, non-finite, missing, or
-  mismatched traces fail closed.
-- Runner validates report schema, checkpoint existence and SHA256, task axis mode,
-  and enabled-axis allowlist. Evaluator exceptions become `evaluation_error` holds.
-- Gate outcomes are typed as `hold`, `advance`, `regress`, or
-  `preservation_failure`; runner records the causal event and applies only the
-  allowed live EventManager axis.
-- Checkpoint metadata co-locates gate state, stage values, evaluator schema and
-  iteration/env-step counters, known-good checkpoint, evaluation events, and RNG
-  state. Explicit rollback rejects a checkpoint other than the recorded known-good.
-- Verification: 27 focused tests pass, Ruff and diff checks pass, adaptive 64-env /
-  5-iteration smoke passes with 61D observations, 14D actions, BAM M6, and no NaN.
-
-## Phase 1 replay gate and matched-budget campaign (2026-09-18)
-
-The missing fake-runner checkpoint tests were added and passed. The replay gate
-now covers PPO-like policy state, gate trace, live EventManager ranges, Python /
-NumPy / Torch RNG restoration, incompatible-axis rejection, and explicit
-known-good rollback. The focused suite passes 31 tests; Ruff, `git diff --check`,
-the canonical-task diff guard, and the adaptive 64-env / 5-iteration smoke all
-pass. The implementation is committed as `b6788e3`.
-
-An immutable source snapshot for that commit was uploaded to
-`/dongxu/microduck_rl/source/adaptive-curriculum/b6788e3`. The first campaign
-submission exposed two operational issues and is retained for audit: a top-level
-`--seed` was rejected (the CLI requires `--agent.seed`), and the initial CoM /
-composed commands had evaluation disabled and therefore represented only the
-initial static slice. Those four jobs were explicitly stopped before producing
-evidence. The corrected r2 campaign uses `--agent.seed`; all-static s17 is
-running as `t-20260918100626-bfpsl`, while all-static s23 is
-`t-20260918100627-j3snt`. Corrected CoM/composed jobs were stopped and will be
-re-submitted with the staged battery/resume harness after quota release. No
-matched-budget policy result or adaptive improvement claim has been made.
-
-The corrected all-static jobs subsequently completed the full 4000-iteration
-budget successfully: `t-20260918100626-bfpsl` (seed 17, completed 12:03:18)
-and `t-20260918100627-j3snt` (seed 23, completed 12:00:54). Each output
-contains `model_3999.pt` and an auto-exported ONNX, but neither has yet been
-run through the held-out six-bucket battery. R49 GUARANTEED and
-GUARANTEED_PUBLIC quota remains fully occupied, so no additional branch/seed
-has been submitted. These are static-branch artifacts only and do not establish
-an adaptive advantage.
-
-The two all-static final ONNX files were then checked with the frozen six-bucket
-battery using held-out seed set `adaptive-default-20260915`. Both runs produced
-six 300-step traces with finite 61D observations and 14D actions. The validated
-capability reports nevertheless failed the aggregate gate (`lower_tail_score=0`,
-`passed=0`) because forward/lateral/turn tracking remained above the configured
-thresholds. Seed 17 metrics were `zero=0.4502, forward=0, lateral=0.0112,
-yaw=0.1300, turn-left=0, turn-right=0`; seed 23 metrics were `zero=0.8542,
-forward=0, lateral=0, yaw=0.0513, turn-left=0, turn-right=0`. Reports and traces
-are in the local monitor workspace under `/tmp/adaptive-battery/results/`; ONNX
-SHA256 values are `8554fd59ac917b130ac908a3bdcd969cdf4727968d715b4f31b32fb4142d934e`
-(seed 17) and `976750347999dd418fe337367cd0847e2fa5a173ea1d346624dd93d43add42ee`
-(seed 23). This is static-branch evidence only and does not support an adaptive
-improvement claim.
+The runner end-to-end smoke also passed: native held-out and separately named
+CPU transfer reports were produced under `/tmp/adaptive-native-campaign-smoke-final/`;
+both are negative valid reports. The first smoke exposed and fixed the live
+EventManager reference-range overwrite, then the rerun completed successfully.
+Stage only owned changes; this shared worktree contains unrelated external edits.

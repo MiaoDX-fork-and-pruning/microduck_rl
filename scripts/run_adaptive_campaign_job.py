@@ -52,7 +52,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
         "MICRODUCK_ADAPTIVE_SEED_SET_ID": f"adaptive-gate-{args.gate_seed}",
         "MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND": (
-            f"{sys.executable} {source}/scripts/run_adaptive_checkpoint_battery.py "
+            f"{sys.executable} {source}/scripts/run_adaptive_native_checkpoint_battery.py "
             "--checkpoint {checkpoint} --task-id {task_id} --axis-mode {axis_mode} "
             "--evaluation-seed {evaluation_seed} --seed-set-id {seed_set_id} --output {output}"
         ),
@@ -90,12 +90,21 @@ def main() -> int:
     report_path = output / "heldout" / "capability.json"
     with (output / "heldout.log").open("w") as log:
         subprocess.run([
-            sys.executable, str(source / "scripts/run_adaptive_checkpoint_battery.py"),
+            sys.executable, str(source / "scripts/run_adaptive_native_checkpoint_battery.py"),
             "--checkpoint", str(checkpoint), "--task-id", task_id, "--axis-mode", axis_mode,
             "--evaluation-seed", str(args.heldout_seed),
             "--seed-set-id", f"adaptive-default-{args.heldout_seed}", "--output", str(report_path),
         ], env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
     report = json.loads(report_path.read_text())
+    transfer_path = output / "cpu-transfer" / "capability.json"
+    with (output / "cpu-transfer.log").open("w") as log:
+        subprocess.run([
+            sys.executable, str(source / "scripts/run_adaptive_checkpoint_battery.py"),
+            "--checkpoint", str(checkpoint), "--task-id", task_id, "--axis-mode", axis_mode,
+            "--evaluation-seed", str(args.heldout_seed),
+            "--seed-set-id", f"adaptive-default-{args.heldout_seed}", "--output", str(transfer_path),
+        ], env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
+    transfer = json.loads(transfer_path.read_text())
     result = {
         **config,
         "status": "evaluated", "checkpoint": str(checkpoint),
@@ -105,6 +114,9 @@ def main() -> int:
         "heldout_report": str(report_path),
         "heldout_report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),
         "heldout_aggregate": report["aggregate"],
+        "cpu_transfer_report": str(transfer_path),
+        "cpu_transfer_report_sha256": hashlib.sha256(transfer_path.read_bytes()).hexdigest(),
+        "cpu_transfer_aggregate": transfer["aggregate"],
     }
     (output / "campaign-result.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps({"status": result["status"], "aggregate": report["aggregate"]}), flush=True)
