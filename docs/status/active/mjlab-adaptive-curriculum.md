@@ -4,10 +4,10 @@ Status: **ACTIVE** — acquisition and acceptance calibration remain open;
 no usable policy established. Updated: 2026-09-22.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
-Latest intent: status update during the authorized sustained intuitive-flow
-objective (necessary changes, training and behavioral checks). Both the
-1500-update feedback continuation and 500-update strictification probe are
-finished; neither establishes a usable policy.
+Latest intent: continue the authorized sustained intuitive-flow objective
+(necessary changes, training and behavioral checks). The 1500-update feedback
+continuation, 500-update strictification probe, and 500-update
+acquisition-feedback slice are finished; none establishes a usable policy.
 
 ## Current slice
 
@@ -24,20 +24,26 @@ continued and recovered the two retained gate buckets. DR remains at stage 0.
 
 Lateral plateaued: held-out MAE is 0.1252 m/s at 1000 updates and 0.1244 m/s
 at 1500. A separate strictification bootstrap (lighter pose/action costs,
-stronger tracking and 25% pure lateral sampling) also failed at 500 updates:
-native mean lateral velocity is only 0.0028 m/s against a 0.12 m/s command.
-Do not continue that checkpoint into the stricter stage on the assumption
-that it acquired a gait. Long episodes and rising reward did not establish
-translation.
+stronger tracking and 25% pure lateral sampling) failed at 500 updates with
+0.0028 m/s mean lateral velocity against a 0.12 m/s command. The combined
+acquisition-feedback slice improved forward MAE to 0.0287 m/s at 500 updates,
+but held-out lateral MAE remained 0.1188 m/s and yaw MAE 0.7655 rad/s; zero
+drift was 0.0767 m. Its native six-bucket gate still failed, and the CPU
+transfer report also failed all buckets. Do not promote either checkpoint as
+a usable policy.
 
-Next hypothesis: pure lateral acquisition requires a better motion incentive
-or command progression; longer exposure and the tested bootstrap alone did
-not solve it. Compare command-conditioned native motion and weighted reward
-mass before another bounded training intervention. Keep product thresholds
-and samplewise MAE fixed; evaluation-semantic calibration remains separate.
+The acquisition-feedback slice exposed a controller-specific confounder:
+initial lateral focus was overwritten by the default frontier order because
+forward was also below mastery. The final exposure was forward 21.7% and
+lateral 14.3%, so the experiment did not maintain lateral priority. Next
+hypothesis: a checkpointed lateral-first frontier must hold the acquisition
+focus until lateral mastery, while retaining the zero anchor and adaptive
+rollback. Keep product thresholds and samplewise MAE fixed; evaluation
+semantic calibration remains separate.
 Blocker fingerprint: `native_lateral_acquisition`; classification: stationary
-or low-progress solution under tested recipes; decision delta: reject direct
-adoption/1000-update continuation of the strictification bootstrap.
+or low-progress solution under tested recipes, with the previous slice also
+confounded by frontier order; decision delta: reject direct adoption and test
+a lateral-priority frontier before changing physics or thresholds.
 
 The Feedback-only L1 terms now average signed velocity error before magnitude
 with tau 0.5 s. Shared state updates once per step and resets on episode or
@@ -52,6 +58,14 @@ NaN term, rollback-state coverage, and ONNX export. Latest feedback artifact:
 `model_1499.pt`, SHA256
 `4a93635a1f86f74ec859acfb58335de891ee3e162fbb449280af33b6ee665119`.
 Judge mean progress, MAE, air-time and preservation together.
+
+Latest acquisition-feedback artifact:
+`/tmp/microduck-acquisition-feedback-s17-500/campaign-result.json`, checkpoint
+`model_499.pt`. Native held-out and CPU reports are bound to the exact
+checkpoint and source SHA `b99c6e0`; all six product buckets fail. The four
+native gate windows were valid `hold` decisions with no rollback or evaluator
+error. The 64-env/5-iteration smoke and 51 focused tests passed before this
+run.
 
 ## Latest behavioral evidence
 

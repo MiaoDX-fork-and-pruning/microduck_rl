@@ -50,6 +50,15 @@ evidence. Next isolate command-conditioned motion and reward mass before
 another bounded training intervention. Samplewise MAE and product thresholds
 remain fixed; any metric-semantic repair needs a separate calibration argument.
 
+The bounded acquisition-feedback slice combined 0.5 s command-aligned feedback,
+staged tracking width, and an initial lateral focus. It improved forward MAE to
+0.0287 m/s at 500 updates but held-out lateral MAE remained 0.1188 m/s; the
+controller's default frontier order moved focus back to forward because both
+frontiers were below mastery. Native and CPU six-bucket reports both failed.
+The next diagnostic must make frontier order checkpointed and lateral-first so
+the lateral acquisition hypothesis is actually exercised before changing
+physics or product thresholds.
+
 ## Goal
 
 Build an automated MJLab training system that can adjust bounded difficulty
