@@ -41,7 +41,7 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     exposure = CommandExposure()
     assert exposure.focus_bucket == "forward"
     assert exposure.probabilities == pytest.approx(
-        {name: (0.30 if name == "forward" else 0.10) for name in BUCKETS}
+        {name: (0.28 if name == "forward" else 0.20 if name == "zero" else 0.08) for name in BUCKETS}
     )
     env = SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda _: term))
     ids = torch.arange(term.num_envs)
@@ -56,14 +56,17 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     exposure.apply(env)
     assert exposure.focus_bucket == "lateral"
     assert exposure.probabilities["lateral"] > exposure.probabilities["forward"]
-    assert all(value >= 0.10 for value in exposure.probabilities.values())
+    assert exposure.probabilities["zero"] >= 0.20
+    assert all(value >= 0.08 for name, value in exposure.probabilities.items() if name != "zero")
     torch.manual_seed(17)
     term._resample_command(ids)
     term._update_command()
     masks = _masks(term.command)
     assert masks["lateral"].float().mean() > initial + 0.12
+    assert masks["zero"].float().mean() >= 0.18
     for bucket in BUCKETS:
-        assert masks[bucket].float().mean() >= 0.09
+        if bucket != "zero":
+            assert masks[bucket].float().mean() >= 0.07
     assert masks["nominal"].float().mean() == pytest.approx(0.20, abs=0.015)
     assert torch.any(term.command[masks["lateral"], 1] < 0)
     assert torch.any(term.command[masks["lateral"], 1] > 0)
@@ -106,8 +109,9 @@ def test_focus_switch_preserves_every_anchor_bucket():
     exposure = CommandExposure()
     exposure.update({name: (0.9 if name != "lateral" else 0.1) for name in BUCKETS})
     assert exposure.focus_bucket == "lateral"
-    assert exposure.probabilities["lateral"] > 0.10
-    assert all(value >= 0.10 for value in exposure.probabilities.values())
+    assert exposure.probabilities["lateral"] > exposure.probabilities["yaw"]
+    assert exposure.probabilities["zero"] >= 0.20
+    assert all(value >= 0.08 for name, value in exposure.probabilities.items() if name != "zero")
     assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
 
 
@@ -138,8 +142,8 @@ def test_failed_lateral_never_uses_three_percent_retention_floor():
     for _ in range(8):
         exposure.update({name: (0.0 if name == "lateral" else 1.0) for name in BUCKETS})
     assert exposure.focus_bucket == "lateral"
-    assert min(exposure.probabilities.values()) >= 0.10
-    assert exposure.probabilities["zero"] == pytest.approx(0.10)
+    assert min(exposure.probabilities[name] for name in BUCKETS if name != "zero") >= 0.08
+    assert exposure.probabilities["zero"] == pytest.approx(0.20)
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.1, 1.1])

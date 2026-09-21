@@ -646,8 +646,9 @@ def test_runner_feedback_restores_live_mixture_and_invalid_report_is_noop(monkey
     probabilities = term.cfg.bucket_probabilities
     assert saved["windows"] == 1
     assert saved["focus_bucket"] == "lateral"
-    assert saved["probabilities"]["lateral"] > saved["probabilities"]["zero"]
-    assert min(saved["probabilities"].values()) >= 0.10
+    assert saved["probabilities"]["lateral"] > saved["probabilities"]["yaw"]
+    assert saved["probabilities"]["zero"] >= 0.20
+    assert min(value for name, value in saved["probabilities"].items() if name != "zero") >= 0.08
     gate = runner.capability_gate.state_dict()
     runner.evaluator = SimpleNamespace(evaluate=lambda **kw: {"schema_version": -1})
     runner._evaluate_window(str(checkpoint))

@@ -19,10 +19,11 @@ class CommandExposure:
     """Keep learned commands alive while concentrating on one frontier.
 
     Twenty percent of resamples retain the nominal continuous command
-    distribution.  Each of the six capability buckets keeps a ten percent
-    anchor, and the current directional frontier receives the remaining twenty
-    percent.  A window moves one quarter of the way to the new target, so a
-    focus switch cannot erase a previously learned skill in one update.
+    distribution.  The zero-command recovery anchor keeps twenty percent;
+    each directional bucket keeps eight percent, and the current frontier
+    receives the remaining twenty percent.  A window moves one quarter of the
+    way to the new target, so a focus switch cannot erase a previously learned
+    skill in one update.
 
     ``zero`` is deliberately an anchor rather than a frontier: the recovery
     and idle behavior must remain present while the controller acquires the
@@ -31,7 +32,8 @@ class CommandExposure:
 
     version = 2
     nominal_probability = 0.20
-    bucket_floor = 0.10
+    bucket_floor = 0.08
+    zero_floor = 0.20
     focus_extra = 0.20
     update_rate = 0.25
     # Match CapabilityGate's upper threshold.  A bucket scoring 0.5 is making
@@ -50,6 +52,7 @@ class CommandExposure:
         if focus not in cls.frontier_order:
             raise ValueError(f"unsupported frontier bucket: {focus}")
         target = {name: cls.bucket_floor for name in BUCKETS}
+        target["zero"] = cls.zero_floor
         target[focus] += cls.focus_extra
         return target
 
@@ -86,7 +89,7 @@ class CommandExposure:
         if not isinstance(probabilities, Mapping) or set(probabilities) != set(BUCKETS):
             raise ValueError("command exposure bucket mismatch")
         values = {name: float(probabilities[name]) for name in BUCKETS}
-        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= self.bucket_floor + self.focus_extra
+        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= self.zero_floor + self.focus_extra
                 for value in values.values())
                 or not math.isclose(sum(values.values()), 1.0 - self.nominal_probability, abs_tol=1e-9)):
             raise ValueError("invalid command exposure probabilities")
