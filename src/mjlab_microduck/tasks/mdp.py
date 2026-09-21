@@ -3811,20 +3811,63 @@ def standing_phase(
     return phase.unsqueeze(-1)  # Shape: (num_envs, 1)
 
 
+def _command_velocity_error_average(
+    env: ManagerBasedRlEnv,
+    command: torch.Tensor,
+    asset: Entity,
+    tau_s: float,
+    state_key: tuple[str, str, float],
+) -> torch.Tensor:
+    """Average signed tracking error once per step, isolating episodes/commands.
+
+    The instantaneous L1 cost can prefer standing to a lateral gait whose
+    mean velocity is closer to the command but whose sway crosses the target.
+    Average before taking the absolute value to price sustained error. This
+    state is reward-only; actor observations and actions remain unfiltered.
+    """
+    actual = torch.cat(
+        (asset.data.root_link_lin_vel_b[:, :2], asset.data.root_link_ang_vel_b[:, 2:3]), dim=-1
+    )
+    error = actual - command
+    if tau_s == 0.0:
+        return error
+    if not math.isfinite(tau_s) or tau_s < 0.0:
+        raise ValueError("velocity error averaging tau_s must be finite and nonnegative")
+    if not hasattr(env, "_command_velocity_averages"):
+        env._command_velocity_averages = {}
+    state = env._command_velocity_averages.get(state_key)
+    if state is None:
+        state = {"error": error.clone(), "command": command.clone(), "step": env.common_step_counter}
+        env._command_velocity_averages[state_key] = state
+    elif state["step"] != env.common_step_counter:
+        fresh = (env.episode_length_buf <= 1) | (command != state["command"]).any(dim=-1)
+        alpha = 1.0 - math.exp(-float(env.step_dt) / tau_s)
+        averaged = torch.lerp(state["error"], error, alpha)
+        # Initialize from the current error, not zero: stationary starts and
+        # command switches must not create an unearned low-cost grace period.
+        state["error"] = torch.where(fresh[:, None], error, averaged)
+        state["command"].copy_(command)
+        state["step"] = env.common_step_counter
+    return state["error"]
+
+
 def command_normalized_linear_velocity_l1(
     env: ManagerBasedRlEnv,
     command_name: str,
     minimum_scale: float,
     deadband: float,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    tau_s: float = 0.0,
 ) -> torch.Tensor:
     """Negative normalized command-aligned planar error; use a POSITIVE weight.
 
     In body-frame m/s, let ``c = cmd_xy`` and ``v = actual_xy``. For an active
     command (``||c|| > deadband``), return
-    ``-abs(dot(v - c, c / ||c||)) / max(||c||, minimum_scale)``. This prices
+    ``-abs(dot(mean(v - c), c / ||c||)) / max(||c||, minimum_scale)``. This prices
     only error along the requested direction, leaving orthogonal gait motion
-    free. For a near-zero command, return
+    free. ``tau_s > 0`` averages signed error before taking its magnitude,
+    so same-axis gait oscillation is not mistaken for sustained bias. For a
+    near-zero command, keep the instantaneous idle penalty:
     ``-max(||v|| - deadband, 0) / max(||c||, minimum_scale)`` so idle motion is
     still discouraged. ``minimum_scale`` (m/s, > 0) keeps the dimensionless
     signal finite at an exact-zero command. Vertical motion is left to the
@@ -3834,10 +3877,13 @@ def command_normalized_linear_velocity_l1(
     command = env.command_manager.get_command(command_name)
     assert command is not None, f"Command '{command_name}' not found."
     actual = asset.data.root_link_lin_vel_b[:, :2]
+    tracking_error = _command_velocity_error_average(
+        env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
+    )[:, :2]
     commanded = command[:, :2]
     command_norm = torch.linalg.vector_norm(commanded, dim=-1)
     direction = commanded / command_norm.clamp_min(torch.finfo(command_norm.dtype).eps).unsqueeze(-1)
-    aligned_error = torch.abs(torch.sum((actual - commanded) * direction, dim=-1))
+    aligned_error = torch.abs(torch.sum(tracking_error * direction, dim=-1))
     idle_error = (torch.linalg.vector_norm(actual, dim=-1) - deadband).clamp(min=0.0)
     error = torch.where(command_norm > deadband, aligned_error, idle_error)
     scale = command_norm.clamp(min=minimum_scale)
@@ -3850,21 +3896,25 @@ def command_normalized_yaw_velocity_l1(
     minimum_scale: float,
     deadband: float,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    tau_s: float = 0.0,
 ) -> torch.Tensor:
     """Negative normalized yaw tracking error; use a POSITIVE reward weight.
 
     In body-frame rad/s, return
-    ``-relu(abs(omega_z - cmd_z) - deadband) / max(abs(cmd_z), minimum_scale)``
+    ``-relu(abs(mean(omega_z - cmd_z)) - deadband) / max(abs(cmd_z), minimum_scale)``
     only when ``abs(cmd_z) > deadband``. It returns exactly zero for idle and
     forward commands with no meaningful yaw request because the Gaussian yaw
     term already handles their natural ripple. ``minimum_scale`` (rad/s, > 0)
     keeps active low-rate commands finite; roll/pitch rates remain the
-    responsibility of the existing reward stack.
+    responsibility of the existing reward stack. ``tau_s > 0`` averages signed
+    error, sharing one update per step with the linear term.
     """
     asset: Entity = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
     assert command is not None, f"Command '{command_name}' not found."
-    error = (asset.data.root_link_ang_vel_b[:, 2] - command[:, 2]).abs()
+    error = _command_velocity_error_average(
+        env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
+    )[:, 2].abs()
     scale = command[:, 2].abs().clamp(min=minimum_scale)
     active = command[:, 2].abs() > deadband
     return -torch.where(active, (error - deadband).clamp(min=0.0) / scale, torch.zeros_like(error))

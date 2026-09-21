@@ -12,6 +12,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     FEEDBACK_LINEAR_DEADBAND_M_S,
     FEEDBACK_LINEAR_L1_WEIGHT,
     FEEDBACK_LINEAR_MIN_SCALE_M_S,
+    FEEDBACK_TRACKING_TAU_S,
     FEEDBACK_YAW_DEADBAND_RAD_S,
     FEEDBACK_YAW_L1_WEIGHT,
     FEEDBACK_YAW_MIN_SCALE_RAD_S,
@@ -32,6 +33,9 @@ def _env(command, *, linear=None, angular=None):
     return SimpleNamespace(
         command_manager=SimpleNamespace(get_command=lambda name: command if name == "twist" else None),
         scene={"robot": SimpleNamespace(data=data)},
+        step_dt=0.02,
+        common_step_counter=0,
+        episode_length_buf=torch.zeros(len(command), dtype=torch.long),
     )
 
 
@@ -141,6 +145,85 @@ def test_yaw_normalization_tracks_command_magnitude_and_ignores_roll_pitch():
 def test_yaw_moving_command_keeps_small_error_deadband():
     env = _env([[0.12, 0.0, 0.8]], angular=[[0.0, 0.0, 0.825]])
     assert _yaw(env).item() == 0
+
+
+def _averaged_linear(env, tau_s=FEEDBACK_TRACKING_TAU_S):
+    return mdp.command_normalized_linear_velocity_l1(
+        env, command_name="twist", minimum_scale=0.12, deadband=0.01, tau_s=tau_s
+    )
+
+
+def _averaged_yaw(env, tau_s=FEEDBACK_TRACKING_TAU_S):
+    return mdp.command_normalized_yaw_velocity_l1(
+        env, command_name="twist", minimum_scale=0.8, deadband=0.05, tau_s=tau_s
+    )
+
+
+def test_averaged_tracking_prefers_progress_with_gait_sway_to_standing():
+    # Walking in the commanded direction is better on average, but the lateral
+    # sway of a biped crosses the target. Instantaneous L1 ranks it worse than
+    # standing; averaging must reverse that ranking without changing actions.
+    env = _env([[0.0, 0.12, 0.8]] * 2)
+    data = env.scene["robot"].data
+    averaged, instantaneous, yaw = [], [], []
+    for step in range(1, 501):
+        env.common_step_counter = step
+        env.episode_length_buf[:] = step
+        ripple = torch.sin(torch.tensor(2 * torch.pi * 2 * step * env.step_dt))
+        data.root_link_lin_vel_b[0, 1] = 0.06 + 0.20 * ripple
+        data.root_link_ang_vel_b[0, 2] = 0.8 + 1.8 * ripple
+        if step > 100:
+            instantaneous.append(_linear(env))
+        lin, ang = _averaged_linear(env), _averaged_yaw(env)
+        if step > 100:
+            averaged.append(lin)
+            yaw.append(ang)
+    assert torch.stack(instantaneous).mean(0)[0] < torch.stack(instantaneous).mean(0)[1]
+    for samples in (averaged, yaw):
+        rewards = torch.stack(samples)
+        assert torch.isfinite(rewards).all() and torch.all(rewards <= 0)
+        assert rewards.mean(0)[0] > rewards.mean(0)[1] + 0.25
+
+
+def test_average_isolated_across_resets_and_command_changes_and_not_double_updated():
+    env = _env([[0.12, 0.0, 0.8]] * 3)
+    command = env.command_manager.get_command("twist")
+    data = env.scene["robot"].data
+    _averaged_linear(env)
+    env.common_step_counter = 1
+    env.episode_length_buf[:] = 20
+    data.root_link_lin_vel_b[:, 0] = 0.12
+    data.root_link_ang_vel_b[:, 2] = 0.8
+    # Row 0 starts a new episode; row 1 switches command; row 2 continues.
+    env.episode_length_buf[0] = 1
+    command[1] = torch.tensor([-0.12, 0.0, -0.8], dtype=command.dtype)
+    lin = _averaged_linear(env)
+    ang = _averaged_yaw(env)
+    assert lin[0] == 0 and ang[0] == 0
+    assert lin[1] == -2.0  # New command is immediately charged, no grace period.
+    assert ang[1].item() == pytest.approx(-1.55 / 0.8)
+    assert -1.0 < lin[2] < -0.9
+    # Reading the two reward terms must not advance their shared average twice.
+    torch.testing.assert_close(_averaged_linear(env), lin)
+    torch.testing.assert_close(_averaged_yaw(env), ang)
+    env.common_step_counter += 1
+    env.episode_length_buf += 1
+    assert _averaged_linear(env)[2] > lin[2]
+
+
+def test_idle_speed_is_still_penalized_instantaneously():
+    env = _env([[0.0, 0.0, 0.0]])
+    assert _averaged_linear(env).item() == 0
+    env.common_step_counter = 1
+    env.episode_length_buf[:] = 20
+    env.scene["robot"].data.root_link_lin_vel_b[0, 1] = 0.13
+    assert _averaged_linear(env).item() == pytest.approx(-1.0)
+
+
+@pytest.mark.parametrize("tau", [-0.1, float("nan"), float("inf")])
+def test_invalid_averaging_time_constant_rejected(tau):
+    with pytest.raises(ValueError, match="tau_s"):
+        _averaged_linear(_env([[0.12, 0.0, 0.0]]), tau_s=tau)
 
 
 def test_only_feedback_adds_positive_weight_self_negating_terms():

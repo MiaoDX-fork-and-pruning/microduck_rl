@@ -30,14 +30,23 @@ CPU transfer, and superiority to fixed training remain separate verdicts; no
 hardware success is inferred from simulation. Matched-budget comparison follows
 acquisition; the optional advisor and stronger teachers remain deferred.
 
-The completed 500-update Feedback pilot has valid negative native and transfer
-results. Its source, checkpoint and reports are frozen under
-`/tmp/microduck-adaptive-formal-20260921-s17/`. The runner/exposure refactor is
-verified, but no usable policy or effective acquisition-stage preservation is
-established. Next proof: quantify the stationary-versus-gait reward tradeoff and
-separate tracking bias, gait oscillation and push-induced displacement before
-selecting a bounded acquisition experiment. Any metric-semantic repair needs a
-written calibration argument and must keep the failed pilot a failed policy.
+The Feedback pilot and command-aligned L1 continuation both have valid negative
+500-update native/transfer results. Aligned L1 restores stepping but lateral
+MAE remains 0.1184 m/s. Initial-DR and nonzero-pose interventions did not rescue
+tracking; a fresh diagonal-bucket pilot also failed pure lateral. Evidence and
+hashes: `/tmp/microduck-adaptive-aligned-s17/review-500.json`. The runner/exposure
+refactor is verified, but no usable policy or effective acquisition-stage
+preservation is established.
+
+Measured same-axis gait sway explains a remaining objective conflict: a lateral
+gait making 0.0488 m/s progress toward 0.12 m/s has 0.1413 instantaneous MAE,
+so instantaneous L1 favors standing. The next bounded experiment averages
+signed error over 0.5 s before the Feedback-only L1 magnitude, retaining idle
+instantaneous cost, weights, command sampling, canonical rewards and all product
+thresholds. Validate reset/command-switch isolation and reward signs, smoke64/5,
+then fresh seed17/4096 envs/500 updates. Judge actual mean progress, MAE,
+survival and preservation together. Any metric-semantic repair remains a
+separate written calibration argument; failed policies remain failed.
 
 ## Goal
 

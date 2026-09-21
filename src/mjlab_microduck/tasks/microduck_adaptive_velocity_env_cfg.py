@@ -46,6 +46,10 @@ FEEDBACK_LINEAR_MIN_SCALE_M_S = 0.12
 FEEDBACK_YAW_MIN_SCALE_RAD_S = 0.8
 FEEDBACK_LINEAR_DEADBAND_M_S = 0.01
 FEEDBACK_YAW_DEADBAND_RAD_S = 0.05
+# Measured lateral gait: 0.049 m/s mean toward a 0.12 command, but 0.141
+# instantaneous MAE (worse than standing). Average signed error over a gait
+# cycle before L1 so learning that motion is not penalized as a regression.
+FEEDBACK_TRACKING_TAU_S = 0.5
 
 
 DIAGNOSTIC_NAMES = {
@@ -184,6 +188,7 @@ def make_microduck_adaptive_velocity_env_cfg(
                 "command_name": "twist",
                 "minimum_scale": FEEDBACK_LINEAR_MIN_SCALE_M_S,
                 "deadband": FEEDBACK_LINEAR_DEADBAND_M_S,
+                "tau_s": FEEDBACK_TRACKING_TAU_S,
             },
         )
         cfg.rewards["yaw_velocity_error_l1"] = RewardTermCfg(
@@ -193,6 +198,7 @@ def make_microduck_adaptive_velocity_env_cfg(
                 "command_name": "twist",
                 "minimum_scale": FEEDBACK_YAW_MIN_SCALE_RAD_S,
                 "deadband": FEEDBACK_YAW_DEADBAND_RAD_S,
+                "tau_s": FEEDBACK_TRACKING_TAU_S,
             },
         )
     if play:
