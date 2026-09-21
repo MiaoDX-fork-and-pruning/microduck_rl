@@ -4,7 +4,7 @@ Status: Phase 0/1 infrastructure complete; r4 remains inconclusive. Phase 2A
 recipe endpoints are complete but fail usability. Runner consolidation and
 bounded command-exposure feedback are implemented; acquisition/calibration
 remain open. See the active status capsule for current proof.
-Date: 2026-09-21
+Date: 2026-09-22
 Related:
 
 - [`mjlab_adaptive_curriculum_proposal.md`](../mjlab_adaptive_curriculum_proposal.md)
@@ -30,23 +30,25 @@ CPU transfer, and superiority to fixed training remain separate verdicts; no
 hardware success is inferred from simulation. Matched-budget comparison follows
 acquisition; the optional advisor and stronger teachers remain deferred.
 
-The Feedback pilot and command-aligned L1 continuation both have valid negative
-500-update native/transfer results. Aligned L1 restores stepping but lateral
-MAE remains 0.1184 m/s. Initial-DR and nonzero-pose interventions did not rescue
-tracking; a fresh diagonal-bucket pilot also failed pure lateral. Evidence and
-hashes: `/tmp/microduck-adaptive-aligned-s17/review-500.json`. The runner/exposure
-refactor is verified, but no usable policy or effective acquisition-stage
-preservation is established.
+Feedback now averages signed tracking error over 0.5 s before L1 magnitude,
+keeps a 20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The
+seed17 continuation completed 1500 updates and demonstrated partial `zero` /
+`forward` preservation, automatic lateral focus, and a real rollback after
+forward regression at env step 33000. Held-out native lateral MAE plateaued
+at 0.1244 m/s and every held-out bucket still fails. Evidence and hashes:
+`/tmp/microduck-adaptive-zero20-s17-1500/campaign-result.json`. DR remains at
+stage 0; partial gate-set retention is not held-out usability.
 
-Measured same-axis gait sway explains a remaining objective conflict: a lateral
-gait making 0.0488 m/s progress toward 0.12 m/s has 0.1413 instantaneous MAE,
-so instantaneous L1 favors standing. The next bounded experiment averages
-signed error over 0.5 s before the Feedback-only L1 magnitude, retaining idle
-instantaneous cost, weights, command sampling, canonical rewards and all product
-thresholds. Validate reset/command-switch isolation and reward signs, smoke64/5,
-then fresh seed17/4096 envs/500 updates. Judge actual mean progress, MAE,
-survival and preservation together. Any metric-semantic repair remains a
-separate written calibration argument; failed policies remain failed.
+A separate 500-update strictification diagnostic tested lighter motion costs,
+stronger tracking and 25% pure lateral sampling. Its native traces show mean
+lateral velocity only 0.0028 m/s against a 0.12 m/s command; forward also
+stalls. It survives all six cases but passes none. Evidence:
+`/tmp/microduck-strictification-s17/native-499/capability.json`; this working
+tree diagnostic has no held-out/transfer acceptance claim. Do not promote it
+to the feedback recipe or continue its stricter stage without acquisition
+evidence. Next isolate command-conditioned motion and reward mass before
+another bounded training intervention. Samplewise MAE and product thresholds
+remain fixed; any metric-semantic repair needs a separate calibration argument.
 
 ## Goal
 

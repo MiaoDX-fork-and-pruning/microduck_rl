@@ -5,25 +5,39 @@ no usable policy established. Updated: 2026-09-22.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
 Latest intent: status update during the authorized sustained intuitive-flow
-objective (necessary changes, training and behavioral checks).
+objective (necessary changes, training and behavioral checks). Both the
+1500-update feedback continuation and 500-update strictification probe are
+finished; neither establishes a usable policy.
 
 ## Current slice
 
 Runner/exposure consolidation is committed as `8b2f28a`. Command-aligned
 shaping `86ee5be` is included in `bb37a29`, which also protects the 20% zero
 anchor and uses a 0.80 focus mastery threshold. The zero20 seed17 campaign
-completed 1000 cumulative updates from the 500-update checkpoint. Smoke,
-resume, native gates, normalized ONNX export, and CPU transfer all completed
-with valid manifests; product gates still fail. The adaptive controller did
-preserve `zero` and `forward`, then moved focus to `lateral` after forward
-mastery.
+completed 1500 cumulative updates. Smoke, resume, native gates, normalized
+ONNX export, and CPU transfer completed; product gates still fail. The
+controller retains `zero` and `forward` on its gate seed set and focuses on
+`lateral`. This partial retention does not generalize to the held-out product
+gate. At env step 33000, forward regression caused a real
+`preservation_failure -> rollback` to `model_1249.eval.adaptive.pt`; training
+continued and recovered the two retained gate buckets. DR remains at stage 0.
 
-Next hypothesis: lateral acquisition remains the limiting skill after the
-adaptive focus switch. The native gate lateral error is still about 0.131 m/s
-at model_999 while the other directional skills improve. Continue the exact
-checkpoint with lateral focus to test whether exposure is sufficient; if the
-lateral error plateaus, inspect its reward/command semantics before changing
-the acceptance metric. The samplewise MAE and product thresholds remain fixed.
+Lateral plateaued: held-out MAE is 0.1252 m/s at 1000 updates and 0.1244 m/s
+at 1500. A separate strictification bootstrap (lighter pose/action costs,
+stronger tracking and 25% pure lateral sampling) also failed at 500 updates:
+native mean lateral velocity is only 0.0028 m/s against a 0.12 m/s command.
+Do not continue that checkpoint into the stricter stage on the assumption
+that it acquired a gait. Long episodes and rising reward did not establish
+translation.
+
+Next hypothesis: pure lateral acquisition requires a better motion incentive
+or command progression; longer exposure and the tested bootstrap alone did
+not solve it. Compare command-conditioned native motion and weighted reward
+mass before another bounded training intervention. Keep product thresholds
+and samplewise MAE fixed; evaluation-semantic calibration remains separate.
+Blocker fingerprint: `native_lateral_acquisition`; classification: stationary
+or low-progress solution under tested recipes; decision delta: reject direct
+adoption/1000-update continuation of the strictification bootstrap.
 
 The Feedback-only L1 terms now average signed velocity error before magnitude
 with tau 0.5 s. Shared state updates once per step and resets on episode or
@@ -33,37 +47,40 @@ normalization floors remain 0.12 m/s and 0.8 rad/s. No action/observation
 filtering, canonical recipe, PPO, or product-threshold changes.
 
 Proof: focused tests and smoke64/5 passed, with nonpositive penalties, zero
-NaN term, rollback-state coverage, and ONNX export. The 1000-update artifact
-is `/tmp/microduck-adaptive-zero20-s17-1000/`; its final native gate is still
-not a usable-policy result. Continue acquisition only from its exact
-`model_999.pt` checkpoint and judge lateral progress, MAE, air-time, and
-preservation together; do not infer capability from aggregate reward.
+NaN term, rollback-state coverage, and ONNX export. Latest feedback artifact:
+`/tmp/microduck-adaptive-zero20-s17-1500/campaign-result.json`, checkpoint
+`model_1499.pt`, SHA256
+`4a93635a1f86f74ec859acfb58335de891ee3e162fbb449280af33b6ee665119`.
+Judge mean progress, MAE, air-time and preservation together.
 
 ## Latest behavioral evidence
 
-| Held-out metric | Aligned L1 500 | Zero20 1000 | Product requirement |
+| Held-out metric | Zero20 1000 | Zero20 1500 | Product requirement |
 | --- | ---: | ---: | ---: |
-| Zero endpoint drift (m) | 0.1050 | 0.0484 | <=0.012 |
-| Forward MAE (m/s) | 0.0436 | 0.0319 | <=0.024 |
-| Lateral MAE (m/s) | 0.1184 | 0.1252 | <=0.024 |
-| Yaw MAE (rad/s) | 0.5504 | 0.2741 | <=0.12 |
-| Left/right turn yaw MAE (rad/s) | 0.3529 / 0.3288 | 0.2601 / 0.2659 | <=0.12 |
+| Zero endpoint drift (m) | 0.0484 | 0.0624 | <=0.012 |
+| Forward MAE (m/s) | 0.0319 | 0.0368 | <=0.024 |
+| Lateral MAE (m/s) | 0.1252 | 0.1244 | <=0.024 |
+| Yaw MAE (rad/s) | 0.2741 | 0.3541 | <=0.12 |
+| Left/right turn yaw MAE (rad/s) | 0.2601 / 0.2659 | 0.1891 / 0.2646 | <=0.12 |
 
-At native gate model_999, the scores are zero0.848, forward0.849,
-lateral0.000, yaw0.369, turn-left0.465, and turn-right0.480. Zero and
-forward are now stable enough to be retained, while lateral remains the
-acquisition bottleneck. Held-out final-DR still fails every bucket despite
-better yaw/turn tracking. The controller recorded eight hold windows, no
-rollback, and focus `lateral`; CoM/head-CoM remain +/-3 mm.
+Final gate scores at model_1499: zero 0.870, forward 0.857, lateral 0.000,
+yaw 0.421, turn-left 0.548, turn-right 0.371. Held-out final-DR still fails
+all six buckets. CoM/head-CoM remain +/-3 mm; no successful difficulty
+advance or autonomous acquisition procedure is established. Source: `bb37a29`.
 
-Evidence: `/tmp/microduck-adaptive-zero20-s17-1000/campaign-result.json`, with
-exact checkpoint/report hashes and adaptive event provenance. Source:
-`bb37a29` (including `86ee5be`).
-The250 source snapshot is `/tmp/microduck-adaptive-aligned-s17/source/`;
-500 continuation is `/tmp/microduck-adaptive-aligned-s17-500/run/`.
-First unshaped pilot: `/tmp/microduck-adaptive-formal-20260921-s17/`.
-Componentwise L1: `/tmp/microduck-adaptive-objective-s17[-500]/`.
-All native/CPU verdicts remain negative; no video/hardware acceptance.
+Strictification diagnostic artifact:
+`/tmp/microduck-strictification-s17/native-499/capability.json`. Seed 17,
+4096 envs, 500 updates, gate evaluation seed 20260815, final DR. It survives
+all six 6 s cases but passes none: zero drift 0.0143 m, forward/lateral MAE
+0.1203/0.1178 m/s, yaw/left/right MAE 0.2734/0.2177/0.2560 rad/s. Mean
+forward/lateral velocity is -0.00035/0.00278 m/s; lateral late velocity is
+0.0000945 m/s. Its 35 focused tests and smoke64/5 passed before training;
+those prove execution, not capability. This is a negative diagnostic, not a
+held-out or transfer acceptance result. Report `source_sha` is `unknown`;
+the two runtime patches match the saved training `git/holy-ape.diff` exactly.
+Checkpoint SHA256:
+`38a8f15fbaac63a6a26f21fd5fb1b512226bb15ae5115014120a5b947f5f959c`.
+All native/CPU product verdicts remain negative; no video/hardware acceptance.
 
 Diagnostics completed:
 - Initial DR at250 still gives forward/lateral MAE0.1190/0.1185, so final
@@ -91,10 +108,8 @@ Diagnostics completed:
   shows0.0671 m offset vs0.00258 without kick, both settling near0.001 m/s.
   Any metric change needs written semantics and calibration; failed policies
   must remain failed. Do not lower thresholds to make reports pass.
-- Preserve partially learned skills before a complete last-known-good policy
-  exists. The zero20 continuation now records a valid partial known-good
-  checkpoint containing `zero` and `forward`; it still does not constitute a
-  usable policy.
+- Partial preservation and real rollback are established on the gate set;
+  held-out preservation and all-six capability acquisition remain required.
 - Native battery uses MJLab/BAM with DR/noise/delay. CPU/XML-position-actuator
   rehearsal is independent transfer evidence, not proof of native quality.
 - Stop on nonfinite training, invalid provenance, resource exhaustion or

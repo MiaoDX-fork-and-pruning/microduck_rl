@@ -34,6 +34,58 @@ ACQUISITION_TRACKING_STD_STAGES = (
     {"step": 1500 * 24, "std": 0.12},
 )
 
+# Bounded bootstrap profile adapted from the independently validated
+# strictification experiment. It is diagnostic-only until a native MJLab run
+# shows that the early lateral basin transfers when the later strict stages are
+# restored. Values are applied through the live managers by
+# ``adaptive_strictification_profile``.
+STRICTIFICATION_PROFILE_STAGES = (
+    {
+        "step": 0,
+        "rel_forward_envs": 0.0,
+        "rel_lateral_envs": 0.25,
+        "track_linear_velocity": 4.0,
+        "track_angular_velocity": 6.0,
+        "pose": 0.5,
+        "air_time": 1.0,
+        "root_height": 0.0,
+        "action_rate_l2": -0.1,
+    },
+    {
+        "step": 500 * 24,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_linear_velocity": 2.0,
+        "track_angular_velocity": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": 0.055,
+        "action_rate_l2": -0.2,
+    },
+    {
+        "step": 750 * 24,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_linear_velocity": 2.0,
+        "track_angular_velocity": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": 0.055,
+        "action_rate_l2": -0.4,
+    },
+    {
+        "step": 1000 * 24,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_linear_velocity": 2.0,
+        "track_angular_velocity": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": 0.055,
+        "action_rate_l2": -0.6,
+    },
+)
+
 # Feedback-only acquisition signal: at low commanded speeds the Gaussian
 # tracking reward is nearly flat around standing. These dimensionless,
 # command-aligned L1 penalties keep a direct cost for missing the requested
@@ -55,7 +107,8 @@ FEEDBACK_TRACKING_TAU_S = 0.5
 DIAGNOSTIC_NAMES = {
     "standing": "Standing", "action_rate": "ActionRate", "lateral": "Lateral",
     "tracking": "Tracking", "acquisition": "Acquisition",
-    "acquisition_lateral": "AcquisitionLateral", "push": "Push",
+    "acquisition_lateral": "AcquisitionLateral", "strictification": "Strictification",
+    "push": "Push",
 }
 
 
@@ -147,6 +200,24 @@ def make_microduck_adaptive_velocity_env_cfg(
                         },
                     )
                 }
+            elif diagnostic_mode == "strictification":
+                # A bounded adapted-to-strict bootstrap. The command sampler
+                # stays on the normal velocity path so the live curriculum can
+                # mutate its explicit forward/lateral buckets.
+                cfg.commands["twist"].rel_forward_envs = 0.0
+                cfg.commands["twist"].rel_lateral_envs = 0.25
+                cfg.rewards["track_linear_velocity"].weight = 4.0
+                cfg.rewards["track_angular_velocity"].weight = 6.0
+                cfg.rewards["pose"].weight = 0.5
+                cfg.rewards["air_time"].weight = 1.0
+                cfg.rewards["action_rate_l2"].weight = -0.1
+                cfg.terminations["root_height"].params["min_height"] = 0.0
+                cfg.curriculum = {
+                    "strictification_profile": CurriculumTermCfg(
+                        func=microduck_mdp.adaptive_strictification_profile,
+                        params={"profile_stages": list(STRICTIFICATION_PROFILE_STAGES)},
+                    )
+                }
             else:
                 cfg.curriculum["push_strength"] = CurriculumTermCfg(
                     func=microduck_mdp.push_curriculum,
@@ -227,6 +298,7 @@ AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diag
 AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
 AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
 AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
+AdaptiveMicroduckStrictificationRlCfg = _adaptive_rl_cfg("velocity_adaptive_strictification_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
 
 AdaptiveMicroduckFeedbackRlCfg = _adaptive_rl_cfg("velocity_adaptive_feedback")
@@ -244,6 +316,7 @@ ADAPTIVE_RECIPES = (
     ("all_static", "tracking", False, AdaptiveMicroduckTrackingRlCfg),
     ("all_static", "acquisition", False, AdaptiveMicroduckAcquisitionRlCfg),
     ("all_static", "acquisition_lateral", False, AdaptiveMicroduckAcquisitionLateralRlCfg),
+    ("all_static", "strictification", False, AdaptiveMicroduckStrictificationRlCfg),
     ("all_static", "push", False, AdaptiveMicroduckPushRlCfg),
     ("composed", None, True, AdaptiveMicroduckFeedbackRlCfg),
 )

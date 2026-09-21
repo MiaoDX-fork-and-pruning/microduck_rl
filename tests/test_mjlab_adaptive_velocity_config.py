@@ -7,6 +7,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckActionRateRlCfg,
     AdaptiveMicroduckLateralRlCfg,
     AdaptiveMicroduckTrackingRlCfg,
+    AdaptiveMicroduckStrictificationRlCfg,
     AdaptiveMicroduckPushRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
@@ -128,6 +129,28 @@ def test_acquisition_lateral_preserves_anchor_buckets() -> None:
     assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
     assert cfg.commands["twist"].rel_lateral_envs == 0.50
     assert list(cfg.curriculum) == ["tracking_std"]
+
+
+def test_strictification_bootstrap_is_bounded_and_restores_strict_profile() -> None:
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="all_static", diagnostic_mode="strictification"
+    )
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-Strictification-MicroDuck"
+    assert cfg.commands["twist"].rel_forward_envs == 0.0
+    assert cfg.commands["twist"].rel_lateral_envs == 0.25
+    assert cfg.rewards["track_linear_velocity"].weight == 4.0
+    assert cfg.rewards["track_angular_velocity"].weight == 6.0
+    assert cfg.rewards["pose"].weight == 0.5
+    assert cfg.rewards["air_time"].weight == 1.0
+    assert cfg.rewards["action_rate_l2"].weight == -0.1
+    assert cfg.terminations["root_height"].params["min_height"] == 0.0
+    stages = cfg.curriculum["strictification_profile"].params["profile_stages"]
+    assert stages[0]["rel_lateral_envs"] == 0.25
+    assert stages[1]["step"] == 500 * 24
+    assert stages[-1]["action_rate_l2"] == -0.6
+    assert AdaptiveMicroduckStrictificationRlCfg.experiment_name == (
+        "velocity_adaptive_strictification_diagnostic"
+    )
 
 
 def test_push_diagnostic_only_adds_live_push_curriculum() -> None:

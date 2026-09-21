@@ -3461,6 +3461,52 @@ def reward_weight(
     return torch.tensor([term_cfg.weight])
 
 
+def adaptive_strictification_profile(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor,
+    profile_stages: list[dict],
+) -> torch.Tensor:
+    """Move a lateral acquisition diagnostic from an adapted basin to strict.
+
+    The live managers own deep-copied term configs, so this curriculum updates
+    the command, reward, and root-height termination through those managers.
+    The initial profile is deliberately bounded and diagnostic-only: it gives
+    lateral motion a dense early signal, then restores the production reward
+    balance in measured stages. It does not change the actor ABI or evaluator
+    thresholds.
+    """
+    del env_ids
+    if not profile_stages:
+        raise ValueError("strictification profile needs at least one stage")
+    values = profile_stages[0]
+    for stage in profile_stages:
+        if env.common_step_counter >= stage["step"]:
+            values = stage
+
+    command_cfg = env.command_manager.get_term_cfg("twist")
+    for name in ("rel_forward_envs", "rel_lateral_envs"):
+        if name in values and hasattr(command_cfg, name):
+            setattr(command_cfg, name, float(values[name]))
+
+    reward_names = (
+        "track_linear_velocity",
+        "track_angular_velocity",
+        "pose",
+        "air_time",
+        "action_rate_l2",
+    )
+    for name in reward_names:
+        if name in values:
+            term_cfg = env.reward_manager.get_term_cfg(name)
+            term_cfg.weight = float(values[name])
+
+    if "root_height" in values:
+        term_cfg = env.termination_manager.get_term_cfg("root_height")
+        term_cfg.params["min_height"] = float(values["root_height"])
+
+    return torch.tensor([float(values["step"])])
+
+
 def com_range_curriculum(
     env: ManagerBasedRlEnv,
     env_ids: torch.Tensor,
