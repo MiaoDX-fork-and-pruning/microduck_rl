@@ -489,7 +489,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         consumed_iterations = getattr(self, "completed_iterations", None)
         current_iteration = self.current_learning_iteration
         resume_checkpoint = getattr(self, "resume_checkpoint", None)
-        infos = self.load(checkpoint_path)
+        # Rollback is reached immediately after an inference-mode rollout.
+        # RSL-RL's observation normalizer may therefore own inference tensors;
+        # loading outside inference mode attempts an illegal in-place copy into
+        # that buffer (PyTorch's "inplace update to inference tensor" error).
+        # Keep the complete trainer restore atomic under the same mode.
+        with torch.inference_mode():
+            infos = self.load(checkpoint_path)
         self.resume_checkpoint = resume_checkpoint
         self.evaluation_events = history
         self.last_evaluation_provenance = provenance

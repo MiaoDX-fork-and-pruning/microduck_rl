@@ -495,6 +495,22 @@ def test_preservation_failure_rolls_back_policy_rng_and_keeps_chronological_audi
     ]
 
 
+def test_rollback_loads_under_inference_mode_for_normalizer_buffers(monkeypatch, tmp_path):
+    runner = _runner()
+    checkpoint = tmp_path / "known-good.adaptive.pt"
+    checkpoint.write_bytes(b"known-good")
+    runner.last_known_good_checkpoint = str(checkpoint)
+    observed = []
+
+    def load(*args, **kwargs):
+        observed.append(torch.is_inference_mode_enabled())
+        return {}
+
+    monkeypatch.setattr(runner, "load", load)
+    runner.rollback(str(checkpoint))
+    assert observed == [True]
+
+
 @pytest.mark.parametrize("mode, interval", [("all_static", 0), ("all_static", 2), ("composed", 0), ("composed", 2)])
 def test_resume_counts_completed_updates_and_publishes_explicit_result(monkeypatch, tmp_path, mode, interval):
     import json
