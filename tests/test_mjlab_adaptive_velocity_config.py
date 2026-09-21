@@ -10,6 +10,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckStrictificationRlCfg,
     AdaptiveMicroduckPushRlCfg,
     AdaptiveMicroduckAcquisitionFeedbackRlCfg,
+    AdaptiveMicroduckLateralDriveRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -58,7 +59,8 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckPushRlCfg.experiment_name,
     }
     names.add(AdaptiveMicroduckAcquisitionFeedbackRlCfg.experiment_name)
-    assert len(names) == 9
+    names.add(AdaptiveMicroduckLateralDriveRlCfg.experiment_name)
+    assert len(names) == 10
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -145,6 +147,21 @@ def test_acquisition_feedback_combines_staged_tracking_with_adaptive_exposure() 
     assert list(cfg.curriculum) == ["tracking_std"]
     assert cfg.curriculum["tracking_std"].params["std_stages"][1]["std"] == 0.22
     assert {"linear_velocity_error_l1", "yaw_velocity_error_l1"} <= set(cfg.rewards)
+    assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
+    assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
+    from mjlab.tasks.registry import load_env_cfg
+
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck")
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck"
+    assert cfg.adaptive_axis_mode == "composed"
+    assert cfg.adaptive_command_exposure is True
+    assert cfg.adaptive_initial_focus == "lateral"
+    assert cfg.adaptive_frontier_order[0] == "lateral"
+    assert cfg.rewards["linear_velocity_error_l1"].weight == 2.0
+    assert cfg.rewards["yaw_velocity_error_l1"].weight == 0.0
     assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
     assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
 

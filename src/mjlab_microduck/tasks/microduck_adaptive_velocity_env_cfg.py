@@ -102,12 +102,14 @@ FEEDBACK_YAW_DEADBAND_RAD_S = 0.05
 # instantaneous MAE (worse than standing). Average signed error over a gait
 # cycle before L1 so learning that motion is not penalized as a regression.
 FEEDBACK_TRACKING_TAU_S = 0.5
+LATERAL_DRIVE_LINEAR_L1_WEIGHT = 2.0
 
 
 DIAGNOSTIC_NAMES = {
     "standing": "Standing", "action_rate": "ActionRate", "lateral": "Lateral",
     "tracking": "Tracking", "acquisition": "Acquisition",
     "acquisition_lateral": "AcquisitionLateral", "acquisition_feedback": "AcquisitionFeedback",
+    "lateral_drive": "LateralDrive",
     "strictification": "Strictification",
     "push": "Push",
 }
@@ -122,6 +124,8 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_command_exposure: bool = False
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
+    adaptive_linear_feedback_weight: float = FEEDBACK_LINEAR_L1_WEIGHT
+    adaptive_yaw_feedback_weight: float = FEEDBACK_YAW_L1_WEIGHT
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
     adaptive_evaluator_schema_version: int = 2
@@ -192,7 +196,9 @@ def make_microduck_adaptive_velocity_env_cfg(
         else:
             if diagnostic_mode == "tracking":
                 cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
-            elif diagnostic_mode in ("acquisition", "acquisition_lateral", "acquisition_feedback"):
+            elif diagnostic_mode in (
+                "acquisition", "acquisition_lateral", "acquisition_feedback", "lateral_drive"
+            ):
                 cfg.commands["twist"].rel_lateral_envs = 0.20 if diagnostic_mode == "acquisition" else 0.50
                 cfg.curriculum = {
                     "tracking_std": CurriculumTermCfg(
@@ -203,7 +209,7 @@ def make_microduck_adaptive_velocity_env_cfg(
                         },
                     )
                 }
-                if diagnostic_mode == "acquisition_feedback":
+                if diagnostic_mode in ("acquisition_feedback", "lateral_drive"):
                     # The feedback controller owns command allocation. Start
                     # directly on the hard frontier instead of waiting for a
                     # failed gate window to switch from forward.
@@ -211,6 +217,9 @@ def make_microduck_adaptive_velocity_env_cfg(
                     cfg.adaptive_frontier_order = (
                         "lateral", "forward", "yaw", "turn-left", "turn-right"
                     )
+                if diagnostic_mode == "lateral_drive":
+                    cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
+                    cfg.adaptive_yaw_feedback_weight = 0.0
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
@@ -243,15 +252,19 @@ def make_microduck_adaptive_velocity_env_cfg(
                     },
                 )
         cfg.task_id = f"Mjlab-Velocity-Flat-Adaptive-{DIAGNOSTIC_NAMES[diagnostic_mode]}-MicroDuck"
-        if diagnostic_mode != "acquisition_feedback":
+        if diagnostic_mode not in ("acquisition_feedback", "lateral_drive"):
             cfg.adaptive_axis_mode = "all_static"
 
     if command_exposure:
-        if axis_mode != "composed" or diagnostic_mode not in (None, "acquisition_feedback"):
-            raise ValueError("feedback exposure requires the composed recipe or acquisition_feedback")
+        if axis_mode != "composed" or diagnostic_mode not in (
+            None, "acquisition_feedback", "lateral_drive"
+        ):
+            raise ValueError("feedback exposure requires the composed recipe or an acquisition diagnostic")
         cfg.task_id = (
             "Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck"
             if diagnostic_mode == "acquisition_feedback"
+            else "Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck"
+            if diagnostic_mode == "lateral_drive"
             else "Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck"
         )
         cfg.adaptive_command_exposure = True
@@ -270,7 +283,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         # The MDP functions self-negate; positive weights keep them penalties.
         cfg.rewards["linear_velocity_error_l1"] = RewardTermCfg(
             func=microduck_mdp.command_normalized_linear_velocity_l1,
-            weight=FEEDBACK_LINEAR_L1_WEIGHT,
+            weight=cfg.adaptive_linear_feedback_weight,
             params={
                 "command_name": "twist",
                 "minimum_scale": FEEDBACK_LINEAR_MIN_SCALE_M_S,
@@ -280,7 +293,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         )
         cfg.rewards["yaw_velocity_error_l1"] = RewardTermCfg(
             func=microduck_mdp.command_normalized_yaw_velocity_l1,
-            weight=FEEDBACK_YAW_L1_WEIGHT,
+            weight=cfg.adaptive_yaw_feedback_weight,
             params={
                 "command_name": "twist",
                 "minimum_scale": FEEDBACK_YAW_MIN_SCALE_RAD_S,
@@ -315,6 +328,7 @@ AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_di
 AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
 AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
 AdaptiveMicroduckAcquisitionFeedbackRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_feedback")
+AdaptiveMicroduckLateralDriveRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_drive")
 AdaptiveMicroduckStrictificationRlCfg = _adaptive_rl_cfg("velocity_adaptive_strictification_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
 
@@ -334,6 +348,7 @@ ADAPTIVE_RECIPES = (
     ("all_static", "acquisition", False, AdaptiveMicroduckAcquisitionRlCfg),
     ("all_static", "acquisition_lateral", False, AdaptiveMicroduckAcquisitionLateralRlCfg),
     ("composed", "acquisition_feedback", True, AdaptiveMicroduckAcquisitionFeedbackRlCfg),
+    ("composed", "lateral_drive", True, AdaptiveMicroduckLateralDriveRlCfg),
     ("all_static", "strictification", False, AdaptiveMicroduckStrictificationRlCfg),
     ("all_static", "push", False, AdaptiveMicroduckPushRlCfg),
     ("composed", None, True, AdaptiveMicroduckFeedbackRlCfg),
