@@ -1,200 +1,112 @@
 # MJLab Adaptive Curriculum v2
 
-Status: **ACTIVE** — acquisition and acceptance calibration remain open;
-no usable policy established. Updated: 2026-09-22.
+Status: **ACTIVE** — no usable policy established. Updated: 2026-09-22.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
-Latest intent: continue the authorized sustained intuitive-flow objective
-(necessary changes, training and behavioral checks). The 1500-update feedback
-continuation, 500-update strictification probe, and 500-update
-acquisition-feedback slice are finished; none establishes a usable policy.
+Latest intent: sustained authorized intuitive-flow execution; the status request
+does not cancel necessary changes, training, or behavioral checks.
 
 ## Current slice
 
-Runner/exposure consolidation is committed as `8b2f28a`. Command-aligned
-shaping `86ee5be` is included in `bb37a29`, which also protects the 20% zero
-anchor and uses a 0.80 focus mastery threshold. The zero20 seed17 campaign
-completed 1500 cumulative updates. Smoke, resume, native gates, normalized
-ONNX export, and CPU transfer completed; product gates still fail. The
-controller retains `zero` and `forward` on its gate seed set and focuses on
-`lateral`. This partial retention does not generalize to the held-out product
-gate. At env step 33000, forward regression caused a real
-`preservation_failure -> rollback` to `model_1249.eval.adaptive.pt`; training
-continued and recovered the two retained gate buckets. DR remains at stage 0.
+The seed 17 yaw-feedback continuation is complete at 3000 updates and is not
+running in the background. It resumed the exact previous frontier checkpoint at
+4096 envs from source `e068387`; manifests are under
+`/tmp/microduck-adaptive-yaw-feedback-s17-3000/`. Smoke64/5 passed and the
+training result is finite, but both the native held-out report and the
+independent CPU/ONNX report have `passed: 0`.
+The current branch includes the canonical-curriculum ownership repair
+`920e0ec`; the focused suite is green at 54 tests.
 
-Lateral plateaued: held-out MAE is 0.1252 m/s at 1000 updates and 0.1244 m/s
-at 1500. A separate strictification bootstrap (lighter pose/action costs,
-stronger tracking and 25% pure lateral sampling) failed at 500 updates with
-0.0028 m/s mean lateral velocity against a 0.12 m/s command. The combined
-acquisition-feedback slice improved forward MAE to 0.0287 m/s at 500 updates,
-but held-out lateral MAE remained 0.1188 m/s and yaw MAE 0.7655 rad/s; zero
-drift was 0.0767 m. Its native six-bucket gate still failed, and the CPU
-transfer report also failed all buckets. Do not promote either checkpoint as
-a usable policy.
+The adaptive controller did execute its intended behavior: it retained the
+zero bucket, rotated focus after stalls, increased yaw exposure, and completed
+without a nonfinite event. The gate seed briefly improved yaw, but that did not
+transfer to held-out seeds. The final gate state focused `turn-right`; no
+difficulty stage was advanced and no usable checkpoint was established.
 
-The first acquisition-feedback slice exposed a controller-specific confounder:
-initial lateral focus was overwritten by the default frontier order because
-forward was also below mastery. A checkpointed lateral-first frontier was then
-tested for 500 updates. It held lateral at 28% exposure throughout, but native
-held-out lateral MAE remained 0.1187 m/s and yaw MAE 0.7319 rad/s; zero drift
-was 0.0528 m. Forward learned to 0.0214 m/s at the third window, then a
-preservation failure at env step 12000 triggered a real rollback. The final
-native and CPU six-bucket reports both failed. The frontier-order confounder is
-therefore removed; the remaining classification is a weak lateral reward/physics
-basin. Keep product thresholds and samplewise MAE fixed; evaluation semantic
-calibration remains separate.
+## Last proven evidence
 
-The `lateral-drive` diagnostic then made that acquisition signal explicit: it
-kept the lateral-first frontier, raised linear L1 to 2.0, and removed the yaw
-L1 term while retaining the zero anchor, staged tracking schedule, ABI, BAM
-actuator, and product thresholds. At 500 updates, native held-out lateral MAE
-fell to 0.09859 m/s with mean lateral velocity 0.13029 m/s (late mean
-0.10871 m/s), but lateral velocity standard deviation remained 0.11170 m/s.
-Forward MAE was 0.02795 m/s, yaw MAE 0.80762 rad/s, and zero drift 0.04139 m.
-All native product buckets failed. The run had four valid `hold` windows and no
-rollback, so it is evidence of lateral acquisition with severe ripple, not a
-usable policy. Continue this exact checkpoint to cumulative 1000 updates before
-opening another reward or physics branch.
-
-Blocker fingerprint: `native_lateral_acquisition`; classification: oscillatory
-and undertrained lateral basin after direct lateral drive; decision delta:
-resume the validated acquisition checkpoint through the existing staged tracking
-schedule before changing physics, thresholds, or command semantics.
-
-The Feedback-only L1 terms now average signed velocity error before magnitude
-with tau 0.5 s. Shared state updates once per step and resets on episode or
-command changes using current error (no free startup grace period). Exact-zero
-linear commands retain instantaneous idle-speed cost. The base feedback weights
-remain 0.5/0.35; `lateral-drive` overrides linear L1 to 2.0 and yaw L1 to 0 for
-its diagnostic only. Normalization floors remain 0.12 m/s and 0.8 rad/s. No
-action/observation filtering, canonical recipe, PPO, or product-threshold
-changes.
-
-Proof: focused tests and smoke64/5 passed, with nonpositive penalties, zero
-NaN term, rollback-state coverage, and ONNX export. Latest feedback artifact:
-`/tmp/microduck-adaptive-zero20-s17-1500/campaign-result.json`, checkpoint
-`model_1499.pt`, SHA256
-`4a93635a1f86f74ec859acfb58335de891ee3e162fbb449280af33b6ee665119`.
-Judge mean progress, MAE, air-time and preservation together.
-
-Latest acquisition-feedback artifact:
-`/tmp/microduck-acquisition-feedback-s17-500/campaign-result.json`, checkpoint
-`model_499.pt`. Native held-out and CPU reports are bound to the exact
-checkpoint and source SHA `b99c6e0`; all six product buckets fail. The four
-native gate windows were valid `hold` decisions with no rollback or evaluator
-error. The 64-env/5-iteration smoke and 51 focused tests passed before this
-run.
-
-Latest lateral-priority artifact:
-`/tmp/microduck-acquisition-feedback-frontier-s17-500/campaign-result.json`.
-Its adaptive trace contains `hold` at steps 3000/6000/9000 followed by
-`preservation_failure` and `rollback` at step 12000; the checkpoint stores the
-lateral-first order and 28% lateral exposure. This is negative acquisition
-evidence, not a product or transfer result.
-
-Latest lateral-drive artifact:
-`/tmp/microduck-adaptive-lateral-drive-s17-500/campaign-result.json`, source
-SHA `e9c2c5a`, checkpoint `model_499.pt`, SHA256
-`9044b5655b32c38c89f4d0bff311b75a3059d368239d7aab961df13d6fc36811`. Its
-native report is at `heldout/capability.json` and its independent ONNX/CPU
-report is at `cpu-transfer/capability.json`; both are negative product results.
-
-## Latest behavioral evidence
-
-| Held-out metric | Zero20 1000 | Zero20 1500 | Product requirement |
-| --- | ---: | ---: | ---: |
-| Zero endpoint drift (m) | 0.0484 | 0.0624 | <=0.012 |
-| Forward MAE (m/s) | 0.0319 | 0.0368 | <=0.024 |
-| Lateral MAE (m/s) | 0.1252 | 0.1244 | <=0.024 |
-| Yaw MAE (rad/s) | 0.2741 | 0.3541 | <=0.12 |
-| Left/right turn yaw MAE (rad/s) | 0.2601 / 0.2659 | 0.1891 / 0.2646 | <=0.12 |
-
-The lateral-drive 500-update native held-out slice is:
-
-| Metric | Lateral-drive 500 | Product requirement |
+| Native held-out metric | Yaw-feedback 3000 | Product requirement |
 | --- | ---: | ---: |
-| Zero endpoint drift (m) | 0.04139 | <=0.012 |
-| Forward MAE (m/s) | 0.02795 | <=0.024 |
-| Lateral MAE (m/s) | 0.09859 | <=0.024 |
-| Yaw MAE (rad/s) | 0.80762 | <=0.12 |
-| Left/right turn yaw MAE (rad/s) | 0.78340 / 0.71512 | <=0.12 |
+| Zero endpoint drift (m) | 0.04456 | <=0.012 |
+| Forward MAE (m/s) | 0.02133 | <=0.024 |
+| Lateral MAE (m/s) | 0.11037 | <=0.024 |
+| Yaw MAE (rad/s) | 0.74515 | <=0.12 |
+| Left/right turn MAE (rad/s) | 0.30365 / 0.21847 | <=0.12 |
 
-The lateral bucket mean velocity was 0.13029 m/s, late mean 0.10871 m/s, and
-standard deviation 0.11170 m/s; action magnitude/difference means were
-0.25164/0.09476. This confirms acquisition with large ripple rather than
-samplewise tracking.
+Only forward passes. All six native cases survive their 6 s rollouts. The
+native held-out report is at
+`/tmp/microduck-adaptive-yaw-feedback-s17-3000/heldout/capability.json`.
+CPU/ONNX passes only zero and reports yaw MAE 0.76967 rad/s; it remains
+separate transfer evidence using XML position actuators.
 
-Final gate scores at model_1499: zero 0.870, forward 0.857, lateral 0.000,
-yaw 0.421, turn-left 0.548, turn-right 0.371. Held-out final-DR still fails
-all six buckets. CoM/head-CoM remain +/-3 mm; no successful difficulty
-advance or autonomous acquisition procedure is established. Source: `bb37a29`.
+Bounded anti-stall rotation works as orchestration: yaw exposure reached about
+12.3% and the final turn-right focus reached about 21.7%, with no invalid
+rollback. This did not acquire the missing yaw/turn capability on held-out
+seeds. CoM/head-CoM remain at +/-3 mm; no difficulty advance or reproducible
+usable-policy procedure is established.
 
-Strictification diagnostic artifact:
-`/tmp/microduck-strictification-s17/native-499/capability.json`. Seed 17,
-4096 envs, 500 updates, gate evaluation seed 20260815, final DR. It survives
-all six 6 s cases but passes none: zero drift 0.0143 m, forward/lateral MAE
-0.1203/0.1178 m/s, yaw/left/right MAE 0.2734/0.2177/0.2560 rad/s. Mean
-forward/lateral velocity is -0.00035/0.00278 m/s; lateral late velocity is
-0.0000945 m/s. Its 35 focused tests and smoke64/5 passed before training;
-those prove execution, not capability. This is a negative diagnostic, not a
-held-out or transfer acceptance result. Report `source_sha` is `unknown`;
-the two runtime patches match the saved training `git/holy-ape.diff` exactly.
-Checkpoint SHA256:
-`38a8f15fbaac63a6a26f21fd5fb1b512226bb15ae5115014120a5b947f5f959c`.
-All native/CPU product verdicts remain negative; no video/hardware acceptance.
+Completed repairs: runner state/rollback consolidation, command-aligned feedback,
+zero retention, checkpointed frontier order, inclusive tracking-stage boundaries
+(`8638d29`), anti-stall rotation (`e9f3a74`), focus preservation (`0d9567b`),
+and canonical curriculum ownership (`920e0ec`). These prove orchestration, not
+all-capability acquisition. Earlier lateral-drive and frontier-preserve reports
+remain under their named `/tmp` campaign paths.
 
-Diagnostics completed:
-- Initial DR at250 still gives forward/lateral MAE0.1190/0.1185, so final
-  CoM width alone does not explain the failure.
-- A small nonzero head/body command intervention does not rescue tracking.
-  This reduces confidence in that specific hypothesis, without ruling out
-  all command-distribution effects.
-- At250, forward MAE varies from0.0342 (gate seed20260815) to0.1191
-  (held-out seed20260915); extra seed20260916 gives0.0338. This extra set
-  overlaps held-out bucket seeds and is diagnostic only. Lateral fails all.
-- Aligned500 with diagnostic diagonal command(0.20,0.12,0) makes0.0552 m/s
-  lateral progress vs0.0034 for pure lateral. A separate fresh250-update
-  diagonal-bucket training experiment still gives pure-lateral MAE0.1195;
-  no further diagonal-only continuation. Source patch and manifest reside
-  under `/tmp/microduck-adaptive-diagonal-s17/` and were not adopted in repo.
+## Next decision and experiment boundary
 
-## Remaining gates and boundaries
+Blocker fingerprint: `native_yaw_acquisition`.
+Current classification: yaw stays near stationary despite increased exposure;
+the instantaneous zero-linear-command cost also penalizes pure-turn gait sway.
+Counterfactual reward replay:
+`/tmp/microduck-yaw-acquisition-diagnostic-e068387/reward-replay.json`.
+On a mature fixed-policy trace with mean yaw 0.7845 rad/s for a 0.8 command,
+current weighted linear L1 averages -2.3269; at yaw-feedback-2625, the nearly
+stationary trace costs -0.0152. Averaging planar error during active yaw would
+reduce the former to -0.3611 while retaining a cost for sustained translation.
+This is reward-conflict evidence, not a training or acceptance result.
 
-- Acquire all six capabilities, then reproduce the automated procedure across
-  training seeds17/23/47 with disjoint held-out native evidence, video
-  inspection and normalized ONNX/CPU deployment rehearsal.
-- Calibrate gate semantics: samplewise velocity MAE includes gait ripple;
-  zero endpoint drift includes push displacement despite no absolute-position
-  observation. Paired kick evidence under `/tmp/adaptive-push-paired/v3/`
-  shows0.0671 m offset vs0.00258 without kick, both settling near0.001 m/s.
-  Any metric change needs written semantics and calibration; failed policies
-  must remain failed. Do not lower thresholds to make reports pass.
-- Partial preservation and real rollback are established on the gate set;
-  held-out preservation and all-six capability acquisition remain required.
-- Resume `/tmp/microduck-adaptive-lateral-drive-s17-500/.../model_499.pt` to
-  cumulative 1000 updates with the same seed and task, then inspect native
-  windows at 625/750/875/1000 for lateral MAE, ripple, zero/forward
-  preservation, and rollback before any multi-seed campaign.
-- Native battery uses MJLab/BAM with DR/noise/delay. CPU/XML-position-actuator
-  rehearsal is independent transfer evidence, not proof of native quality.
+The current bounded decision is a reward-semantics diagnostic, not a product
+threshold change. The recorded traces show the pure-yaw policy remains nearly
+stationary even while its yaw-specific L1 cost is substantial. Before another
+long run, test a command-aligned acquisition signal that distinguishes active
+turning from exact idle and preserves the canonical curriculum. Success requires
+lower native yaw/turn error while retaining zero/forward/lateral; run focused
+tests and smoke64/5 first, then a fresh bounded continuation. Do not start a
+multi-seed campaign until all six native held-out buckets pass.
+
+The completed manifests are `training-result.json`, `campaign-result.json`,
+`heldout/capability.json`, and `cpu-transfer/capability.json` under the campaign
+directory. Any next experiment must inspect every new gate report,
+focus/exposure state and preservation decision.
+
+## Remaining gates and no-touch scope
+
+- Acquire all six capabilities, then reproduce the procedure on training seeds
+  17/23/47 with disjoint held-out native evidence, video inspection, normalized
+  ONNX export and CPU rehearsal. No broad multi-seed campaign before acquisition.
+- Keep current product thresholds and samplewise MAE fixed. Semantic calibration
+  remains open: gait ripple contributes to MAE; kicked zero endpoint offset is
+  not directly observed by the actor. The paired probe under
+  `/tmp/adaptive-push-paired/v3/` shows 0.0671 m kicked offset versus 0.00258 m
+  without a kick, both ending near 0.001 m/s. Any metric change needs a written
+  independent calibration argument; failing motion must remain failing.
+- Preserve canonical velocity, 61D/14D ABI, BAM M6, unfiltered actions and export
+  normalization. Do not touch unrelated IsaacLab, uv.lock, generated files or
+  other users' processes. Fresh-sync portability is unproven; local runs reuse
+  the validated venv. Keep logs under `/tmp`; repo `logs/rsl_rl` is not writable.
 - Stop on nonfinite training, invalid provenance, resource exhaustion or
-  demonstrated regression. No five-branch/multi-seed superiority campaign
-  until acquisition is informative. Fresh-sync portability is unproven;
-  local runs reuse the validated venv.
-- No-touch: canonical velocity recipe,61D/14D ABI,BAM M6,action filtering,
-  unrelated IsaacLab/uv.lock/generated-file changes, other users' processes.
-- Parked: optional advisor/stronger teachers, generalist, IsaacLab migration,
-  hardware deployment. They do not substitute for native usable-policy proof.
+  demonstrated regression. Optional advisor, stronger teachers, generalist,
+  IsaacLab migration and hardware deployment remain parked.
 
-## Verification commands
+## Verification inventory
 
-`PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest pytest -q
- tests/test_adaptive*.py tests/test_capability_metrics.py
- tests/test_mjlab_adaptive_velocity_config.py tests/test_mjlab_velocity_flat_config.py`
-
-`run_adaptive_campaign_job.py --branch lateral-drive --seed 17 --output <new-dir>
- --iterations <cumulative-budget> --num-envs 4096 --gate-interval 125`
-uses explicit result manifests and exact checkpoint paths. Set
-`MICRODUCK_SOURCE_SHA` and import the matching immutable snapshot. All logs go
-under `/tmp`; repo `logs/rsl_rl` is not writable. A `status:evaluated` manifest
-is completion of the experiment, not a passing policy.
+Focused proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest
+pytest -q tests/test_mjlab_adaptive_velocity_config.py
+tests/test_adaptive_velocity_l1_rewards.py tests/test_adaptive_command_exposure.py`.
+Broader adaptive runner/checkpoint tests are required for controller changes.
+Every training change requires smoke64/5 before a long run. Campaign launch uses
+`scripts/run_adaptive_campaign_job.py --branch lateral-drive --seed 17
+--output <new-dir> --iterations <cumulative-budget> --resume <exact-checkpoint>
+--num-envs 4096 --gate-interval 125`, with source provenance recorded. Prefer an
+immutable source snapshot for future launches. `status:evaluated` means the
+experiment completed, not that the policy passed.
