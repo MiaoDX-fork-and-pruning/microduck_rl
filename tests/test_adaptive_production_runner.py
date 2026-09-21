@@ -439,7 +439,7 @@ def test_preservation_failure_rolls_back_policy_rng_and_keeps_chronological_audi
 
     assert runner.last_gate_outcome == "preservation_failure"
     assert torch.equal(runner.alg.state["weight"], expected_policy["weight"])
-    assert runner.current_learning_iteration == 1
+    assert runner.current_learning_iteration == 2
     restored_rng = runner._rng_state()
     assert restored_rng["python"] == expected_rng["python"]
     assert np.array_equal(restored_rng["numpy"][1], expected_rng["numpy"][1])
@@ -451,19 +451,123 @@ def test_preservation_failure_rolls_back_policy_rng_and_keeps_chronological_audi
     ]
 
 
-def test_disabled_evaluation_delegates_to_stock_learn(monkeypatch):
-    calls = []
+@pytest.mark.parametrize("mode, interval", [("all_static", 0), ("all_static", 2), ("composed", 0), ("composed", 2)])
+def test_resume_counts_completed_updates_and_publishes_explicit_result(monkeypatch, tmp_path, mode, interval):
+    import json
+    from tensordict import TensorDict
 
-    def stock_learn(self, num_learning_iterations, init_at_random_ep_len=False):
-        calls.append((num_learning_iterations, init_at_random_ep_len))
-
-    monkeypatch.setattr(
-        "mjlab_microduck.tasks.adaptive_runner.MicroduckOnPolicyRunner.learn",
-        stock_learn,
+    _fake_parent_io(monkeypatch)
+    runner = _runner(mode=mode)
+    if mode == "all_static":
+        runner.capability_gate = None
+    runner.completed_iterations = 5
+    runner.current_learning_iteration = 4
+    runner.evaluation_interval = interval
+    runner.cfg.update(num_steps_per_env=1, algorithm={}, save_interval=10)
+    runner.is_distributed = False
+    runner.device = "cpu"
+    runner.env.device = "cpu"
+    runner.env.num_envs = 2
+    runner.env.get_observations = lambda: TensorDict({"actor": torch.zeros(2, 1)}, batch_size=[2])
+    runner.env.step = lambda _: (runner.env.get_observations(), torch.zeros(2), torch.zeros(2), {})
+    runner.alg.train_mode = lambda: None
+    runner.alg.act = lambda _: torch.zeros(2, 1)
+    runner.alg.process_env_step = lambda *a: None
+    runner.alg.compute_returns = lambda _: None
+    runner.alg.update = lambda: {}
+    runner.alg.learning_rate = 0.001
+    runner.alg.get_policy = lambda: SimpleNamespace(output_std=1.0)
+    iterations, windows = [], []
+    runner.logger = SimpleNamespace(
+        writer=True, log_dir=str(tmp_path), init_logging_writer=lambda: None,
+        stop_logging_writer=lambda: None, process_env_step=lambda *a: None,
+        log=lambda **kw: iterations.append(kw["it"]),
     )
-    runner = object.__new__(AdaptiveMicroduckOnPolicyRunner)
-    runner.evaluation_interval = 0
-    runner.evaluator = None
-    runner.learn(7, init_at_random_ep_len=True)
+    runner._evaluate_window = lambda cp: windows.append(cp)
+    runner.learn(2)
+    assert iterations == [5, 6]
+    assert runner.completed_iterations == 7
+    result = json.loads((tmp_path / "training-result.json").read_text())
+    assert result["completed_iterations"] == 7
+    assert result["segment_iterations"] == 2
+    assert result["start_completed_iterations"] == 5
+    assert Path(result["checkpoint"]).name == "model_6.pt"
+    assert len(windows) == (1 if interval and mode != "all_static" else 0)
 
-    assert calls == [(7, True)]
+
+def test_actor_only_load_does_not_restore_trainer_rng_gate_or_live_ranges(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    trained = _runner()
+    trained.completed_iterations = 100
+    checkpoint = tmp_path / "trained.pt"
+    trained.save(str(checkpoint))
+    evaluator = _runner()
+    before_gate = evaluator.capability_gate.state_dict()
+    before_rng = evaluator._rng_state()
+    before_ranges = copy.deepcopy(evaluator.env.event_manager.cfgs)
+    evaluator.load(str(checkpoint), load_cfg={"actor": True})
+    assert evaluator.completed_iterations == 0
+    assert evaluator.capability_gate.state_dict() == before_gate
+    assert evaluator.env.event_manager.cfgs == before_ranges
+    assert torch.equal(evaluator._rng_state()["torch"], before_rng["torch"])
+    assert evaluator._rng_state()["python"] == before_rng["python"]
+
+
+def _attach_exposure(runner):
+    from mjlab_microduck.tasks.adaptive_curriculum import CommandExposure
+
+    runner.command_exposure = CommandExposure()
+    term = SimpleNamespace(cfg=SimpleNamespace(bucket_probabilities=()))
+    runner.env.command_manager = SimpleNamespace(get_term=lambda _: term)
+    runner.command_exposure.apply(runner.env)
+    return term
+
+
+def test_runner_feedback_restores_live_mixture_and_invalid_report_is_noop(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    term = _attach_exposure(runner)
+    checkpoint = tmp_path / "candidate.pt"
+    checkpoint.write_bytes(b"candidate")
+    raw = _raw(low=False)
+    raw["lateral"]["tracking_error_m_s"] = 0.12
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report_with_raw(checkpoint, raw))
+    runner._evaluate_window(str(checkpoint))
+    saved = runner.command_exposure.state_dict()
+    probabilities = term.cfg.bucket_probabilities
+    assert saved["windows"] == 1
+    assert saved["probabilities"]["lateral"] > saved["probabilities"]["forward"]
+    gate = runner.capability_gate.state_dict()
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: {"schema_version": -1})
+    runner._evaluate_window(str(checkpoint))
+    assert runner.command_exposure.state_dict() == saved
+    assert runner.capability_gate.state_dict() == gate
+    assert term.cfg.bucket_probabilities == probabilities
+    runner.command_exposure.update(dict.fromkeys(BUCKETS, 1.0))
+    runner.load(str(checkpoint.with_suffix(".adaptive.pt")))
+    assert runner.command_exposure.state_dict() == saved
+    assert term.cfg.bucket_probabilities == probabilities
+
+
+def test_low_score_preservation_failure_restores_sampling_without_rewinding_budget(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    term = _attach_exposure(runner)
+    runner.completed_iterations = 10
+    checkpoint = tmp_path / "candidate.pt"
+    checkpoint.write_bytes(b"candidate")
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint))
+    runner._evaluate_window(str(checkpoint))
+    probabilities = term.cfg.bucket_probabilities
+    saved_exposure = runner.command_exposure.state_dict()
+    runner.completed_iterations = 20
+    runner.command_exposure.update({name: 0.0 if name == "lateral" else 1.0 for name in BUCKETS})
+    runner.command_exposure.apply(runner.env)
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint, low=True))
+    runner._evaluate_window(str(checkpoint))
+    assert runner.last_gate_outcome == "preservation_failure"
+    assert runner.command_exposure.state_dict() == saved_exposure
+    assert term.cfg.bucket_probabilities == probabilities
+    assert runner.completed_iterations == 20
+    assert runner.env.common_step_counter == 20 * 24
+    assert runner.evaluation_events[-1]["kind"] == "rollback"

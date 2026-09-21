@@ -1,12 +1,43 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: Phase 0 complete; Phase 1 replay validation pending; Phase 2 ready after Phase 1 gate
-Date: 2026-09-15
+Status: Phase 0/1 infrastructure complete; r4 remains inconclusive. Phase 2A
+recipe endpoints are complete but fail usability. Runner consolidation and
+bounded command-exposure feedback are implemented; acquisition/calibration
+remain open. See the active status capsule for current proof.
+Date: 2026-09-21
 Related:
 
 - [`mjlab_adaptive_curriculum_proposal.md`](../mjlab_adaptive_curriculum_proposal.md)
 - [`adaptive_curriculum_deep_research.md`](../adaptive_curriculum_deep_research.md)
 - [`status/active/mjlab-adaptive-curriculum.md`](../status/active/mjlab-adaptive-curriculum.md)
+
+## Active execution contract
+
+Status: **ACTIVE**. Task control plane: thread
+`01a0c2ae-6895-7700-accd-89a0e7a46e1b`, workspace `holy-ape`.
+The user authorized sustained necessary changes, training and checks through
+`intuitive-flow` until adaptive training produces usable policies. This includes
+bounded reward/controller/evaluation repairs; the earlier exposure-only pilot
+is not the completion boundary. The latest status request does not cancel this
+authorization.
+
+Acceptance remains behavioral: first establish a native six-capability policy,
+then reproduce the automated procedure with at least three independent training
+seeds (17, 23, 47), each with held-out native evidence, rollout/video inspection,
+normalizer-baked export and CPU deployment rehearsal. These are policies in the
+existing walking family, not a new collection of task IDs. Native usability,
+CPU transfer, and superiority to fixed training remain separate verdicts; no
+hardware success is inferred from simulation. Matched-budget comparison follows
+acquisition; the optional advisor and stronger teachers remain deferred.
+
+The completed 500-update Feedback pilot has valid negative native and transfer
+results. Its source, checkpoint and reports are frozen under
+`/tmp/microduck-adaptive-formal-20260921-s17/`. The runner/exposure refactor is
+verified, but no usable policy or effective acquisition-stage preservation is
+established. Next proof: quantify the stationary-versus-gait reward tradeoff and
+separate tracking bias, gait oscillation and push-induced displacement before
+selecting a bounded acquisition experiment. Any metric-semantic repair needs a
+written calibration argument and must keep the failed pilot a failed policy.
 
 ## Goal
 
@@ -37,11 +68,19 @@ curriculum state.
 - Keep PPO architecture, optimizer, rollout length, and normalization fixed
   while testing curriculum behavior.
 - Do not introduce action filtering, runtime adaptation, or M4/M6 interpolation.
-- Adaptive changes are limited to an explicit allowlist of environment/sampling
-  axes until a separate reward-adaptation experiment is approved.
+- Adaptive changes use an explicit, checkpointed allowlist. The user's sustained
+  execution authorization also covers necessary reward shaping, regularization
+  pacing and evaluation-semantic repairs in the adaptive recipe, after an
+  evidence-backed experiment contract. Canonical rewards remain unchanged.
 - Every stage change is bounded, logged, reproducible, and reversible.
 - Final claims require matched total environment steps, multiple seeds, and a
   fixed held-out battery. Training reward alone is not an acceptance signal.
+- A held-out seed is evidence only when it changes a consumed reset, DR, or
+  perturbation stream. Distinct labels on deterministic traces do not count as
+  independent evaluation.
+- A deployment-quality claim must first pass a native MJLab/BAM evaluator. The
+  CPU MuJoCo/ONNX rehearsal is a separate transfer check and cannot diagnose
+  native training quality by itself.
 
 ## Target architecture
 
@@ -52,6 +91,8 @@ AdaptiveMicroduckOnPolicyRunner
   ├─ FrozenCapabilityEvaluator interface
   ├─ CapabilityGate decision
   ├─ live EventManager stage application
+  ├─ bounded command-bucket exposure feedback via live CommandManager
+  ├─ explicit completed-update/result manifest for launch and resume
   └─ rollback to last-known-good checkpoint
 
 FrozenCapabilityEvaluator
@@ -143,7 +184,63 @@ continuous metric.
 The same checkpoint plus the same evaluator report must reproduce the same
 decision and transition trace without relying on shell filename conventions.
 
+## Phase 2A: Repair the adaptive experiment and establish a usable-policy signal
+
+The r4 campaign is retained as historical evidence, but it does not satisfy the
+experiment contract: the adaptive factory removed every canonical curriculum
+term, the battery seed did not affect the executed trace, and the final battery
+used XML position actuators while training used BAM M6. This phase resolves
+those confounders before spending another matched-budget campaign.
+
+### Work
+
+- Change the adaptive factory so it removes only the canonical schedules for
+  the axes owned by the adaptive controller (`com_range` and/or
+  `head_com_range`). Preserve standing, action-rate, command, pose, and other
+  canonical curricula exactly. Do not edit the canonical velocity factory.
+- Add a native evaluator that runs the checkpoint in the MJLab environment with
+  the same BAM M6 actuator, observation normalizer, command ABI, reset path,
+  and six bucket definitions used for training. Keep the existing CPU
+  MuJoCo/ONNX battery as a separately labelled deployment rehearsal.
+- Make evaluation seeds affect an actual consumed source of variation. Use a
+  fixed, recorded reset/DR/perturbation manifest so gate and held-out sets are
+  disjoint and reproducible. Add a test that two seed sets produce different
+  traces while rerunning one seed reproduces the same trace.
+- Calibrate the curriculum thresholds, EMA, dwell, and preservation tolerance
+  from native reports of canonical checkpoints. Keep the final product gate
+  unchanged unless a written calibration report shows that its units or
+  semantics are wrong; do not tune thresholds to rescue a failed run.
+- Separate two decisions in every report: (a) whether a policy is usable under
+  the deployment gate, and (b) whether adaptive matches or beats fixed. A
+  usable adaptive policy remains valuable even when it does not win the
+  research comparison.
+
+### Tests and evidence
+
+- Config test proving each adaptive mode preserves all non-owned canonical
+  curriculum terms and owns only its declared axes.
+- Native-vs-export observation/action parity test for one checkpoint, including
+  the baked normalizer and 61D/14D ABI.
+- Seed-consumption test proving gate and held-out seeds alter a consumed trace;
+  same-seed replay remains byte-for-byte deterministic.
+- One-checkpoint six-bucket report from native MJLab/BAM and the CPU rehearsal,
+  with per-bucket raw metrics and an explicit transfer comparison.
+- Single-seed checkpoint ladder at 500/1000/2000/4000 iterations for fixed and
+  all-static, recording native capability, CPU rehearsal capability, reward
+  terms, episode length, and videos/traces where available.
+
+### Gate
+
+Do not submit another 15-job campaign until the native evaluator has a valid
+seed-consumption proof and the checkpoint ladder identifies whether the failure
+is native learning, export/observation parity, or CPU actuator transfer. A
+policy is **usable** only when its native six-bucket report passes the product
+gate; adaptive superiority is a separate later claim.
+
 ## Phase 2: Establish the deterministic adaptive baseline
+
+Phase 2 starts only after Phase 2A passes. The r4 matrix and artifacts remain
+historical and must not be reused as proof of a valid held-out comparison.
 
 ### Work
 
@@ -165,13 +262,17 @@ decision and transition trace without relying on shell filename conventions.
   preservation, and rollback count.
 - Finish adaptive acquisition by freezing canonical final ranges and run a
   canonical-distribution fine-tuning segment.
+- Evaluate the final adaptive checkpoint with both the native product gate and
+  the CPU deployment rehearsal, and report the two verdicts separately.
 
 ### Gate
 
 Adaptive is accepted only if it reaches the canonical final distribution, has
 reproducible transitions, and matches or improves the canonical held-out
 battery without nominal or zero-command regression. Otherwise retain the fixed
-schedule and record adaptive as negative evidence.
+schedule and record adaptive as negative or inconclusive evidence. A policy can
+still be marked usable when it passes the product gate even if this comparison
+gate is not won.
 
 ## Phase 3: Add the constrained Codex advisor
 
@@ -256,7 +357,12 @@ before any matched-budget compute is requested.
    defines the continuous capability report and end-to-end axis isolation.
 2. [`01-runner-control-PLAN.md`](mjlab-adaptive-curriculum-v2/01-runner-control-PLAN.md)
    makes the adaptive runner the state authority after Phase 0 passes.
+3. [`02a-diagnostic-repair-PLAN.md`](mjlab-adaptive-curriculum-v2/02a-diagnostic-repair-PLAN.md)
+   repairs curriculum ownership, proves seed consumption, and establishes the
+   native MJLab/BAM usability signal before new campaign compute.
 
-Phase 2 (matched-budget multi-seed experiments) is the next active campaign
-after the Phase 1 replay gate. Phase 3 (constrained Codex advisor) and Phase 4
-(stronger active teachers) remain parked until matched-budget evidence exists.
+Phase 2A (experiment repair and native usability diagnosis) is the next active
+work item. Phase 2 (matched-budget multi-seed experiments) follows only after
+its gate passes. Phase 3 (constrained Codex advisor) and Phase 4 (stronger
+active teachers) remain parked until the deterministic baseline produces
+informative, native-evaluated evidence.

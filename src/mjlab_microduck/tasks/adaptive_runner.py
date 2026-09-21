@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from copy import deepcopy
 import os
 import random
 import hashlib
@@ -18,6 +19,7 @@ from pathlib import Path
 from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
     CapabilityGate,
+    CommandExposure,
     apply_stage_to_env,
 )
 from mjlab_microduck.evaluation.capability import resolve_enabled_axes
@@ -92,16 +94,17 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.last_known_good_checkpoint: str | None = None
         self.last_gate_outcome: str | None = None
         self.completed_iterations = 0
+        self.resume_checkpoint: str | None = None
+        self.command_exposure = CommandExposure() if getattr(env.cfg, "adaptive_command_exposure", False) else None
+        if self.command_exposure is not None:
+            self.command_exposure.apply(_manager_env(env))
         evaluator_command = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND") or os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR")
         if evaluator_command and self.evaluation_interval > 0:
             self.evaluator = CommandCapabilityEvaluator(
                 evaluator_command,
                 int(getattr(env.cfg, "adaptive_evaluation_timeout_s", 900)),
             )
-        if not axis_configs:
-            self.capability_gate = None
-            return
-        if self.evaluation_interval > 0 and self.evaluator is None:
+        if axis_configs and self.evaluation_interval > 0 and self.evaluator is None:
             raise ValueError("adaptive evaluation enabled without an evaluator command")
         self.capability_gate = CapabilityGate(
             axis_configs,
@@ -109,7 +112,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             axis_mode=mode,
             ema_alpha=0.25,
             preservation_tolerance=0.05,
-        )
+        ) if axis_configs else None
+        # The launcher passes an exact path, without MJLab's regex run lookup.
+        # Evaluators/exporters have no training log_dir and never resume here.
+        resume = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
+        if resume and log_dir is not None:
+            self.load(resume, map_location=device)
 
     def set_evaluator(self, evaluator) -> None:
         """Inject a synchronous evaluator (used by production adapters/tests)."""
@@ -225,13 +233,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
 
 
     def learn(self, num_learning_iterations: int, init_at_random_ep_len: bool = False) -> None:
-        """Run the normal runner in explicit iteration windows when enabled.
-
-        Preserve stock rollout/update/logging order and evaluate after complete
-        PPO updates. A zero interval uses the inherited runner unchanged.
-        """
-        if self.evaluation_interval <= 0 or self.capability_gate is None:
-            return super().learn(num_learning_iterations, init_at_random_ep_len)
+        """Count completed PPO updates identically with and without evaluation."""
+        if num_learning_iterations < 1:
+            raise ValueError("num_learning_iterations must be positive")
+        if getattr(self, "_needs_reset", False):
+            self.env.reset()
+            self._needs_reset = False
         # The installed RSL-RL runner closes its writer at the end of learn(),
         # so windows are implemented here rather than by repeatedly calling
         # super().learn(1).
@@ -240,7 +247,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 self.env.episode_length_buf, high=int(self.env.max_episode_length)
             )
         if self.is_distributed:
-            raise ValueError("adaptive synchronous evaluation currently requires a single training process")
+            if self.evaluation_interval > 0 and self.capability_gate is not None:
+                raise ValueError("adaptive synchronous evaluation currently requires a single training process")
+            self.alg.broadcast_parameters()
         obs = self.env.get_observations().to(self.device)
         self.alg.train_mode()
         self.logger.init_logging_writer()
@@ -284,22 +293,46 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             )
             if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
-            if self.completed_iterations % self.evaluation_interval == 0:
+            if self.capability_gate is not None and self.evaluation_interval > 0 and self.completed_iterations % self.evaluation_interval == 0:
                 checkpoint = os.path.join(self.logger.log_dir, f"model_{it}.eval.pt")
                 self.save(checkpoint)
                 self._evaluate_window(checkpoint)
-                if self.last_gate_outcome == "preservation_failure":
+                if getattr(self, "_needs_reset", False):
                     # Restoring PPO does not rewind collected experience or the
                     # campaign budget. Start fresh episodes under restored state.
                     self.current_learning_iteration = it
                     self.completed_iterations = it + 1
                     obs, _ = self.env.reset()
+                    self._needs_reset = False
                     obs = obs.to(self.device)
                     self.alg.train_mode()
                     self.save(str(Path(checkpoint).with_suffix(".adaptive.pt")))
         if self.logger.writer is not None:
-            self.save(os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.pt"))
+            checkpoint = Path(self.logger.log_dir) / f"model_{self.current_learning_iteration}.pt"
+            self.save(str(checkpoint))
+            self._write_training_result(checkpoint, start_it)
             self.logger.stop_logging_writer()
+
+    def _write_training_result(self, checkpoint: Path, start_iteration: int) -> None:
+        """Publish completion only after the final checkpoint is durably written."""
+        checkpoint = checkpoint.resolve()
+        result = {
+            "version": 1, "status": "completed", "task_id": self.env.cfg.task_id,
+            "checkpoint": str(checkpoint),
+            "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
+            "resume_checkpoint": getattr(self, "resume_checkpoint", None),
+            "start_completed_iterations": start_iteration,
+            "completed_iterations": self.completed_iterations,
+            "segment_iterations": self.completed_iterations - start_iteration,
+            "env_step": self.completed_iterations * self.cfg["num_steps_per_env"],
+            "num_envs": self.env.num_envs,
+            "adaptive_state": self.adaptive_checkpoint_info()["adaptive_curriculum"],
+        }
+        path = Path(os.environ.get("MICRODUCK_ADAPTIVE_RESULT_FILE", checkpoint.parent / "training-result.json"))
+        path.parent.mkdir(parents=True, exist_ok=True)
+        temporary = path.with_suffix(".tmp")
+        temporary.write_text(json.dumps(result, indent=2) + "\n", encoding="utf-8")
+        temporary.replace(path)
 
     def record_capability_metrics(
         self,
@@ -312,101 +345,117 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Consume one frozen battery window and apply at most one transition."""
         if self.capability_gate is None:
             return None
+        if step is None:
+            step = getattr(self, "completed_iterations", self.current_learning_iteration + 1) * self.cfg["num_steps_per_env"]
         decision = self.capability_gate.decide(
-            self.current_learning_iteration if step is None else step,
+            step,
             metrics,
             checkpoint=checkpoint,
             seed=seed,
         )
         transition = decision.transition
         self.last_gate_outcome = decision.outcome.value
-        event = {"kind": decision.outcome.value, "step": self.current_learning_iteration if step is None else step, "checkpoint": checkpoint, "reason": decision.reason}
+        event = {"kind": decision.outcome.value, "step": step, "checkpoint": checkpoint, "reason": decision.reason}
         if getattr(self, "last_evaluation_provenance", None) is not None:
             event["provenance"] = dict(self.last_evaluation_provenance)
         self.evaluation_events.append(event)
         if decision.outcome.value == "preservation_failure" and self.last_known_good_checkpoint:
             self.rollback(self.last_known_good_checkpoint)
             return None
+        exposure = getattr(self, "command_exposure", None)
+        if exposure is not None:
+            exposure.update(metrics)
+            exposure.apply(_manager_env(self.env))
+            event["command_exposure"] = exposure.state_dict()
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
                 transition.axis,
                 self.capability_gate.stage_value(transition.axis),
             )
-            if checkpoint is not None:
-                # Keep the evaluated checkpoint immutable and persist the
-                # applied stage in a separate explicit rollback checkpoint.
-                applied_checkpoint = Path(checkpoint).with_name(
-                    f"{Path(checkpoint).stem}.adaptive.pt"
-                )
-                self.save(str(applied_checkpoint))
         return transition
 
     def save(self, path: str, infos: dict | None = None) -> None:
         payload = {} if infos is None else dict(infos)
-        payload["adaptive_curriculum"] = (
-            None if self.capability_gate is None else self.capability_gate.state_dict()
-        )
-        if payload["adaptive_curriculum"] is not None:
-            payload["adaptive_curriculum"] = dict(payload["adaptive_curriculum"])
-            payload["adaptive_curriculum"].update({
-                "version": 1,
-                "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
-                "last_known_good_checkpoint": self.last_known_good_checkpoint,
-                "evaluation_events": list(self.evaluation_events),
-                "evaluation_provenance": getattr(self, "last_evaluation_provenance", None),
-                "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
-                "evaluation_iteration": self.current_learning_iteration,
-                "completed_iterations": getattr(self, "completed_iterations", self.current_learning_iteration + 1),
-                "evaluation_seed_set_id": getattr(self, "evaluation_seed_set_id", None),
-                "evaluation_seed": getattr(self, "evaluation_seed", None),
-                "env_step": getattr(self, "completed_iterations", self.current_learning_iteration + 1) * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
-            })
-        payload["adaptive_rng_state"] = self._rng_state()
+        payload.update(self.adaptive_checkpoint_info())
         super().save(path, payload)
 
     def adaptive_checkpoint_info(self) -> dict[str, object]:
-        """Return the co-located adaptive metadata for audit and checkpoint tests."""
-        state = None if self.capability_gate is None else dict(self.capability_gate.state_dict())
-        if state is not None:
-            state.update({
-                "version": 1,
-                "stage_values": {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order},
-                "last_known_good_checkpoint": self.last_known_good_checkpoint,
-                "evaluation_events": list(self.evaluation_events),
-                "evaluation_provenance": getattr(self, "last_evaluation_provenance", None),
-                "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
-                "evaluation_iteration": self.current_learning_iteration,
-                "completed_iterations": getattr(self, "completed_iterations", self.current_learning_iteration + 1),
-                "evaluation_seed_set_id": getattr(self, "evaluation_seed_set_id", None),
-                "evaluation_seed": getattr(self, "evaluation_seed", None),
-                "env_step": getattr(self, "completed_iterations", self.current_learning_iteration + 1) * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
-            })
+        """One metadata contract for adaptive and static runs, save and audit."""
+        gate = self.capability_gate
+        completed = getattr(self, "completed_iterations", self.current_learning_iteration + 1)
+        exposure = getattr(self, "command_exposure", None)
+        state = gate.state_dict() if gate is not None else {"axis_mode": "all_static", "enabled_axes": []}
+        state.update({
+            "version": 1,
+            "task_id": getattr(self.env.cfg, "task_id", None),
+            "num_envs": getattr(self.env, "num_envs", None),
+            "stage_values": {} if gate is None else {name: gate.stage_value(name) for name in gate.axis_order},
+            "command_exposure": None if exposure is None else exposure.state_dict(),
+            "last_known_good_checkpoint": self.last_known_good_checkpoint,
+            "evaluation_events": list(self.evaluation_events),
+            "evaluation_provenance": getattr(self, "last_evaluation_provenance", None),
+            "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
+            "evaluation_iteration": self.current_learning_iteration,
+            "completed_iterations": completed,
+            "evaluation_seed_set_id": getattr(self, "evaluation_seed_set_id", None),
+            "evaluation_seed": getattr(self, "evaluation_seed", None),
+            "env_step": completed * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
+        })
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
 
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
         infos = super().load(path, load_cfg, strict, map_location)
-        if infos and infos.get("adaptive_curriculum") and self.capability_gate is not None:
-            adaptive_state = infos["adaptive_curriculum"]
-            self.completed_iterations = int(adaptive_state.get("completed_iterations", self.current_learning_iteration + 1))
-            if adaptive_state.get("version", 1) != 1:
+        # Match RSL-RL's iteration flag: actor-only loading is inference or
+        # fine-tuning, never a restoration of trainer RNG/curriculum/progress.
+        if load_cfg is not None and not load_cfg.get("iteration", False):
+            return infos
+        state = (infos or {}).get("adaptive_curriculum")
+        gate = deepcopy(self.capability_gate)
+        exposure = deepcopy(getattr(self, "command_exposure", None))
+        completed = self.current_learning_iteration + 1
+        if state:
+            if state.get("version", 1) != 1:
                 raise ValueError("unsupported adaptive checkpoint version")
-            self.capability_gate.load_state_dict(adaptive_state)
-            self.last_known_good_checkpoint = adaptive_state.get("last_known_good_checkpoint")
-            self.evaluation_events = list(adaptive_state.get("evaluation_events", []))
-            self.last_evaluation_provenance = adaptive_state.get("evaluation_provenance")
-            stored_schema = adaptive_state.get("evaluation_schema_version", 2)
-            expected_schema = int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2))
-            if int(stored_schema) != expected_schema:
+            if state.get("task_id") and state["task_id"] != getattr(self.env.cfg, "task_id", None):
+                raise ValueError("adaptive checkpoint task mismatch")
+            if int(state.get("evaluation_schema_version", 2)) != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
                 raise ValueError("adaptive checkpoint evaluator schema mismatch")
-            for axis_name, state in self.capability_gate.states.items():
-                apply_stage_to_env(
-                    _manager_env(self.env),
-                    axis_name,
-                    self.capability_gate.stage_value(axis_name),
-                )
+            if gate is not None:
+                gate.load_state_dict(state)
+            elif state.get("enabled_axes"):
+                raise ValueError("adaptive state axis mode/allowlist mismatch")
+            if bool(state.get("command_exposure")) != (exposure is not None):
+                raise ValueError("adaptive checkpoint command exposure mismatch")
+            if exposure is not None:
+                exposure.load_state_dict(state["command_exposure"])
+            completed = int(state.get("completed_iterations", completed))
+            if completed < 0 or state.get("env_step", completed * self.cfg["num_steps_per_env"]) != completed * self.cfg["num_steps_per_env"]:
+                raise ValueError("adaptive checkpoint step budget mismatch")
+            self.last_known_good_checkpoint = state.get("last_known_good_checkpoint")
+            self.evaluation_events = list(state.get("evaluation_events", []))
+            self.last_evaluation_provenance = state.get("evaluation_provenance")
+            # Continue the same evaluation stream after a training restart.
+            if state.get("evaluation_seed") is not None:
+                self.evaluation_seed = int(state["evaluation_seed"])
+            if state.get("evaluation_seed_set_id") is not None:
+                self.evaluation_seed_set_id = str(state["evaluation_seed_set_id"])
+        elif gate is not None or exposure is not None:
+            raise ValueError("resume requires adaptive state; use actor-only load for a warm start")
+        self.capability_gate = gate
+        self.command_exposure = exposure
+        self.completed_iterations = completed
+        manager_env = _manager_env(self.env)
+        manager_env.common_step_counter = completed * self.cfg["num_steps_per_env"]
+        if gate is not None:
+            for name in gate.axis_order:
+                apply_stage_to_env(manager_env, name, gate.stage_value(name))
+        if exposure is not None:
+            exposure.apply(manager_env)
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
+        self.resume_checkpoint = str(Path(path).resolve())
+        self._needs_reset = True
         return infos
 
     def rollback(self, checkpoint_path: str):
@@ -420,11 +469,16 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         history = list(self.evaluation_events)
         provenance = getattr(self, "last_evaluation_provenance", None)
         consumed_iterations = getattr(self, "completed_iterations", None)
+        current_iteration = self.current_learning_iteration
+        resume_checkpoint = getattr(self, "resume_checkpoint", None)
         infos = self.load(checkpoint_path)
+        self.resume_checkpoint = resume_checkpoint
         self.evaluation_events = history
         self.last_evaluation_provenance = provenance
         if consumed_iterations is not None:
             self.completed_iterations = consumed_iterations
+            self.current_learning_iteration = current_iteration
+            _manager_env(self.env).common_step_counter = consumed_iterations * self.cfg["num_steps_per_env"]
         # Loading a checkpoint may contain the predecessor's pointer. The
         # explicit rollback target remains the known-good state after restore.
         self.last_known_good_checkpoint = checkpoint_path

@@ -7,9 +7,7 @@ an evaluator or training adapter owns feeding it frozen battery metrics.
 
 from copy import deepcopy
 from dataclasses import dataclass, fields
-import json
 import os
-from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import CurriculumTermCfg
@@ -37,12 +35,20 @@ ACQUISITION_TRACKING_STD_STAGES = (
 )
 
 
+DIAGNOSTIC_NAMES = {
+    "standing": "Standing", "action_rate": "ActionRate", "lateral": "Lateral",
+    "tracking": "Tracking", "acquisition": "Acquisition",
+    "acquisition_lateral": "AcquisitionLateral", "push": "Push",
+}
+
+
 @dataclass(kw_only=True)
 class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     """Persist adaptive launch settings in MJLab's dataclass configuration."""
 
     task_id: str = "Mjlab-Velocity-Flat-Adaptive-MicroDuck"
     adaptive_axis_mode: str = "composed"
+    adaptive_command_exposure: bool = False
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
     adaptive_evaluator_schema_version: int = 2
@@ -57,6 +63,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     rough: bool = False,
     axis_mode: str = "composed",
     diagnostic_mode: str | None = None,
+    command_exposure: bool = False,
 ) -> ManagerBasedRlEnvCfg:
     """Return the static initial slice used by adaptive curriculum experiments."""
 
@@ -67,7 +74,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     # owns that axis.  The controller mutates the live EventManager ranges for
     # the selected DR axes; all standing, smoothing, command, pose, terrain,
     # and reward schedules remain canonical and continue to run normally.
-    enabled_axes = resolve_enabled_axes(axis_mode)
+    resolve_enabled_axes(axis_mode)
     owned_curriculum = {
         "com": {"com_range"},
         "head_com": {"head_com_range"},
@@ -98,7 +105,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "acquisition", "acquisition_lateral", "push"}:
+        if diagnostic_mode not in DIAGNOSTIC_NAMES:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
@@ -109,17 +116,11 @@ def make_microduck_adaptive_velocity_env_cfg(
             # adding an explicit pure-lateral command bucket. This is a
             # bounded recipe diagnostic and leaves the product task unchanged.
             cfg.commands["twist"].rel_lateral_envs = 0.20
-            cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Lateral-MicroDuck"
         else:
             if diagnostic_mode == "tracking":
                 cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
-                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
-            elif diagnostic_mode == "acquisition":
-                # Keep only the tracking-signal curriculum in this diagnostic.
-                # Canonical action-rate, standing, and head-pose schedules are
-                # deliberately frozen at their initial values so the experiment
-                # tests acquisition rather than several simultaneous taxes.
-                cfg.commands["twist"].rel_lateral_envs = 0.20
+            elif diagnostic_mode in ("acquisition", "acquisition_lateral"):
+                cfg.commands["twist"].rel_lateral_envs = 0.20 if diagnostic_mode == "acquisition" else 0.50
                 cfg.curriculum = {
                     "tracking_std": CurriculumTermCfg(
                         func=microduck_mdp.velocity_tracking_std_curriculum,
@@ -129,23 +130,6 @@ def make_microduck_adaptive_velocity_env_cfg(
                         },
                     )
                 }
-                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
-            elif diagnostic_mode == "acquisition_lateral":
-                # Same acquisition contract, but allocate half of the
-                # ordinary-motion pool to explicit lateral commands. Standing,
-                # turn-in-place, and forward anchors remain intact in the
-                # command sampler; this isolates exposure from reward changes.
-                cfg.commands["twist"].rel_lateral_envs = 0.50
-                cfg.curriculum = {
-                    "tracking_std": CurriculumTermCfg(
-                        func=microduck_mdp.velocity_tracking_std_curriculum,
-                        params={
-                            "reward_name": "track_linear_velocity",
-                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
-                        },
-                    )
-                }
-                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
             else:
                 cfg.curriculum["push_strength"] = CurriculumTermCfg(
                     func=microduck_mdp.push_curriculum,
@@ -159,22 +143,28 @@ def make_microduck_adaptive_velocity_env_cfg(
                         ],
                     },
                 )
-                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck"
+        cfg.task_id = f"Mjlab-Velocity-Flat-Adaptive-{DIAGNOSTIC_NAMES[diagnostic_mode]}-MicroDuck"
         cfg.adaptive_axis_mode = "all_static"
 
-    stage_file = os.environ.get("MICRODUCK_ADAPTIVE_STAGE_FILE")
-    if stage_file:
-        payload = json.loads(Path(stage_file).read_text(encoding="utf-8"))
-        stages = payload.get("stages", payload)
-        if not isinstance(stages, dict):
-            raise ValueError("adaptive stage file must contain a stages object")
-        for axis_name, stage_value in stages.items():
-            if axis_name not in enabled_axes:
-                raise ValueError(f"adaptive stage file axis {axis_name!r} is disabled by mode {axis_mode!r}")
-            event_name = {"com_range": "randomize_com", "head_com_range": "randomize_head_com"}.get(axis_name)
-            if event_name is None or event_name not in cfg.events:
-                raise ValueError(f"adaptive stage file contains unknown axis: {axis_name}")
-            cfg.events[event_name].params["ranges"] = (-float(stage_value), float(stage_value))
+    if command_exposure:
+        if diagnostic_mode is not None or axis_mode != "composed":
+            raise ValueError("feedback exposure requires the composed recipe without diagnostics")
+        cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck"
+        cfg.adaptive_command_exposure = True
+        # This controller owns the full twist mixture. Keep a uniform nominal
+        # pool and remove the competing standing-fraction schedule.
+        cfg.curriculum.pop("standing_envs", None)
+        command = microduck_mdp.AdaptiveVelocityCommandCfg(**vars(cfg.commands["twist"]))
+        command.rel_standing_envs = 0.0
+        command.rel_forward_envs = 0.0
+        command.rel_turn_in_place_envs = 0.0
+        command.rel_lateral_envs = 0.0
+        command.rel_heading_envs = 0.0
+        command.rel_world_envs = 0.0
+        command.init_velocity_prob = 0.0
+        cfg.commands["twist"] = command
+    if play:
+        cfg.adaptive_evaluation_interval = 0
     return cfg
 
 
@@ -200,3 +190,22 @@ AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_di
 AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
 AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
+
+AdaptiveMicroduckFeedbackRlCfg = _adaptive_rl_cfg("velocity_adaptive_feedback")
+
+# Historical recipes remain replayable, but all registrations share this table.
+# Values are (axis mode, diagnostic recipe, feedback sampler, PPO log config).
+ADAPTIVE_RECIPES = (
+    ("all_static", None, False, AdaptiveMicroduckStaticRlCfg),
+    ("com", None, False, AdaptiveMicroduckComRlCfg),
+    ("head_com", None, False, AdaptiveMicroduckHeadComRlCfg),
+    ("composed", None, False, AdaptiveMicroduckRlCfg),
+    ("composed", "standing", False, AdaptiveMicroduckStandingRlCfg),
+    ("composed", "action_rate", False, AdaptiveMicroduckActionRateRlCfg),
+    ("composed", "lateral", False, AdaptiveMicroduckLateralRlCfg),
+    ("all_static", "tracking", False, AdaptiveMicroduckTrackingRlCfg),
+    ("all_static", "acquisition", False, AdaptiveMicroduckAcquisitionRlCfg),
+    ("all_static", "acquisition_lateral", False, AdaptiveMicroduckAcquisitionLateralRlCfg),
+    ("all_static", "push", False, AdaptiveMicroduckPushRlCfg),
+    ("composed", None, True, AdaptiveMicroduckFeedbackRlCfg),
+)

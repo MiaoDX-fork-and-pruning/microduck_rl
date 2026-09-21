@@ -30,6 +30,11 @@ files_modified:
   - tests/test_adaptive_axis_isolation.py
 ---
 
+Historical plan: the Phase 0 shell window loop and JSON stage controller below
+were retired on 2026-09-21. Their submitted job specs are preserved in
+`cloudml/archive/adaptive-phase0/`. Current launch/resume uses
+`scripts/run_adaptive_campaign_job.py` with runner-owned checkpoint state.
+
 <objective>
 Replace the saturated binary adaptive battery with a reproducible, continuous
 capability report and make adaptive axis selection explicit end to end.

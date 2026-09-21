@@ -118,6 +118,8 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
         cfg.seed = seed
         cfg.scene.num_envs = 1
         cfg.auto_reset = False
+        if hasattr(cfg, "adaptive_evaluation_interval"):
+            cfg.adaptive_evaluation_interval = 0
         # Evaluation uses an explicit frozen DR distribution. The training
         # curriculum is otherwise evaluated at ``reference_step`` during reset
         # and can silently overwrite the ranges before the first sample.

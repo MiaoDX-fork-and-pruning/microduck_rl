@@ -8,10 +8,67 @@ then apply the returned one-stage transition to live manager term configs.
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Mapping
 from enum import StrEnum
 
+from mjlab_microduck.evaluation.capability import BUCKETS
 
+
+class CommandExposure:
+    """Bounded feedback allocation, including a fixed nominal command pool.
+
+    Each capability bucket owns at least 10% of resamples; 20% retain the
+    nominal continuous distribution. Only the remaining 20% follows deficits.
+    A window moves one quarter of the way to its target allocation, limiting
+    a single bucket's change to at most five percentage points per window.
+    """
+
+    version = 1
+    nominal_probability = 0.20
+    bucket_floor = 0.10
+    update_rate = 0.25
+
+    def __init__(self) -> None:
+        self.probabilities = {name: 0.80 / len(BUCKETS) for name in BUCKETS}
+        self.windows = 0
+
+    def update(self, metrics: Mapping[str, float]) -> None:
+        values = {name: float(metrics[name]) for name in BUCKETS}
+        if any(not math.isfinite(value) or not 0 <= value <= 1 for value in values.values()):
+            raise ValueError("exposure scores must be finite and in [0, 1]")
+        deficits = {name: 1.0 - value for name, value in values.items()}
+        total = sum(deficits.values())
+        for name in BUCKETS:
+            share = deficits[name] / total if total > 0 else 1.0 / len(BUCKETS)
+            target = self.bucket_floor + 0.20 * share
+            self.probabilities[name] += self.update_rate * (target - self.probabilities[name])
+        self.windows += 1
+
+    def state_dict(self) -> dict[str, object]:
+        return {"version": self.version, "probabilities": self.probabilities.copy(), "windows": self.windows}
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") != self.version:
+            raise ValueError("unsupported command exposure version")
+        probabilities = payload.get("probabilities", {})
+        if not isinstance(probabilities, Mapping) or set(probabilities) != set(BUCKETS):
+            raise ValueError("command exposure bucket mismatch")
+        values = {name: float(probabilities[name]) for name in BUCKETS}
+        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= 0.30 for value in values.values())
+                or not math.isclose(sum(values.values()), 0.80, abs_tol=1e-9)):
+            raise ValueError("invalid command exposure probabilities")
+        windows = payload.get("windows")
+        if not isinstance(windows, int) or windows < 0:
+            raise ValueError("invalid command exposure window count")
+        self.probabilities = values
+        self.windows = windows
+
+    def apply(self, env: object) -> None:
+        # CommandManager owns a deepcopy. The live term consumes these values
+        # on its next scheduled resample; current episodes are not interrupted.
+        term = env.command_manager.get_term("twist")
+        term.cfg.bucket_probabilities = tuple(self.probabilities[name] for name in BUCKETS)
 
 @dataclass(frozen=True)
 class AxisConfig:
@@ -150,6 +207,14 @@ class CapabilityGate:
             raise ValueError("capability metrics must be finite")
         score = min(values.values())
         previous_best = self.best_metrics.copy()
+        mastered_threshold = max(axis.upper_threshold for axis in self.axes.values())
+        if any(
+            previous_best.get(name, 0) >= mastered_threshold
+            and value < previous_best[name] * (1.0 - self.preservation_tolerance)
+            for name, value in values.items()
+        ):
+            # Regressions below the pass threshold must not evade preservation.
+            return GateDecision(GateOutcome.PRESERVATION_FAILURE, reason="mastered bucket regressed")
         for name, value in values.items():
             self.best_metrics[name] = max(self.best_metrics.get(name, value), value)
 

@@ -4625,6 +4625,54 @@ class VelocityCommandCommandOnlyCfg(UniformVelocityCommandCfg):
         return VelocityCommandCommandOnly(self, env)
 
 
+class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
+    """Disjoint capability buckets plus a nominal continuous command pool.
+
+    The runner owns allocation updates. Sampling only consumes the live cfg,
+    so checkpoint restoration does not require another controller in the MDP.
+    Bucket order matches evaluation.capability.BUCKETS.
+    """
+
+    def _resample_command(self, env_ids: torch.Tensor) -> None:
+        super()._resample_command(env_ids)
+        if len(env_ids) == 0:
+            return
+        probabilities = self.cfg.bucket_probabilities
+        weights = torch.tensor((*probabilities, 1.0 - sum(probabilities)), device=self.device)
+        buckets = torch.multinomial(weights, len(env_ids), replacement=True)
+        for bucket in range(6):
+            ids = env_ids[buckets == bucket]
+            if len(ids) == 0:
+                continue
+            self.vel_command_b[ids] = 0.0
+            self.is_standing_env[ids] = bucket == 0
+            self.is_forward_env[ids] = bucket == 1
+            self.is_heading_env[ids] = False
+            self.is_world_env[ids] = False
+            if bucket in (1, 4, 5):
+                self.vel_command_b[ids, 0] = torch.empty(len(ids), device=self.device).uniform_(
+                    0.1 * self.cfg.ranges.lin_vel_x[1], self.cfg.ranges.lin_vel_x[1]
+                )
+            if bucket == 2:
+                max_y = max(abs(v) for v in self.cfg.ranges.lin_vel_y)
+                sign = torch.where(torch.rand(len(ids), device=self.device) < 0.5, -1.0, 1.0)
+                self.vel_command_b[ids, 1] = sign * torch.empty(len(ids), device=self.device).uniform_(0.2 * max_y, max_y)
+            if bucket in (3, 4, 5):
+                max_yaw = max(abs(v) for v in self.cfg.ranges.ang_vel_z)
+                sign = (torch.where(torch.rand(len(ids), device=self.device) < 0.5, -1.0, 1.0)
+                        if bucket == 3 else (1.0 if bucket == 4 else -1.0))
+                self.vel_command_b[ids, 2] = sign * torch.empty(len(ids), device=self.device).uniform_(0.4 * max_yaw, max_yaw)
+            self.vel_command_w[ids] = self.vel_command_b[ids]
+
+
+@_dataclass(kw_only=True)
+class AdaptiveVelocityCommandCfg(VelocityCommandCommandOnlyCfg):
+    bucket_probabilities: tuple[float, ...] = (0.8 / 6,) * 6
+
+    def build(self, env: ManagerBasedRlEnv) -> AdaptiveVelocityCommand:
+        return AdaptiveVelocityCommand(self, env)
+
+
 class RelativeHeadingVelocityCommand(VelocityCommandCommandOnly):
     """Velocity command where cmd[2] is the heading error in the robot's body frame.
 

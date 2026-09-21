@@ -138,3 +138,33 @@ def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
     assert push.events["push_robot"].params["velocity_range"] == {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}
     assert push.rewards == base.rewards
     assert push.commands == base.commands
+
+
+def test_feedback_sampler_has_single_owner_and_preserves_policy_contract():
+    from mjlab.tasks.registry import load_env_cfg
+    from mjlab_microduck.tasks.mdp import AdaptiveVelocityCommandCfg
+
+    base = make_microduck_adaptive_velocity_env_cfg()
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck")
+    assert cfg.adaptive_command_exposure
+    assert cfg.adaptive_axis_mode == "composed"
+    assert isinstance(cfg.commands["twist"], AdaptiveVelocityCommandCfg)
+    assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"}
+    assert cfg.observations == base.observations
+    assert cfg.actions == base.actions
+    assert cfg.rewards == base.rewards
+    assert cfg.events == base.events
+    for name in ("head_pose", "body_pose"):
+        assert cfg.commands[name] == base.commands[name]
+    assert cfg.commands["twist"].ranges == base.commands["twist"].ranges
+
+
+def test_registered_task_ids_match_checkpoint_provenance():
+    from mjlab.tasks.registry import load_env_cfg
+    from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES
+
+    for axis, diagnostic, feedback, _ in ADAPTIVE_RECIPES:
+        cfg = make_microduck_adaptive_velocity_env_cfg(
+            axis_mode=axis, diagnostic_mode=diagnostic, command_exposure=feedback
+        )
+        assert load_env_cfg(cfg.task_id).task_id == cfg.task_id

@@ -146,6 +146,16 @@ def run_battery(
         "metrics": capability.metrics,
         "score": capability.payload["aggregate"]["lower_tail_score"],
         "cases": cases,
+        "seed_manifest": {
+            "version": "adaptive-battery-seed-v1",
+            "seed_set_id": f"adaptive-default-{seed}",
+            "gate_seed": seed,
+            "consumed_case_seeds": {
+                case["bucket"]: seed + offset
+                for offset, case in enumerate(command_cases("adaptive_velocity", smoke))
+            },
+            "sources": ["reset_qpos_noise", "reset_qvel_noise"],
+        },
     }
     (output / "capability.json").write_text(
         json.dumps(payload, indent=2) + "\n", encoding="utf-8"

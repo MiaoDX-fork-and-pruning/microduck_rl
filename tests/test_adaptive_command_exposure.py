@@ -1,0 +1,111 @@
+"""Feedback must change actual command exposure without losing anchor coverage."""
+from types import SimpleNamespace
+
+import pytest
+import torch
+
+from mjlab_microduck.evaluation.capability import BUCKETS
+from mjlab_microduck.tasks import mdp
+from mjlab_microduck.tasks.adaptive_curriculum import CommandExposure
+from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import make_microduck_adaptive_velocity_env_cfg
+
+
+def _command(n=30000):
+    cfg = make_microduck_adaptive_velocity_env_cfg(command_exposure=True).commands["twist"]
+    cfg.heading_command = False  # Unit sampler has no robot heading tensor.
+    term = object.__new__(mdp.AdaptiveVelocityCommand)
+    term.cfg = cfg
+    term._env = SimpleNamespace(device="cpu", num_envs=n)
+    term.vel_command_b = torch.full((n, 3), 9.0)
+    term.vel_command_w = term.vel_command_b.clone()
+    for name in ("is_standing_env", "is_world_env", "is_heading_env", "is_forward_env"):
+        setattr(term, name, torch.zeros(n, dtype=torch.bool))
+    return term
+
+
+def _masks(command):
+    x, y, yaw = command.unbind(1)
+    return {
+        "zero": (x == 0) & (y == 0) & (yaw == 0),
+        "forward": (x > 0) & (y == 0) & (yaw == 0),
+        "lateral": (x == 0) & (y != 0) & (yaw == 0),
+        "yaw": (x == 0) & (y == 0) & (yaw != 0),
+        "turn-left": (x > 0) & (y == 0) & (yaw > 0),
+        "turn-right": (x > 0) & (y == 0) & (yaw < 0),
+        "nominal": (x != 0) & (y != 0) & (yaw != 0),
+    }
+
+
+def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_floors():
+    term = _command()
+    exposure = CommandExposure()
+    env = SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda _: term))
+    ids = torch.arange(term.num_envs)
+    torch.manual_seed(17)
+    term._resample_command(ids)
+    initial = _masks(term.command)["lateral"].float().mean()
+    scores = {bucket: (0.0 if bucket == "lateral" else 1.0) for bucket in BUCKETS}
+    for _ in range(20):
+        before = exposure.probabilities.copy()
+        exposure.update(scores)
+        assert max(abs(exposure.probabilities[b] - before[b]) for b in BUCKETS) <= 0.05
+    exposure.apply(env)
+    torch.manual_seed(17)
+    term._resample_command(ids)
+    term._update_command()
+    masks = _masks(term.command)
+    assert masks["lateral"].float().mean() > initial + 0.12
+    for bucket in BUCKETS:
+        assert masks[bucket].float().mean() >= 0.09
+    assert masks["nominal"].float().mean() == pytest.approx(0.20, abs=0.015)
+    assert torch.any(term.command[masks["lateral"], 1] < 0)
+    assert torch.any(term.command[masks["lateral"], 1] > 0)
+    assert torch.any(term.command[masks["nominal"], 0] < 0)
+    assert torch.equal(term.is_standing_env, masks["zero"])
+    assert torch.equal(term.vel_command_w, term.vel_command_b)
+
+
+def test_subset_reset_does_not_change_other_commands_and_survives_update():
+    term = _command(n=256)
+    ids = torch.arange(0, term.num_envs, 2)
+    term._resample_command(ids)
+    commands = term.command.clone()
+    term._update_command()
+    assert torch.equal(term.command, commands)
+    assert torch.all(term.command[1::2] == 9)
+
+
+def test_feedback_state_and_rng_reproduce_sampling_after_resume():
+    exposure = CommandExposure()
+    exposure.update({name: (0.0 if name == "yaw" else 0.9) for name in BUCKETS})
+    restored = CommandExposure()
+    restored.load_state_dict(exposure.state_dict())
+    scores = {name: (0.0 if name == "forward" else 0.8) for name in BUCKETS}
+    exposure.update(scores)
+    restored.update(scores)
+    assert restored.state_dict() == exposure.state_dict()
+    a, b = _command(512), _command(512)
+    a.cfg.bucket_probabilities = tuple(exposure.probabilities.values())
+    b.cfg.bucket_probabilities = tuple(restored.probabilities.values())
+    torch.manual_seed(901)
+    state = torch.get_rng_state()
+    a._resample_command(torch.arange(512))
+    torch.set_rng_state(state)
+    b._resample_command(torch.arange(512))
+    assert torch.equal(a.command, b.command)
+
+
+@pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.1, 1.1])
+def test_invalid_feedback_does_not_partially_mutate_state(bad):
+    exposure = CommandExposure()
+    before = exposure.state_dict()
+    with pytest.raises(ValueError):
+        exposure.update({name: bad if name == "turn-right" else 0.9 for name in BUCKETS})
+    assert exposure.state_dict() == before
+
+
+def test_equal_deficits_keep_balanced_samples():
+    exposure = CommandExposure()
+    before = exposure.probabilities.copy()
+    exposure.update(dict.fromkeys(BUCKETS, 0.0))
+    assert exposure.probabilities == pytest.approx(before)
