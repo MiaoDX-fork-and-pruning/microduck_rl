@@ -220,6 +220,31 @@ def test_idle_speed_is_still_penalized_instantaneously():
     assert _averaged_linear(env).item() == pytest.approx(-1.0)
 
 
+def test_pure_yaw_uses_averaged_planar_error_but_exact_idle_stays_instantaneous():
+    yaw_env = _env([[0.0, 0.0, 0.8]])
+    idle_env = _env([[0.0, 0.0, 0.0]])
+    yaw_data = yaw_env.scene["robot"].data
+    idle_data = idle_env.scene["robot"].data
+    yaw_rewards, idle_rewards = [], []
+    for step in range(1, 501):
+        for env in (yaw_env, idle_env):
+            env.common_step_counter = step
+            env.episode_length_buf[:] = step
+        ripple = torch.sin(torch.tensor(2 * torch.pi * 2 * step * yaw_env.step_dt))
+        yaw_data.root_link_lin_vel_b[0, 1] = 0.06 + 0.20 * ripple
+        idle_data.root_link_lin_vel_b[0, 1] = 0.06 + 0.20 * ripple
+        if step > 100:
+            yaw_rewards.append(_averaged_linear(yaw_env))
+            idle_rewards.append(_averaged_linear(idle_env))
+    yaw_mean = torch.stack(yaw_rewards).mean().item()
+    idle_mean = torch.stack(idle_rewards).mean().item()
+    assert yaw_mean > idle_mean + 0.25
+    idle_env.common_step_counter += 1
+    idle_env.episode_length_buf[:] += 1
+    idle_data.root_link_lin_vel_b[0, 1] = 0.13
+    assert _averaged_linear(idle_env).item() == pytest.approx(-1.0)
+
+
 @pytest.mark.parametrize("tau", [-0.1, float("nan"), float("inf")])
 def test_invalid_averaging_time_constant_rejected(tau):
     with pytest.raises(ValueError, match="tau_s"):

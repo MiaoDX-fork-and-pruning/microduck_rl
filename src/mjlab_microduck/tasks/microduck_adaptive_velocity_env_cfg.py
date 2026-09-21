@@ -301,6 +301,7 @@ def make_microduck_adaptive_velocity_env_cfg(
                 "minimum_scale": FEEDBACK_LINEAR_MIN_SCALE_M_S,
                 "deadband": FEEDBACK_LINEAR_DEADBAND_M_S,
                 "tau_s": FEEDBACK_TRACKING_TAU_S,
+                "yaw_deadband": FEEDBACK_YAW_DEADBAND_RAD_S,
             },
         )
         cfg.rewards["yaw_velocity_error_l1"] = RewardTermCfg(

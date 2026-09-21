@@ -3908,6 +3908,7 @@ def command_normalized_linear_velocity_l1(
     deadband: float,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
     tau_s: float = 0.0,
+    yaw_deadband: float = 0.05,
 ) -> torch.Tensor:
     """Negative normalized command-aligned planar error; use a POSITIVE weight.
 
@@ -3917,15 +3918,18 @@ def command_normalized_linear_velocity_l1(
     only error along the requested direction, leaving orthogonal gait motion
     free. ``tau_s > 0`` averages signed error before taking its magnitude,
     so same-axis gait oscillation is not mistaken for sustained bias. For a
-    near-zero command, keep the instantaneous idle penalty:
-    ``-max(||v|| - deadband, 0) / max(||c||, minimum_scale)`` so idle motion is
-    still discouraged. ``minimum_scale`` (m/s, > 0) keeps the dimensionless
-    signal finite at an exact-zero command. Vertical motion is left to the
-    existing Gaussian tracking reward.
+    near-zero command, keep the instantaneous idle penalty unless the command
+    requests yaw in place. Pure-yaw commands use the averaged planar error so
+    gait sway is not mistaken for translation drift while turning; sustained
+    translation is still charged. ``minimum_scale`` (m/s, > 0) keeps the
+    dimensionless signal finite at an exact-zero command. Vertical motion is
+    left to the existing Gaussian tracking reward.
     """
     asset: Entity = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
     assert command is not None, f"Command '{command_name}' not found."
+    if not math.isfinite(yaw_deadband) or yaw_deadband < 0.0:
+        raise ValueError("yaw_deadband must be finite and nonnegative")
     actual = asset.data.root_link_lin_vel_b[:, :2]
     tracking_error = _command_velocity_error_average(
         env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
@@ -3935,6 +3939,9 @@ def command_normalized_linear_velocity_l1(
     direction = commanded / command_norm.clamp_min(torch.finfo(command_norm.dtype).eps).unsqueeze(-1)
     aligned_error = torch.abs(torch.sum(tracking_error * direction, dim=-1))
     idle_error = (torch.linalg.vector_norm(actual, dim=-1) - deadband).clamp(min=0.0)
+    yaw_active = command[:, 2].abs() > yaw_deadband
+    turning_idle_error = (torch.linalg.vector_norm(tracking_error, dim=-1) - deadband).clamp(min=0.0)
+    idle_error = torch.where(yaw_active, turning_idle_error, idle_error)
     error = torch.where(command_norm > deadband, aligned_error, idle_error)
     scale = command_norm.clamp(min=minimum_scale)
     return -error / scale
