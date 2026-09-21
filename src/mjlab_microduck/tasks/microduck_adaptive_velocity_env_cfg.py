@@ -35,12 +35,13 @@ ACQUISITION_TRACKING_STD_STAGES = (
 )
 
 # Feedback-only acquisition signal: at low commanded speeds the Gaussian
-# tracking reward is nearly flat around standing. These dimensionless L1
-# penalties keep a direct cost for missing the command. The normalizer floors
-# deliberately remain at gait scale: smaller denominators on uncommanded axes
-# would tax the measured lateral/yaw oscillation of a walking biped heavily.
-FEEDBACK_LINEAR_L1_WEIGHT = 1.0
-FEEDBACK_YAW_L1_WEIGHT = 0.75
+# tracking reward is nearly flat around standing. These dimensionless,
+# command-aligned L1 penalties keep a direct cost for missing the requested
+# direction while leaving orthogonal gait motion free. The normalizer floors
+# deliberately remain at gait scale: smaller denominators would tax measured
+# lateral/yaw oscillation of a walking biped heavily.
+FEEDBACK_LINEAR_L1_WEIGHT = 0.5
+FEEDBACK_YAW_L1_WEIGHT = 0.35
 FEEDBACK_LINEAR_MIN_SCALE_M_S = 0.12
 FEEDBACK_YAW_MIN_SCALE_RAD_S = 0.8
 FEEDBACK_LINEAR_DEADBAND_M_S = 0.01

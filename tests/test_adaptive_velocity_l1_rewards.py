@@ -66,7 +66,7 @@ def test_linear_tracking_improves_toward_either_command_direction(axis, sign):
     reward = _linear(_env(command.tolist(), linear=actual.tolist()))
     assert torch.all(reward <= 0)
     assert torch.all(torch.diff(reward) > 0)
-    assert reward[-1] == 0
+    torch.testing.assert_close(reward[-1], torch.tensor(0.0, dtype=torch.float64), atol=1e-6, rtol=0)
 
 
 def test_zero_linear_command_has_deadband_then_finite_gait_scale_penalty():
@@ -75,24 +75,39 @@ def test_zero_linear_command_has_deadband_then_finite_gait_scale_penalty():
         linear=[[0.0, 0.0, 4.0], [0.01, -0.01, 4.0], [0.07, 0.0, 4.0], [0.0, -0.13, 4.0]],
     )
     torch.testing.assert_close(
-        _linear(env), torch.tensor([0.0, 0.0, -0.25, -0.5], dtype=torch.float64)
+        _linear(env),
+        torch.tensor(
+            [0.0, -((2**0.5 * 0.01 - 0.01) / 0.12), -0.5, -1.0],
+            dtype=torch.float64,
+        ),
     )
 
 
 def test_linear_normalizer_uses_command_speed_for_both_axes():
     env = _env(
-        [[0.12, 0.0, 0.0], [0.24, 0.0, 0.0], [0.144, 0.192, 0.0], [0.24, 0.0, 0.0]],
-        linear=[[0.05, 0.0, 0.0], [0.11, 0.0, 0.0], [0.014, 0.192, 0.0], [0.24, 0.13, 0.0]],
+        [[0.12, 0.0, 0.0], [0.24, 0.0, 0.0], [0.144, 0.192, 0.0]],
+        linear=[[0.06, 0.0, 0.0], [0.12, 0.0, 0.0], [0.072, 0.096, 0.0]],
     )
-    # The same residual fraction has equal cost for short/long/diagonal
-    # commands. Lateral oscillation during forward motion shares that speed
-    # scale; it does not divide by the zero lateral command.
-    torch.testing.assert_close(_linear(env), torch.full((4,), -0.25, dtype=torch.float64))
+    # The same aligned residual fraction has equal cost for short, long, and
+    # diagonal commands; the scalar command norm sets the denominator.
+    torch.testing.assert_close(_linear(env), torch.full((3,), -0.5, dtype=torch.float64))
 
 
-def test_linear_moving_command_keeps_small_error_deadband():
-    env = _env([[0.12, 0.0, 0.8]], linear=[[0.115, -0.005, 0.0]])
-    assert _linear(env).item() == 0
+def test_linear_orthogonal_gait_motion_is_free_for_active_command():
+    env = _env(
+        [[0.24, 0.0, 0.0], [0.24, 0.0, 0.0]],
+        # Same aligned error (−0.12 m/s), with a large orthogonal oscillation
+        # added to the second rollout.
+        linear=[[0.12, 0.0, 0.0], [0.12, 0.8, 0.0]],
+    )
+    torch.testing.assert_close(_linear(env), torch.full((2,), -0.5, dtype=torch.float64))
+
+
+def test_linear_active_command_prices_aligned_error_inside_old_deadband():
+    env = _env([[0.12, 0.0, 0.8]], linear=[[0.115, 3.0, 0.0]])
+    # The 0.005 m/s aligned miss is intentionally visible; only the near-zero
+    # command branch uses the linear deadband.
+    torch.testing.assert_close(_linear(env), torch.tensor([-0.005 / 0.12], dtype=torch.float64))
 
 
 @pytest.mark.parametrize("sign", [-1, 1])
@@ -107,14 +122,12 @@ def test_yaw_tracking_improves_toward_either_command_direction(sign):
     assert reward[-1] == 0
 
 
-def test_zero_yaw_command_has_deadband_then_finite_gait_scale_penalty():
+def test_zero_yaw_command_has_no_extra_penalty():
     env = _env(
-        [[0.12, 0.0, 0.0]] * 5,
-        angular=[[3.0, -2.0, value] for value in [0.0, 0.05, -0.05, 0.45, -0.85]],
+        [[0.12, 0.0, 0.0], [0.12, 0.0, 0.04], [0.12, 0.0, -0.05], [0.12, 0.0, 0.0]],
+        angular=[[3.0, -2.0, value] for value in [0.0, 0.05, -0.05, 0.85]],
     )
-    torch.testing.assert_close(
-        _yaw(env), torch.tensor([0.0, 0.0, 0.0, -0.5, -1.0], dtype=torch.float64)
-    )
+    torch.testing.assert_close(_yaw(env), torch.zeros(4, dtype=torch.float64))
 
 
 def test_yaw_normalization_tracks_command_magnitude_and_ignores_roll_pitch():

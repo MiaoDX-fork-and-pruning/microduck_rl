@@ -3818,23 +3818,30 @@ def command_normalized_linear_velocity_l1(
     deadband: float,
     asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
 ) -> torch.Tensor:
-    """Negative normalized planar tracking error; use a POSITIVE reward weight.
+    """Negative normalized command-aligned planar error; use a POSITIVE weight.
 
-    In body-frame m/s, return
-    ``-mean(relu(abs(v_xy - cmd_xy) - deadband)) / max(norm(cmd_xy), minimum_scale)``.
-    The mean is over x/y only. The scalar command-speed normalizer is shared by
-    both axes, so an uncommanded axis does not receive a smaller denominator.
-    ``minimum_scale`` (m/s, > 0) also gives exact-zero commands a finite idle
-    penalty; ``deadband`` (m/s, >= 0) permits small errors around any command.
-    The dimensionless result is zero inside that band and otherwise negative.
-    Vertical motion is left to the existing Gaussian tracking reward.
+    In body-frame m/s, let ``c = cmd_xy`` and ``v = actual_xy``. For an active
+    command (``||c|| > deadband``), return
+    ``-abs(dot(v - c, c / ||c||)) / max(||c||, minimum_scale)``. This prices
+    only error along the requested direction, leaving orthogonal gait motion
+    free. For a near-zero command, return
+    ``-max(||v|| - deadband, 0) / max(||c||, minimum_scale)`` so idle motion is
+    still discouraged. ``minimum_scale`` (m/s, > 0) keeps the dimensionless
+    signal finite at an exact-zero command. Vertical motion is left to the
+    existing Gaussian tracking reward.
     """
     asset: Entity = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
     assert command is not None, f"Command '{command_name}' not found."
-    error = (asset.data.root_link_lin_vel_b[:, :2] - command[:, :2]).abs()
-    scale = torch.linalg.vector_norm(command[:, :2], dim=-1).clamp(min=minimum_scale)
-    return -(error - deadband).clamp(min=0.0).mean(dim=-1) / scale
+    actual = asset.data.root_link_lin_vel_b[:, :2]
+    commanded = command[:, :2]
+    command_norm = torch.linalg.vector_norm(commanded, dim=-1)
+    direction = commanded / command_norm.clamp_min(torch.finfo(command_norm.dtype).eps).unsqueeze(-1)
+    aligned_error = torch.abs(torch.sum((actual - commanded) * direction, dim=-1))
+    idle_error = (torch.linalg.vector_norm(actual, dim=-1) - deadband).clamp(min=0.0)
+    error = torch.where(command_norm > deadband, aligned_error, idle_error)
+    scale = command_norm.clamp(min=minimum_scale)
+    return -error / scale
 
 
 def command_normalized_yaw_velocity_l1(
@@ -3847,18 +3854,20 @@ def command_normalized_yaw_velocity_l1(
     """Negative normalized yaw tracking error; use a POSITIVE reward weight.
 
     In body-frame rad/s, return
-    ``-relu(abs(omega_z - cmd_z) - deadband) / max(abs(cmd_z), minimum_scale)``.
-    ``minimum_scale`` (rad/s, > 0) keeps exact-zero yaw commands finite without
-    magnifying walking yaw oscillation. ``deadband`` (rad/s, >= 0) applies to
-    idle and moving commands alike. The result is dimensionless and <= 0;
-    roll/pitch rates remain the responsibility of the existing reward stack.
+    ``-relu(abs(omega_z - cmd_z) - deadband) / max(abs(cmd_z), minimum_scale)``
+    only when ``abs(cmd_z) > deadband``. It returns exactly zero for idle and
+    forward commands with no meaningful yaw request because the Gaussian yaw
+    term already handles their natural ripple. ``minimum_scale`` (rad/s, > 0)
+    keeps active low-rate commands finite; roll/pitch rates remain the
+    responsibility of the existing reward stack.
     """
     asset: Entity = env.scene[asset_cfg.name]
     command = env.command_manager.get_command(command_name)
     assert command is not None, f"Command '{command_name}' not found."
     error = (asset.data.root_link_ang_vel_b[:, 2] - command[:, 2]).abs()
     scale = command[:, 2].abs().clamp(min=minimum_scale)
-    return -(error - deadband).clamp(min=0.0) / scale
+    active = command[:, 2].abs() > deadband
+    return -torch.where(active, (error - deadband).clamp(min=0.0) / scale, torch.zeros_like(error))
 
 
 def air_time_adaptive(
