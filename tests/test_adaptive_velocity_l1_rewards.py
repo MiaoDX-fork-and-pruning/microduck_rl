@@ -220,7 +220,7 @@ def test_idle_speed_is_still_penalized_instantaneously():
     assert _averaged_linear(env).item() == pytest.approx(-1.0)
 
 
-def test_pure_yaw_uses_averaged_planar_error_but_exact_idle_stays_instantaneous():
+def test_pure_yaw_does_not_price_planar_sway_but_exact_idle_stays_instantaneous():
     yaw_env = _env([[0.0, 0.0, 0.8]])
     idle_env = _env([[0.0, 0.0, 0.0]])
     yaw_data = yaw_env.scene["robot"].data
@@ -238,11 +238,22 @@ def test_pure_yaw_uses_averaged_planar_error_but_exact_idle_stays_instantaneous(
             idle_rewards.append(_averaged_linear(idle_env))
     yaw_mean = torch.stack(yaw_rewards).mean().item()
     idle_mean = torch.stack(idle_rewards).mean().item()
-    assert yaw_mean > idle_mean + 0.25
+    assert yaw_mean == pytest.approx(0.0)
+    assert idle_mean < -0.25
     idle_env.common_step_counter += 1
     idle_env.episode_length_buf[:] += 1
     idle_data.root_link_lin_vel_b[0, 1] = 0.13
     assert _averaged_linear(idle_env).item() == pytest.approx(-1.0)
+
+
+def test_turning_command_still_prices_commanded_linear_error():
+    env = _env(
+        [[0.08, 0.0, 0.8], [0.08, 0.0, 0.8]],
+        linear=[[0.04, 0.0, 0.0], [0.04, 0.6, 0.0]],
+    )
+    # Turn buckets have a commanded forward component. The aligned error
+    # remains active while orthogonal gait sway stays free.
+    torch.testing.assert_close(_linear(env), torch.full((2,), -1 / 3, dtype=torch.float64))
 
 
 @pytest.mark.parametrize("tau", [-0.1, float("nan"), float("inf")])
