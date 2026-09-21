@@ -495,20 +495,54 @@ def test_preservation_failure_rolls_back_policy_rng_and_keeps_chronological_audi
     ]
 
 
-def test_rollback_loads_under_inference_mode_for_normalizer_buffers(monkeypatch, tmp_path):
+def test_real_ppo_can_train_after_rollback_of_inference_normalizer(tmp_path):
+    from rsl_rl.algorithms import PPO
+    from rsl_rl.models import MLPModel
+    from rsl_rl.storage import RolloutStorage
+    from tensordict import TensorDict
+
+    torch.manual_seed(19)
+    obs = TensorDict({"actor": torch.randn(4, 61)}, batch_size=[4])
+    groups = {"actor": ["actor"], "critic": ["actor"]}
+    actor = MLPModel(obs, groups, "actor", 14, hidden_dims=[16], obs_normalization=True,
+                     distribution_cfg={"class_name": "rsl_rl.modules.distribution:GaussianDistribution"})
+    critic = MLPModel(obs, groups, "critic", 1, hidden_dims=[16], obs_normalization=True)
     runner = _runner()
+    runner.env.unwrapped = runner.env
+    runner.env.common_step_counter = 24
+    runner.alg = PPO(actor, critic, RolloutStorage("rl", 4, 2, obs, [14]),
+                     num_learning_epochs=1, num_mini_batches=1, schedule="fixed")
+
+    def update():
+        with torch.inference_mode():
+            for _ in range(2):
+                runner.alg.act(obs)
+                runner.alg.process_env_step(obs, torch.randn(4), torch.zeros(4, dtype=torch.bool), {})
+            runner.alg.compute_returns(obs)
+        return runner.alg.update()
+
+    update()  # Allocate real Adam state and inference-created normalizer buffers.
+    assert actor.obs_normalizer._std.is_inference()
+    runner.alg.learning_rate = 0.003
+    for group in runner.alg.optimizer.param_groups:
+        group["lr"] = runner.alg.learning_rate
     checkpoint = tmp_path / "known-good.adaptive.pt"
-    checkpoint.write_bytes(b"known-good")
     runner.last_known_good_checkpoint = str(checkpoint)
-    observed = []
+    runner.save(str(checkpoint))
+    saved = torch.load(checkpoint, weights_only=False)
+    update()
+    runner.alg.learning_rate = 0.009
 
-    def load(*args, **kwargs):
-        observed.append(torch.is_inference_mode_enabled())
-        return {}
-
-    monkeypatch.setattr(runner, "load", load)
     runner.rollback(str(checkpoint))
-    assert observed == [True]
+    torch.testing.assert_close(actor.state_dict(), saved["actor_state_dict"])
+    torch.testing.assert_close(runner.alg.optimizer.state_dict(), saved["optimizer_state_dict"])
+    assert runner.alg.learning_rate == 0.003
+    # Merely entering inference mode for the entire restore can poison Adam's
+    # moments. The next gradient update is the observable rollback contract.
+    losses = update()
+    assert all(np.isfinite(value) for value in losses.values())
+    assert any(not torch.equal(value, saved["actor_state_dict"][name])
+               for name, value in actor.named_parameters())
 
 
 @pytest.mark.parametrize("mode, interval", [("all_static", 0), ("all_static", 2), ("composed", 0), ("composed", 2)])

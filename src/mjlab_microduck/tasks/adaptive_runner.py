@@ -419,6 +419,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
 
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
         infos = super().load(path, load_cfg, strict, map_location)
+        # PPO keeps its scheduler scalar separately from Adam's param groups;
+        # restore the scalar after the optimizer state is loaded so a rollback
+        # resumes with the exact learning-rate state of the checkpoint.
+        if load_cfg is None or load_cfg.get("optimizer", False):
+            optimizer = getattr(self.alg, "optimizer", None)
+            groups = getattr(optimizer, "param_groups", ())
+            if groups and hasattr(self.alg, "learning_rate"):
+                self.alg.learning_rate = groups[0]["lr"]
         # Match RSL-RL's iteration flag: actor-only loading is inference or
         # fine-tuning, never a restoration of trainer RNG/curriculum/progress.
         if load_cfg is not None and not load_cfg.get("iteration", False):
@@ -489,12 +497,18 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         consumed_iterations = getattr(self, "completed_iterations", None)
         current_iteration = self.current_learning_iteration
         resume_checkpoint = getattr(self, "resume_checkpoint", None)
-        # Rollback is reached immediately after an inference-mode rollout.
-        # RSL-RL's observation normalizer may therefore own inference tensors;
-        # loading outside inference mode attempts an illegal in-place copy into
-        # that buffer (PyTorch's "inplace update to inference tensor" error).
-        # Keep the complete trainer restore atomic under the same mode.
-        with torch.inference_mode():
+        # RSL-RL creates normalizer buffers during inference-mode rollouts.
+        # Replace those buffers before load_state_dict copies into them. Keep
+        # deserialization outside inference mode so Adam's restored moments
+        # remain writable by the next gradient update.
+        with torch.inference_mode(False):
+            for model in (getattr(self.alg, "actor", None), getattr(self.alg, "critic", None)):
+                if model is None:
+                    continue
+                for name, buffer in model.named_buffers():
+                    if buffer.is_inference():
+                        parent, _, leaf = name.rpartition(".")
+                        setattr(model.get_submodule(parent), leaf, buffer.clone())
             infos = self.load(checkpoint_path)
         self.resume_checkpoint = resume_checkpoint
         self.evaluation_events = history
