@@ -207,15 +207,18 @@ def make_microduck_adaptive_velocity_env_cfg(
                 "acquisition", "acquisition_lateral", "acquisition_feedback", "lateral_drive"
             ):
                 cfg.commands["twist"].rel_lateral_envs = 0.20 if diagnostic_mode == "acquisition" else 0.50
-                cfg.curriculum = {
-                    "tracking_std": CurriculumTermCfg(
-                        func=microduck_mdp.velocity_tracking_std_curriculum,
-                        params={
-                            "reward_name": "track_linear_velocity",
-                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
-                        },
-                    )
-                }
+                # Add the diagnostic tracking signal on top of the filtered
+                # canonical curriculum.  These recipes do not own action-rate,
+                # standing, pose, terrain, or head-bias schedules; replacing
+                # the mapping here silently disabled those schedules during
+                # the long acquisition campaigns.
+                cfg.curriculum["tracking_std"] = CurriculumTermCfg(
+                    func=microduck_mdp.velocity_tracking_std_curriculum,
+                    params={
+                        "reward_name": "track_linear_velocity",
+                        "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
+                    },
+                )
                 if diagnostic_mode in ("acquisition_feedback", "lateral_drive"):
                     # The feedback controller owns command allocation. Start
                     # directly on the hard frontier instead of waiting for a
