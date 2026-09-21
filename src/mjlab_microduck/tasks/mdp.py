@@ -3366,7 +3366,11 @@ def velocity_tracking_std_curriculum(
     current_std = std_stages[0]["std"]  # Default to first stage
 
     for stage in std_stages:
-        if env.common_step_counter > stage["step"]:
+        # Apply a stage at its exact cumulative boundary.  Adaptive resumes
+        # restore ``common_step_counter`` from the checkpoint; a run that ends
+        # exactly on a boundary must not spend the whole next segment using
+        # the previous reward width.
+        if env.common_step_counter >= stage["step"]:
             current_std = stage["std"]
 
     # Update the reward term's std parameter
