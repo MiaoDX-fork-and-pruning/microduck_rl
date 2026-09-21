@@ -545,6 +545,21 @@ def test_real_ppo_can_train_after_rollback_of_inference_normalizer(tmp_path):
                for name, value in actor.named_parameters())
 
 
+def test_post_rollback_reset_runs_in_inference_mode_for_delay_buffers():
+    runner = object.__new__(AdaptiveMicroduckOnPolicyRunner)
+    runner.env = SimpleNamespace()
+    observed = []
+
+    def reset():
+        observed.append(torch.is_inference_mode_enabled())
+        return None, {}
+
+    runner.env.reset = reset
+    obs, _ = runner._reset_after_rollback()
+    assert obs is None
+    assert observed == [True]
+
+
 @pytest.mark.parametrize("mode, interval", [("all_static", 0), ("all_static", 2), ("composed", 0), ("composed", 2)])
 def test_resume_counts_completed_updates_and_publishes_explicit_result(monkeypatch, tmp_path, mode, interval):
     import json

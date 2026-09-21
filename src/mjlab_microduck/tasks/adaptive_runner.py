@@ -312,9 +312,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 if getattr(self, "_needs_reset", False):
                     # Restoring PPO does not rewind collected experience or the
                     # campaign budget. Start fresh episodes under restored state.
+                    # The preceding rollout ran in inference mode and may have
+                    # created inference tensors inside BAM/mjlab delay buffers;
+                    # reset those buffers in the same mode before collecting the
+                    # next rollout.
                     self.current_learning_iteration = it
                     self.completed_iterations = it + 1
-                    obs, _ = self.env.reset()
+                    obs, _ = self._reset_after_rollback()
                     self._needs_reset = False
                     obs = obs.to(self.device)
                     self.alg.train_mode()
@@ -324,6 +328,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.save(str(checkpoint))
             self._write_training_result(checkpoint, start_it)
             self.logger.stop_logging_writer()
+
+    def _reset_after_rollback(self):
+        """Reset stateful simulator buffers in rollout's inference context."""
+        with torch.inference_mode():
+            return self.env.reset()
 
     def _write_training_result(self, checkpoint: Path, start_iteration: int) -> None:
         """Publish completion only after the final checkpoint is durably written."""
