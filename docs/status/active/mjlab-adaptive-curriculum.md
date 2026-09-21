@@ -59,6 +59,15 @@ turns the gate from a passive veto into a corrective sampler. A 1500-update
 continuation of the existing `std=0.12` diagnostic is running as the first
 bounded test of the reward-signal hypothesis.
 
+The next recipe is now implemented as
+`Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck` (`2a7ab22`). It freezes
+the canonical action-rate, standing, and head-pose schedules at their initial
+values, keeps an explicit 20% pure-lateral command bucket, and stages linear
+tracking std from `0.316` to `0.12` over 2000 updates. Configuration tests and
+the 64-env/5-update CPU smoke pass. A fresh 500-update seed-17 pilot is queued
+after the tracking continuation; its native endpoint will decide whether this
+acquisition recipe is worth extending.
+
 If the 2000-update push endpoint still fails, continue with one bounded recipe
 diagnostic selected from the measured failure mode; do not start a five-branch
 or multi-seed campaign. Keep the goal active until native usability,
