@@ -314,6 +314,15 @@ def make_microduck_adaptive_velocity_env_cfg(
                 "tau_s": FEEDBACK_TRACKING_TAU_S,
             },
         )
+    frontier_stall_override = os.environ.get("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS")
+    if frontier_stall_override is not None:
+        try:
+            override = int(frontier_stall_override)
+        except ValueError as exc:
+            raise ValueError("adaptive frontier stall override must be an integer") from exc
+        if override < 0:
+            raise ValueError("adaptive frontier stall override must be nonnegative")
+        cfg.adaptive_frontier_stall_windows = override
     if play:
         cfg.adaptive_evaluation_interval = 0
     return cfg

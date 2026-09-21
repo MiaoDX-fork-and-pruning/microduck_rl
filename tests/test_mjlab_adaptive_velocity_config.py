@@ -1,3 +1,5 @@
+import pytest
+
 from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckRlCfg,
     AdaptiveMicroduckComRlCfg,
@@ -167,6 +169,19 @@ def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
     assert cfg.adaptive_frontier_stall_improvement == 0.05
     assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
     assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_frontier_stall_window_override_is_explicit_and_bounded(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS", "12")
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        diagnostic_mode="lateral_drive", command_exposure=True
+    )
+    assert cfg.adaptive_frontier_stall_windows == 12
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS", "-1")
+    with pytest.raises(ValueError, match="nonnegative"):
+        make_microduck_adaptive_velocity_env_cfg(
+            diagnostic_mode="lateral_drive", command_exposure=True
+        )
 
 
 def test_strictification_bootstrap_is_bounded_and_restores_strict_profile() -> None:
