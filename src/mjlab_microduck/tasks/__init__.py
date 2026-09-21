@@ -37,6 +37,7 @@ from .microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckActionRateRlCfg,
     AdaptiveMicroduckLateralRlCfg,
     AdaptiveMicroduckTrackingRlCfg,
+    AdaptiveMicroduckAcquisitionRlCfg,
     AdaptiveMicroduckPushRlCfg,
 )
 from .adaptive_runner import AdaptiveMicroduckOnPolicyRunner
@@ -152,6 +153,14 @@ register_mjlab_task(
     env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="tracking"),
     play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="tracking"),
     rl_cfg=AdaptiveMicroduckTrackingRlCfg,
+    runner_cls=AdaptiveMicroduckOnPolicyRunner,
+)
+
+register_mjlab_task(
+    task_id="Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck",
+    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="acquisition"),
+    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="acquisition"),
+    rl_cfg=AdaptiveMicroduckAcquisitionRlCfg,
     runner_cls=AdaptiveMicroduckOnPolicyRunner,
 )
 

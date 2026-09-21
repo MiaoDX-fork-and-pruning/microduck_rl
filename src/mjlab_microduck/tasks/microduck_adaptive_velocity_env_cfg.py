@@ -24,6 +24,18 @@ from mjlab_microduck.evaluation.capability import resolve_enabled_axes
 # from command sampling; do not change the canonical reward or product gate.
 DIAGNOSTIC_LINEAR_TRACKING_STD = 0.12
 
+# Acquisition diagnostic: keep the early walking signal reachable, then tighten
+# the absolute tracking target only after a gait has had time to form. A fixed
+# 0.12 m/s std makes the initial ±0.3/±0.4 m/s command support too sparse for
+# this low-torque biped and causes early falls; the staged signal removes the
+# stationary lateral-reward loophole without making iteration zero impossible.
+ACQUISITION_TRACKING_STD_STAGES = (
+    {"step": 0, "std": 0.31622776601683794},
+    {"step": 500 * 24, "std": 0.22},
+    {"step": 1000 * 24, "std": 0.16},
+    {"step": 1500 * 24, "std": 0.12},
+)
+
 
 @dataclass(kw_only=True)
 class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
@@ -86,7 +98,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "push"}:
+        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "acquisition", "push"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
@@ -102,6 +114,22 @@ def make_microduck_adaptive_velocity_env_cfg(
             if diagnostic_mode == "tracking":
                 cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
                 cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck"
+            elif diagnostic_mode == "acquisition":
+                # Keep only the tracking-signal curriculum in this diagnostic.
+                # Canonical action-rate, standing, and head-pose schedules are
+                # deliberately frozen at their initial values so the experiment
+                # tests acquisition rather than several simultaneous taxes.
+                cfg.commands["twist"].rel_lateral_envs = 0.20
+                cfg.curriculum = {
+                    "tracking_std": CurriculumTermCfg(
+                        func=microduck_mdp.velocity_tracking_std_curriculum,
+                        params={
+                            "reward_name": "track_linear_velocity",
+                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
+                        },
+                    )
+                }
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
             else:
                 cfg.curriculum["push_strength"] = CurriculumTermCfg(
                     func=microduck_mdp.push_curriculum,
@@ -153,4 +181,5 @@ AdaptiveMicroduckStandingRlCfg = _adaptive_rl_cfg("velocity_adaptive_standing_di
 AdaptiveMicroduckActionRateRlCfg = _adaptive_rl_cfg("velocity_adaptive_action_rate_diagnostic")
 AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diagnostic")
 AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
+AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
