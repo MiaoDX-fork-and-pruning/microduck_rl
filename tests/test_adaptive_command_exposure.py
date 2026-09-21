@@ -111,6 +111,16 @@ def test_focus_switch_preserves_every_anchor_bucket():
     assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
 
 
+def test_near_pass_bucket_keeps_frontier_focus_until_gate_threshold():
+    exposure = CommandExposure()
+    scores = {name: 1.0 for name in BUCKETS}
+    scores["forward"] = 0.79
+    scores["lateral"] = 0.10
+    exposure.update(scores)
+    assert exposure.focus_bucket == "forward"
+    assert exposure.probabilities["forward"] > exposure.probabilities["lateral"]
+
+
 def test_checkpoint_requires_and_restores_focus_bucket():
     exposure = CommandExposure()
     exposure.update({name: (0.9 if name != "yaw" else 0.1) for name in BUCKETS})

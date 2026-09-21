@@ -34,7 +34,10 @@ class CommandExposure:
     bucket_floor = 0.10
     focus_extra = 0.20
     update_rate = 0.25
-    focus_mastery = 0.50
+    # Match CapabilityGate's upper threshold.  A bucket scoring 0.5 is making
+    # measurable progress, but it is not mastered: handing focus away there
+    # strands near-pass capabilities below the product acceptance boundary.
+    focus_mastery = 0.80
     frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
     def __init__(self) -> None:
