@@ -16,7 +16,15 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "scripts"))
 
 from run_specialist_action_battery import command_cases, run_case  # noqa: E402
-from mjlab_microduck.evaluation.capability import build_capability_report  # noqa: E402
+from mjlab_microduck.evaluation.capability import (  # noqa: E402
+    DEFAULT_INSTANTANEOUS_CAPS,
+    DEFAULT_TRACKING_METRIC,
+    DEFAULT_TRACKING_TAU_S,
+    DEFAULT_THRESHOLDS,
+    TRACKING_METRIC_SIGNED_EMA,
+    build_capability_report,
+    tracking_error_metrics,
+)
 
 
 def _report_metadata(
@@ -41,7 +49,13 @@ def _report_metadata(
     }
 
 
-def _raw_case(report: dict, trace: dict) -> dict[str, object]:
+def _raw_case(
+    report: dict,
+    trace: dict,
+    *,
+    tracking_metric: str = DEFAULT_TRACKING_METRIC,
+    tracking_tau_s: float = DEFAULT_TRACKING_TAU_S,
+) -> dict[str, object]:
     requested = trace["requested_command"]
     linear = trace["trunk_linear_velocity_m_s"]
     angular = trace["trunk_angular_velocity_rad_s"]
@@ -67,14 +81,30 @@ def _raw_case(report: dict, trace: dict) -> dict[str, object]:
             np.linalg.norm(np.asarray(report["world_displacement_m"], dtype=float)[:2])
         )
     elif bucket in {"yaw", "turn-left", "turn-right"}:
-        raw["angular_tracking_error_rad_s"] = float(
-            np.mean(np.abs(angular_target - angular_achieved))
+        samplewise, signed_ema = tracking_error_metrics(
+            angular_achieved,
+            angular_target,
+            dt=1.0 / 50.0,
+            tau_s=tracking_tau_s,
         )
+        raw["angular_tracking_error_rad_s"] = float(
+            signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+        )
+        if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+            raw["angular_tracking_error_samplewise_rad_s"] = float(samplewise)
     else:
         axis = 0 if bucket == "forward" else 1
-        raw["tracking_error_m_s"] = float(
-            np.mean(np.abs(command[:, axis] - achieved[:, axis]))
+        samplewise, signed_ema = tracking_error_metrics(
+            achieved[:, axis],
+            command[:, axis],
+            dt=1.0 / 50.0,
+            tau_s=tracking_tau_s,
         )
+        raw["tracking_error_m_s"] = float(
+            signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+        )
+        if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+            raw["tracking_error_samplewise_m_s"] = float(samplewise)
     return raw
 
 
@@ -89,6 +119,8 @@ def run_battery(
     source_sha: str,
     axis_mode: str,
 ) -> dict:
+    tracking_metric = TRACKING_METRIC_SIGNED_EMA
+    tracking_tau_s = DEFAULT_TRACKING_TAU_S
     output.mkdir(parents=True, exist_ok=True)
     raw_metrics: dict[str, dict[str, object]] = {}
     cases = []
@@ -103,7 +135,12 @@ def run_battery(
         )
         report["bucket"] = case["bucket"]
         cases.append(report)
-        raw_metrics[case["bucket"]] = _raw_case(report, trace)
+        raw_metrics[case["bucket"]] = _raw_case(
+            report,
+            trace,
+            tracking_metric=tracking_metric,
+            tracking_tau_s=tracking_tau_s,
+        )
         trace_path = output / f"{case['bucket']}.npz"
         import numpy as np
 
@@ -111,12 +148,10 @@ def run_battery(
         report["trace"] = str(trace_path)
     config = {
         "name": "adaptive_velocity_six_bucket_v2",
-        "thresholds": {
-            "tracking_m_s": 0.12,
-            "angular_tracking_rad_s": 0.6,
-            "zero_drift_m": 0.06,
-            "tilt_p95_rad": 0.610865,
-        },
+        "thresholds": dict(DEFAULT_THRESHOLDS),
+        "tracking_metric": tracking_metric,
+        "tracking_metric_tau_s": tracking_tau_s,
+        "instantaneous_caps": dict(DEFAULT_INSTANTANEOUS_CAPS),
     }
     import hashlib
 
@@ -146,6 +181,16 @@ def run_battery(
         "metrics": capability.metrics,
         "score": capability.payload["aggregate"]["lower_tail_score"],
         "cases": cases,
+        "seed_manifest": {
+            "version": "adaptive-battery-seed-v1",
+            "seed_set_id": f"adaptive-default-{seed}",
+            "gate_seed": seed,
+            "consumed_case_seeds": {
+                case["bucket"]: seed + offset
+                for offset, case in enumerate(command_cases("adaptive_velocity", smoke))
+            },
+            "sources": ["reset_qpos_noise", "reset_qvel_noise"],
+        },
     }
     (output / "capability.json").write_text(
         json.dumps(payload, indent=2) + "\n", encoding="utf-8"

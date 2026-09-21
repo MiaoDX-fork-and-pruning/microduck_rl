@@ -24,6 +24,36 @@ native = _load("run_adaptive_native_battery")
 manifest = _load("assemble_adaptive_phase2a_manifest")
 
 
+@pytest.mark.parametrize("distribution,widths", [("initial", (0.003, 0.003)), ("final", (0.015, 0.010))])
+def test_native_construction_disables_training_rehearsal(monkeypatch, tmp_path, distribution, widths):
+    from mjlab.envs.mdp import dr
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE", "zero")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", "1")
+
+    class CapturedConfiguration(Exception):
+        pass
+
+    def construct(*, cfg, device):
+        assert cfg.adaptive_final_com_fraction == 0.0
+        assert not cfg.adaptive_transition_acquisition
+        assert cfg.adaptive_transition_probability_override is None
+        assert not cfg.adaptive_transition_bootstrap_mode_override
+        assert cfg.commands["twist"].transition_probability == 0.0
+        for name, width in zip(("randomize_com", "randomize_head_com"), widths, strict=True):
+            assert cfg.events[name].func is dr.body_ipos
+            assert cfg.events[name].params["ranges"] == (-width, width)
+        raise CapturedConfiguration
+
+    monkeypatch.setattr("mjlab.envs.ManagerBasedRlEnv", construct)
+    with pytest.raises(CapturedConfiguration):
+        native.run_native(tmp_path / "actor.pt", tmp_path / "evidence", task="Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck",
+                          seed=17, steps=300, device="cpu", distribution=distribution)
+
+
 def _trace(bucket, steps=300, terminal=False):
     command = np.tile((*native.BUCKETS[bucket], *([0.] * 10)), (steps, 1))
     observation = np.zeros((steps, 61))
@@ -47,7 +77,9 @@ def _fixture(tmp_path, *, steps=300, terminal=False):
     checkpoint = tmp_path / "model.pt"
     checkpoint.write_bytes(b"real checkpoint fixture")
     config = {"name": "native_mjlab_bam_v2", "environment_profile": "training", "steps": 300,
-              "commands": native.BUCKETS, "step_dt": 0.02, "bucket_isolation": "fresh_environment"}
+              "commands": native.BUCKETS, "step_dt": 0.02, "bucket_isolation": "fresh_environment",
+              "tracking_metric": "signed_ema_v1", "tracking_metric_tau_s": 0.5,
+              "zero_mode": "nominal"}
     raw, cases, seed_cases = {}, [], []
     for offset, bucket in enumerate(native.BUCKETS):
         trace = _trace(bucket, steps, terminal)

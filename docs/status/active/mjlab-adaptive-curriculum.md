@@ -1,168 +1,125 @@
 # MJLab Adaptive Curriculum v2
 
-- Status: **ACTIVE**, Phase 2A. No usable adaptive policy is established.
-- Owner: `/root`; latest user intent is to continue executable experiments.
-- Contract: [Phase 2A](../../plans/mjlab-adaptive-curriculum-v2/02a-diagnostic-repair-PLAN.md).
-- No-touch: canonical velocity factory, product thresholds, unrelated IsaacLab edits.
-- No external blocker. Local RTX 3090 is available.
-- No five-branch/multi-seed campaign before Phase 2A evidence is complete.
+Status: **ACTIVE** — no usable policy established. Updated: 2026-09-22.
+Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
+Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
+Latest intent: continue authorized changes, training and checks via intuitive-flow.
+Execution is local in the main session; other worktree changes are not owned.
 
-## Current experiment and next decision
+## Current evidence and decision
 
-The push robustness diagnostic is the active bounded experiment. Its fresh
-500-update seed-17 pilot completed at
-`/tmp/logs/rsl_rl/adaptive_push_pilot/2026-09-20_21-37-28_push-curriculum-s17/`;
-the held-out native report is `/tmp/adaptive-push-pilot/native-499/`. It is
-valid and NaN-free but fails the usability gate: zero drift 0.0837 m, forward
-error 0.0638 m/s, lateral error 0.1716 m/s, yaw error 0.2027 rad/s, and
-turn-left/right errors 0.2351/0.1884 rad/s. The push curriculum had reached
-only +/-0.15 m/s at that checkpoint, so a single 500-update failure does not
-identify the endpoint behavior.
+Runner evaluation, bounded command exposure, checkpoint/resume and retention
+rollback operate. Both CoM axes remain at ±3 mm. Formal training seeds 17/23/47
+remain gated on a retained six-capability policy; no video/hardware usability or
+adaptive superiority is established.
 
-The same checkpoint is now resuming for 1500 additional updates (total
-2000), with explicit run directory
-`/tmp/logs/rsl_rl/adaptive_push_pilot/2026-09-20_22-07-55_push-curriculum-s17-resume1500/`.
-The native endpoint battery is queued by `/tmp/adaptive-push-followup.log` and
-will write `/tmp/adaptive-push-pilot/native-1999-resume/` after
-`model_1999.pt` exists. This is diagnostic evidence, not a matched-budget
-campaign. Require raw native forward/lateral velocity and error, falls, and all
-six scores before deciding whether push robustness is useful.
+`e86a1f4` isolates training transition overrides from evaluators. The validated
+zero-bootstrap campaign is `/tmp/microduck-adaptive-zero-transition-s17-5000-e86/`.
+Its same-policy variance battery has yaw scores
+`[.809, .000, .776, .000, .000, .595, .555, .842, .000, .000]` for base seeds
+20260815–20260824: five zero scores and only two passes at 0.80. Earlier status
+prose claiming six failures was imprecise. These are diagnostic reset/DR seeds,
+not independent training seeds. Scalar friction correlation was about 0.13 and
+does not isolate a causal DR field.
 
-The continuation completed at `model_1998.pt` (the resume starts from
-iteration 499, so the final label is 1998). Its final native report is
-`/tmp/adaptive-push-pilot/native-1998-resume/`. It is valid and stable in the
-six-bucket replay, but still fails the current schema-v2 gate: zero drift
-0.0729 m, forward error 0.0942 m/s, lateral error 0.1192 m/s, yaw error
-0.2760 rad/s, and turn-left/right errors 0.2585/0.1921 rad/s. The aggregate is
-0.0. The old schema-v1 reports that passed a looser historical gate are
-superseded and do not establish a usable policy.
+The matched 5000→5500 reward comparison is in
+`/tmp/microduck-adaptive-yaw-planar-s17-5500/clean-control/` and
+`clean-treatment-v2/`. Control native held-out scores were
+zero .931 / forward .842 / lateral .795 / yaw .442 / left .754 / right .754.
+The treatment did not produce a retained usable policy and its held-out yaw
+score was zero. Its retained-policy score must not be confused with a direct
+measurement of the pre-rollback candidate. `ac21204` reverted the `1f17e81`
+yaw-planar reward treatment; canonical reward behavior is restored.
 
-## Why the current adaptive recipe is not helping acquisition
+`b942d44` replaces the training transition's bootstrap hold/jump with a linear
+bootstrap→target command ramp. It attributes the ramp to the bootstrap bucket until
+completion and preserves reset `dt=0` and partial-reset isolation. Evaluators still
+use direct frozen commands. The bounded experiment is
+`/tmp/microduck-adaptive-slew-s17-5500/experiment-contract.json`.
 
-The native traces expose a reward loophole. The canonical linear tracking
-standard deviation is `sqrt(0.1) = 0.316 m/s`; at the held-out lateral command
-of `0.12 m/s`, a stationary body receives about 86% of the Gaussian tracking
-maximum. The final push policy's lateral trace has `0.1192 m/s` error while its
-action magnitude is only `0.069`, which is consistent with parking rather than
-learning a lateral gait. The gate detects this failure, but the current
-adaptive controller only owns CoM/head-CoM ranges; it has no action that can
-correct a failed command bucket. Meanwhile the canonical action-rate, standing,
-head-pose, and head-bias schedules continue by wall-clock step.
+| Slew experiment (5000→5500, seed 17, 4096 envs) | Minimum score | Outcome |
+| --- | ---: | --- |
+| Pre-rollback candidate at 5250, native gate | .71733 | forward retention failure |
+| Pre-rollback candidate at 5500, native gate | .72894 | forward/left retention failure |
+| Retained policy, native held-out | .00000 | original 5000-update actor restored |
+| Retained policy, CPU/XML transfer | .00000 | transfer fails |
 
-The useful next design is therefore a two-phase adaptive recipe: freeze those
-canonical taxes during capability acquisition, tighten command tracking with a
-command-aware or `std=0.12` signal, and adapt command-bucket exposure from the
-per-bucket native scores while retaining an exact-zero anchor. Only after all
-six buckets pass should adaptive widening of CoM, head-CoM, pushes, and
-regularization begin. This keeps the production velocity factory unchanged and
-turns the gate from a passive veto into a corrective sampler. A 1500-update
-continuation of the existing `std=0.12` diagnostic is running as the first
-bounded test of the reward-signal hypothesis.
+Actor state including normalizer is tensor-identical to the starting checkpoint.
+No retained learning gain is established. The campaign source is read-only
+`/tmp/microduck-adaptive-slew-source-b942d44/`; 676 tracked file hashes are recorded.
+`campaign-result.json` means evidence completed, not policy accepted.
 
-The next recipe is now implemented as
-`Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck` (`2a7ab22`). It freezes
-the canonical action-rate, standing, and head-pose schedules at their initial
-values, keeps an explicit 20% pure-lateral command bucket, and stages linear
-tracking std from `0.316` to `0.12` over 2000 updates. Configuration tests and
-the 64-env/5-update CPU smoke pass. A fresh 500-update seed-17 pilot is queued
-after the tracking continuation; its native endpoint will decide whether this
-acquisition recipe is worth extending.
+## Current slice and next decision
 
-The staged acquisition endpoint is now also complete at
-`/tmp/adaptive-acquisition-pilot/native-1998-resume/`. It improves forward
-tracking to `0.0378 m/s`, but zero drift is `0.1600 m` and lateral error is
-`0.1602 m/s`; yaw and turns remain `0.3199/0.2715/0.2227 rad/s`. The aggregate
-is `0.0`. A same-seed initial-distribution replay gives nearly identical
-behavior (`0.1567 m` drift and `0.1557 m/s` lateral error), so the failure is
-recipe acquisition, not just final CoM width. The staged reward signal is
-therefore insufficient by itself.
+Blocker fingerprint: `direct_command_yaw_under_reset_DR_robustness`.
+Classification: command-initiation/retention depends strongly on reset/DR state;
+continuous acquisition commands alone have not cleared the retained-policy gate.
 
-The next corrective direction is command-conditioned exposure: the gate must
-increase the sampling probability of the failed lateral bucket while keeping a
-fixed exact-zero and forward/turn anchor, and only then widen physical DR.
-This is the remaining high-value change because every tested recipe can stand
-and move forward, but none creates a genuine lateral gait.
+The paired candidate/control probe is complete. Slew improved mean yaw from
+about `.477` to `.646`, but only 2/10 reset/DR seeds passed yaw and 0/10 passed
+all six buckets. The candidate was rolled back at both gate windows; no retained
+learning gain is established. Startup sensor probes show a nonlinear failure
+interaction between IMU misalignment and encoder bias.
 
-A 50% lateral exposure pilot was then run as
-`Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck` (`8b132de`). Its
-500-update native report is `/tmp/adaptive-acquisition-lateral-pilot/native-499/`.
-It increases mean lateral velocity from roughly `0.023` in the staged recipe
-to `0.0488 m/s`, but still misses the command (`0.1413 m/s` error), raises
-zero drift to `0.1443 m`, and leaves the aggregate at `0.0`. More lateral
-samples alone are therefore insufficient and destabilizing; the next design
-must use a small failure-conditioned bucket boost with preservation and a
-nominal anchor, rather than a fixed 50% override.
+The current implementation slice adds
+`scripts/run_adaptive_native_cohort_battery.py`. It keeps the old single-seed
+battery as the primitive, while an explicit cohort size runs fixed native seeds
+and selects the worst score and raw evidence independently for each bucket.
+The campaign launcher now opts into a three-seed gate cohort; held-out CPU and
+native checks remain separate. Cohort metadata records all member reports and
+the selected seed map, and the runner persists the cohort size in checkpoint
+state. Member config/provenance and every member trace are checked before
+aggregation, and the runner rechecks the returned seed map and worst-member
+selection. Legacy checkpoints require an explicit migration flag; migration
+preserves PPO state and cumulative budget while clearing old single-seed
+mastery and rollback evidence.
 
-If the 2000-update push endpoint still fails, continue with one bounded recipe
-diagnostic selected from the measured failure mode; do not start a five-branch
-or multi-seed campaign. Keep the goal active until native usability,
-calibration, and required export/transfer proofs are complete; do not stop
-because a diagnostic report was produced.
+The actual native proof at `/tmp/microduck-adaptive-cohort-proof/` produced a
+schema-v2 report and passed the native trace validator. Its conservative
+lower-tail score was `.72200` and `passed=false`, correctly exposing the current
+policy's lack of robust mastery. A fresh real three-member native run at
+`/tmp/microduck-adaptive-native-cohort-smoke/capability.json` also passed the
+trace validator, with lower-tail `0.0` as expected from the 2-update smoke
+policy. No training remains running.
 
-## Latest diagnostic evidence
+Next action: use the cohort gate for the next changed training hypothesis and
+then address the causal sensor-DR robustness failure. Do not lower product
+thresholds, reuse a single lucky seed, or repeat the same 500-update slew budget.
 
-- Repaired static seed 17: 2000 updates completed under
-  `/tmp/logs/rsl_rl/adaptive_repaired_static_2000/2026-09-20_17-59-03_ownership-repair-s17/`.
-  Final native report `/tmp/adaptive-repaired-2000/native-1999/` has drift
-  0.0722 m, forward 0.1033 m/s, lateral 0.1193 m/s, yaw 0.3008 rad/s,
-  left/right 0.2566/0.2571 rad/s. All buckets survive; aggregate is zero.
-- Lateral diagnostic reports `/tmp/adaptive-lateral-pilot/native-{499,1000,1500,2000}/`
-  also have aggregate zero. Model 2000: drift 0.0711 m, forward 0.0946 m/s,
-  lateral 0.1192 m/s, yaw 0.2141 rad/s, left/right 0.2235/0.1546 rad/s.
-  Lateral mean velocity falls from 0.0399 m/s at model 499 to 0.0008 at 2000.
-  The improved error is collapse to standing, NOT learned lateral motion.
-- Reward diagnosis `/tmp/adaptive-lateral-pilot/reward-replay.json`: actual
-  weighted total rewards favor the stationary model 2000 (8.480/step) over
-  model 1000 (8.364/step). Re-scoring just linear std at 0.12 reverses this
-  ranking slightly (7.494 vs 7.519). This is a fixed-trajectory hypothesis
-  test, not evidence PPO will learn. Transform the recorded exponential term;
-  post-step velocities differ from the reward's pre-forward physics state.
-- Sampling confound: lateral overrides turn/standing. Effective turn is 12%
-  instead of 15%; standing is 68% of its configured fraction. Do not claim an
-  isolated lateral exposure effect. Disabling lateral preserves old command
-  tensors and Torch RNG exactly in the 200k-draw CPU audit.
-- Independent paired push replay `/tmp/adaptive-push-paired/v3/` used two
-  processes with identical reset and pre-push traces. Applying the sampled kick
-  left 0.0671 m endpoint offset while applying zero kick left 0.00258 m; both
-  final local speeds were about 0.001 m/s. Endpoint drift therefore measures a
-  persistent post-kick displacement and does not imply continued idle motion.
-- All-static trains CoM at +/-3 mm; final evaluator uses +/-15/10 mm.
-  Initial-distribution model-1000 diagnostic also failed, but used a different
-  evaluation seed, so it is not a paired CoM intervention.
-- Zero endpoint drift includes push displacement: fixed23 recovers to final
-  1-second mean speed 0.0010 m/s, local displacement 0.745 mm, but retains
-  67 mm spawn-relative offset. Actor has no absolute position input. The old
-  no-push test changed RNG consumption; it is not a clean causal comparison.
-  Preserve thresholds; future push diagnostics must retain RNG draws/timers.
-- Push pilot report `/tmp/adaptive-push-pilot/native-499/` is valid but still
-  fails all-static usability; the total-2000 continuation is in progress.
+## Proof and remaining gates
 
-## Proven foundations and remaining gates
+- Full adaptive/config suite: 207 passed, including cohort report, explicit
+  migration, and runner wiring contracts. The fresh real native cohort smoke
+  and the existing trace validator both passed; its policy score is negative
+  evidence, not a usability result.
+  Ruff retains
+  the 17 pre-existing findings in mdp.py. No new findings in the changed slice.
+- Transition-enabled smoke64/5 passed using TensorBoard in `/tmp`; the new
+  cohort-size configuration also passed a fresh 64-env/5-iteration smoke. Actor 61D,
+  action 14D, no NaN terminations. Repo `logs/rsl_rl` is not writable; W&B has no
+  local key. Neither prevents local training/evaluation.
+- `runtime-slew-proof.json`: 26/64 sampled transitions reached their exact target
+  naturally in 52–96 environment steps; actor command parity held for 110 steps.
+  This proves the ramp executes, not that the policy is usable.
+- Still required: retained six-bucket native gate, fresh held-out reset/DR proof,
+  rollout/video inspection, normalized ONNX and CPU deployment rehearsal,
+  three independent training seeds 17/23/47, then matched-budget comparison.
+- Fresh-sync portability remains unproven; current campaigns use the validated
+  local venv and explicit `PYTHONPATH` pointing to immutable source.
 
-- `e22532e` repairs curriculum ownership: preserve every non-owned canonical
-  standing/action-rate/pose schedule. Canonical task factory is unchanged.
-- Native schema-v2 evaluator uses training MJLab/BAM M6, normalizer, 61D actor,
-  14D action, terminal traces, live EventManager reference ranges, and fresh
-  environment per bucket. `/tmp/adaptive-bam-reset-probe/compute.json` confirms
-  stale qfrc and reward peak-height carryover in the old reused-env evaluator.
-- `/tmp/adaptive-native-isolated-replay/{a,b,c,parity}`: same-seed CUDA traces
-  exact across 19 fields/six buckets; different seeds change consumed state;
-  ONNX action parity max error about 5.37e-7. Gate/held-out seeds disjoint.
-- `/tmp/adaptive-native-isolated-ladder/`: 16 fixed/static seed17/23 checkpoint
-  reports at 500/1000/2000/3999 all valid, every lower-tail score zero.
-  Old native-v1 pass claims/calibration/manifest are superseded.
-- Calibration and bound manifest remain incomplete. Never fabricate thresholds
-  from quantiles of failing policies. Product pass requires score >=0.8, i.e.
-  linear MAE <=0.024 m/s, angular <=0.12 rad/s, drift <=0.012 m, tilt <=7deg.
-- CPU/XML position-actuator battery is a separate transfer rehearsal; its
-  failure does not establish native learning failure. Export via scripts/export.py.
+## Boundaries and verification inventory
 
-## Verification
+Preserve canonical Velocity, 61D/14D ABI, BAM M6, unfiltered actions, reward signs,
+0.5 s signed-EMA metrics, product thresholds and exact-zero/nominal anchors.
+Leave IsaacLab, uv.lock, generated files and other processes untouched.
+Advisor, stronger teachers, generalist, IsaacLab migration and hardware deployment
+remain parked. The rejected 20% final-CoM rehearsal remains opt-in, not a default.
 
-Prior focused adaptive suite: 74 passed. Latest tracking/config/resume/native
-checks: 38 passed; lateral sampler behavioral checks: 2 passed. Both diagnostic
-64-env/5-update smokes passed (61D/14D, no NaN). Tracking smoke additionally
-exported through scripts/export.py to `/tmp/adaptive-tracking-smoke.onnx` with
-`/tmp/adaptive-tracking-smoke-golden.npz`. Focused config/tests Ruff and diff
-checks passed; full mdp.py/__init__.py Ruff has existing baseline violations.
-Stage only owned changes; shared worktree contains external edits.
+Tests: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest pytest -q
+ tests/test_adaptive_*.py tests/test_mjlab_adaptive_velocity_config.py`.
+Campaign: `scripts/run_adaptive_campaign_job.py --branch lateral-drive --seed 17
+--output <fresh-dir> --iterations <cumulative-updates> --resume <exact-checkpoint>
+--num-envs 4096 --gate-interval 250 --gate-cohort-size 3`. Use a read-only source
+snapshot and source manifest. Rehearsal/transition settings inherit the
+checkpoint unless explicitly overridden; frozen evaluators disable acquisition
+aids.

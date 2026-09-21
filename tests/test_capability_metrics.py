@@ -1,4 +1,14 @@
-from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report, resolve_enabled_axes
+import math
+import pytest
+
+from mjlab_microduck.evaluation.capability import (
+    BUCKETS,
+    DEFAULT_THRESHOLDS,
+    TRACKING_METRIC_SIGNED_EMA,
+    build_capability_report,
+    resolve_enabled_axes,
+    tracking_error_metrics,
+)
 
 META = {
     "task_id": "x", "source_sha": "s", "evaluator_config_sha256": "c",
@@ -20,6 +30,18 @@ def _raw(error=0.001, angular=0.001, drift=0.001):
     }
 
 
+def _signed_raw(error=0.001, angular=0.001, drift=0.001, samplewise=0.001):
+    raw = _raw(error=error, angular=angular, drift=drift)
+    for bucket in BUCKETS:
+        if bucket == "zero":
+            continue
+        if bucket in ("yaw", "turn-left", "turn-right"):
+            raw[bucket]["angular_tracking_error_samplewise_rad_s"] = samplewise
+        else:
+            raw[bucket]["tracking_error_samplewise_m_s"] = samplewise
+    return raw
+
+
 def test_good_and_upright_but_stationary_reports_differ():
     good = build_capability_report(_raw(), metadata=META)
     bad_raw = _raw()
@@ -36,6 +58,63 @@ def test_wrong_turn_is_not_hidden_by_upright():
     report = build_capability_report(raw, metadata=META)
     assert report.payload["buckets"]["turn-left"]["score"] < 0.1
     assert not report.payload["aggregate"]["passed"]
+
+
+def test_signed_ema_metric_keeps_gait_ripple_but_caps_instantaneous_excursion():
+    actual = [0.12 + 0.20 * math.sin(2.0 * math.pi * 2.0 * step * 0.02) for step in range(500)]
+    samplewise, signed_ema = tracking_error_metrics(actual, [0.12] * len(actual))
+    assert samplewise > 0.12
+    assert signed_ema < 0.024
+
+    report = build_capability_report(
+        _signed_raw(error=signed_ema, samplewise=samplewise),
+        metadata=META,
+        evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA},
+    )
+    assert report.payload["buckets"]["forward"]["passed"]
+
+
+def test_signed_ema_metric_rejects_violent_ripple_and_dc_miss():
+    violent = build_capability_report(
+        _signed_raw(error=0.01, samplewise=0.30),
+        metadata=META,
+        evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA},
+    )
+    assert not violent.payload["buckets"]["forward"]["passed"]
+    dc_miss = build_capability_report(
+        _signed_raw(error=0.13, samplewise=0.14),
+        metadata=META,
+        evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA},
+    )
+    assert not dc_miss.payload["buckets"]["forward"]["passed"]
+
+
+@pytest.mark.parametrize("thresholds", [None, DEFAULT_THRESHOLDS])
+def test_stability_caps_never_replace_product_tracking_thresholds(thresholds):
+    config = {"tracking_metric": TRACKING_METRIC_SIGNED_EMA}
+    if thresholds is not None:
+        config["thresholds"] = thresholds
+    # Both sides of the contract must be independent of whether the caller
+    # explicitly supplies the product thresholds.
+    biased = build_capability_report(
+        _signed_raw(error=0.04, samplewise=0.04), metadata=META, evaluator_config=config
+    )
+    assert not biased.payload["buckets"]["forward"]["passed"]
+    ripple = build_capability_report(
+        _signed_raw(error=0.01, samplewise=0.20), metadata=META, evaluator_config=config
+    )
+    assert ripple.payload["buckets"]["forward"]["passed"]
+    assert ripple.payload["evaluator_config"]["thresholds"] == DEFAULT_THRESHOLDS
+
+
+def test_report_uses_the_declared_samplewise_cap():
+    report = build_capability_report(
+        _signed_raw(error=0.01, samplewise=0.20), metadata=META,
+        evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA,
+                          "instantaneous_caps": {"tracking_m_s": 0.18,
+                                                 "angular_tracking_rad_s": 0.6}},
+    )
+    assert not report.payload["buckets"]["forward"]["passed"]
 
 
 def test_missing_or_nonfinite_data_is_invalid():

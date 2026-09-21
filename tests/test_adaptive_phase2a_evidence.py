@@ -27,8 +27,8 @@ def _report(root, *, steps=300, task=manifest.FIXED_TASK, parity=False):
     root.mkdir(parents=True, exist_ok=True)
     checkpoint = root / "model.pt"
     checkpoint.write_bytes(b"checkpoint")
-    config = {"name": "native_mjlab_bam_v2", "environment_profile": "training", "steps": steps, "commands": manifest.CANONICAL_COMMANDS, "bucket_isolation": "fresh_environment"}
-    raw = {bucket: {"survival_fraction": 1.0, "tilt_p95_rad": 0.0, "zero_drift_m": 0.0, "tracking_error_m_s": 0.0, "angular_tracking_error_rad_s": 0.0, "episode_length_mean": steps * 0.02, "fall_rate": 0.0, "action_magnitude_mean": 0.0} for bucket in BUCKETS}
+    config = {"name": "native_mjlab_bam_v2", "environment_profile": "training", "steps": steps, "commands": manifest.CANONICAL_COMMANDS, "bucket_isolation": "fresh_environment", "tracking_metric": "signed_ema_v1", "tracking_metric_tau_s": 0.5, "zero_mode": "nominal"}
+    raw = {bucket: {"survival_fraction": 1.0, "tilt_p95_rad": 0.0, "zero_drift_m": 0.0, "tracking_error_m_s": 0.0, "tracking_error_samplewise_m_s": 0.0, "angular_tracking_error_rad_s": 0.0, "angular_tracking_error_samplewise_rad_s": 0.0, "episode_length_mean": steps * 0.02, "fall_rate": 0.0, "action_magnitude_mean": 0.0} for bucket in BUCKETS}
     report = build_capability_report(raw, metadata={"task_id": task, "source_sha": "test-source", "evaluator_config_sha256": "pending", "checkpoint": str(checkpoint), "checkpoint_sha256": manifest.sha256(checkpoint), "policy_format": "native_mjlab_bam_pt", "seed_set_id": "test", "evaluation_seed": 777, "generated_at": "now"}, evaluator_config=config).payload
     report["metadata"]["evaluator_config_sha256"] = canonical_sha256(report["evaluator_config"])
     cases, seed_cases = [], []

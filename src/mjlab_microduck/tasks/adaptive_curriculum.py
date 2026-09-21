@@ -8,10 +8,361 @@ then apply the returned one-stage transition to live manager term configs.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Mapping
+import math
+from typing import Mapping, Sequence
 from enum import StrEnum
 
+from mjlab_microduck.evaluation.capability import BUCKETS
 
+
+class CommandExposure:
+    """Keep learned commands alive while concentrating on one frontier.
+
+    Twenty percent of resamples retain the nominal continuous command
+    distribution.  The zero-command recovery anchor keeps twenty percent;
+    each directional bucket keeps eight percent, and the current frontier
+    receives the remaining twenty percent.  A window moves one quarter of the
+    way to the new target, so a focus switch cannot erase a previously learned
+    skill in one update.
+
+    ``zero`` is deliberately an anchor rather than a frontier: the recovery
+    and idle behavior must remain present while the controller acquires the
+    directional buckets in ``frontier_order``.
+    """
+
+    version = 2
+    nominal_probability = 0.20
+    bucket_floor = 0.08
+    zero_floor = 0.20
+    focus_extra = 0.20
+    update_rate = 0.25
+    # Match CapabilityGate's upper threshold.  A bucket scoring 0.5 is making
+    # measurable progress, but it is not mastered: handing focus away there
+    # strands near-pass capabilities below the product acceptance boundary.
+    focus_mastery = 0.80
+    frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
+
+    def __init__(
+        self,
+        initial_focus: str | None = None,
+        frontier_order: tuple[str, ...] | None = None,
+        stall_windows: int = 0,
+        stall_improvement: float = 0.05,
+    ) -> None:
+        if stall_windows < 0:
+            raise ValueError("stall_windows cannot be negative")
+        if not math.isfinite(stall_improvement) or stall_improvement < 0.0:
+            raise ValueError("stall_improvement must be finite and nonnegative")
+        self.frontier_order = self._validate_frontier_order(frontier_order)
+        self.stall_windows = int(stall_windows)
+        self.stall_improvement = float(stall_improvement)
+        self.focus_bucket = self.frontier_order[0] if initial_focus is None else initial_focus
+        if self.focus_bucket not in self.frontier_order:
+            raise ValueError(f"unsupported frontier bucket: {self.focus_bucket}")
+        self.probabilities = self._target(self.focus_bucket)
+        self.windows = 0
+        self.focus_best_score: float | None = None
+        self.focus_stall_count = 0
+        self.retention_repairs = 0
+        self.last_repair_buckets: tuple[str, ...] = ()
+
+    @classmethod
+    def _validate_frontier_order(
+        cls, frontier_order: tuple[str, ...] | None
+    ) -> tuple[str, ...]:
+        order = cls.frontier_order if frontier_order is None else tuple(frontier_order)
+        if set(order) != set(cls.frontier_order) or len(order) != len(cls.frontier_order):
+            raise ValueError("frontier order must contain each directional bucket exactly once")
+        return order
+
+    @classmethod
+    def _target(cls, focus: str) -> dict[str, float]:
+        if focus not in cls.frontier_order:
+            raise ValueError(f"unsupported frontier bucket: {focus}")
+        target = {name: cls.bucket_floor for name in BUCKETS}
+        target["zero"] = cls.zero_floor
+        target[focus] += cls.focus_extra
+        return target
+
+    def update(self, metrics: Mapping[str, float]) -> None:
+        values = {name: float(metrics[name]) for name in BUCKETS}
+        if any(not math.isfinite(value) or not 0 <= value <= 1 for value in values.values()):
+            raise ValueError("exposure scores must be finite and in [0, 1]")
+        # Advance only after the first unmastered directional bucket.  This
+        # makes a frontier switch deterministic and lets an earlier bucket
+        # reclaim focus if a later stage exposes a regression.
+        current = self.focus_bucket
+        # Once bounded anti-stall is enabled, keep an unmastered focus long
+        # enough to learn it. Otherwise the normal frontier scan would reclaim
+        # focus for the first unmastered bucket immediately after a stall
+        # rotation, giving the newly selected bucket only one window.
+        if self.stall_windows and current in self.frontier_order and values[current] < self.focus_mastery:
+            focus = current
+        else:
+            focus = self.frontier_order[-1]
+            for name in self.frontier_order:
+                if values[name] < self.focus_mastery:
+                    focus = name
+                    break
+        if self.stall_windows and current in self.frontier_order:
+            current_score = values[current]
+            if focus != current or current_score >= self.focus_mastery:
+                self.focus_best_score = None
+                self.focus_stall_count = 0
+            elif self.focus_best_score is None or current_score >= self.focus_best_score + self.stall_improvement:
+                self.focus_best_score = current_score
+                self.focus_stall_count = 0
+            else:
+                self.focus_stall_count += 1
+                if self.focus_stall_count >= self.stall_windows:
+                    alternatives = [
+                        name for name in self.frontier_order
+                        if name != current and values[name] < self.focus_mastery
+                    ]
+                    if alternatives:
+                        focus = min(
+                            alternatives,
+                            key=lambda name: (values[name], self.frontier_order.index(name)),
+                        )
+                    self.focus_best_score = values[focus]
+                    self.focus_stall_count = 0
+        self.focus_bucket = focus
+        target = self._target(focus)
+        for name in BUCKETS:
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
+        self.windows += 1
+
+    def repair(
+        self,
+        buckets: Sequence[str],
+        metrics: Mapping[str, float],
+        feedback: Mapping[str, object] | None = None,
+    ) -> tuple[str, ...]:
+        """Reallocate one bounded exposure slice after a retention failure.
+
+        A rollback restores the last policy that mastered the protected
+        buckets.  Replaying the same command mixture after that rollback is
+        not adaptive: it repeatedly exposes the same failure.  This method
+        keeps the zero and nominal anchors and distributes the focus slice
+        across the buckets that regressed.  When several buckets regressed,
+        command-conditioned reward mass breaks ties toward the bucket with the
+        largest normalized tracking burden.
+        """
+        candidates = tuple(dict.fromkeys(str(name) for name in buckets))
+        if not candidates:
+            raise ValueError("retention repair requires at least one bucket")
+        if any(name not in self.frontier_order for name in candidates):
+            raise ValueError("retention repair accepts directional buckets only")
+        values = {name: float(metrics[name]) for name in candidates}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("retention repair scores must be finite and in [0, 1]")
+
+        # Score a failed bucket by capability deficit, then by the measured
+        # command-aligned penalty mass.  The latter is deliberately bounded so
+        # a noisy reward term cannot erase the product gate's direct evidence.
+        burden: dict[str, float] = dict.fromkeys(candidates, 0.0)
+        if feedback is not None:
+            counts = feedback.get("sample_count")
+            signed = feedback.get("weighted_reward_mass")
+            if isinstance(counts, Mapping) and isinstance(signed, Mapping):
+                for name in candidates:
+                    count = float(counts.get(name, 0.0))
+                    mass = signed.get(name)
+                    if count <= 0.0 or not isinstance(mass, Mapping):
+                        continue
+                    penalty = 0.0
+                    positive = 0.0
+                    for term in ("linear_velocity_error_l1", "yaw_velocity_error_l1"):
+                        value = mass.get(term)
+                        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                            penalty += max(0.0, -float(value))
+                    for term in ("track_linear_velocity", "track_angular_velocity", "upright"):
+                        value = mass.get(term)
+                        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                            positive += max(0.0, float(value))
+                    # Mass is dt-integrated.  Rates make windows comparable;
+                    # cap the ratio to keep this a tie-breaker, not a new gate.
+                    burden[name] = min(2.0, (penalty / max(count * 0.02, 1e-6)) / max(positive / max(count * 0.02, 1e-6), 1e-3))
+
+        ordered = tuple(
+            sorted(
+                candidates,
+                key=lambda name: (-(1.0 - values[name]) * (1.0 + burden[name]), self.frontier_order.index(name)),
+            )
+        )
+        target = {name: self.bucket_floor for name in BUCKETS}
+        target["zero"] = self.zero_floor
+        share = self.focus_extra / len(ordered)
+        for name in ordered:
+            target[name] += share
+        for name in BUCKETS:
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
+        self.focus_bucket = ordered[0]
+        self.focus_best_score = values[self.focus_bucket]
+        self.focus_stall_count = 0
+        self.windows += 1
+        self.retention_repairs += 1
+        self.last_repair_buckets = ordered
+        return ordered
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "probabilities": self.probabilities.copy(),
+            "windows": self.windows,
+            "focus_bucket": self.focus_bucket,
+            "frontier_order": list(self.frontier_order),
+            "stall_windows": self.stall_windows,
+            "stall_improvement": self.stall_improvement,
+            "focus_best_score": self.focus_best_score,
+            "focus_stall_count": self.focus_stall_count,
+            "retention_repairs": self.retention_repairs,
+            "last_repair_buckets": list(self.last_repair_buckets),
+        }
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") != self.version:
+            raise ValueError("unsupported command exposure version")
+        probabilities = payload.get("probabilities", {})
+        if not isinstance(probabilities, Mapping) or set(probabilities) != set(BUCKETS):
+            raise ValueError("command exposure bucket mismatch")
+        values = {name: float(probabilities[name]) for name in BUCKETS}
+        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= self.zero_floor + self.focus_extra
+                for value in values.values())
+                or not math.isclose(sum(values.values()), 1.0 - self.nominal_probability, abs_tol=1e-9)):
+            raise ValueError("invalid command exposure probabilities")
+        windows = payload.get("windows")
+        if not isinstance(windows, int) or windows < 0:
+            raise ValueError("invalid command exposure window count")
+        focus = payload.get("focus_bucket")
+        if focus not in self.frontier_order:
+            raise ValueError("invalid frontier focus bucket")
+        saved_order = payload.get("frontier_order")
+        if saved_order is not None and tuple(saved_order) != self.frontier_order:
+            raise ValueError("adaptive checkpoint frontier order mismatch")
+        saved_stall_windows = payload.get("stall_windows", self.stall_windows)
+        if not isinstance(saved_stall_windows, int) or saved_stall_windows < 0:
+            raise ValueError("invalid stall window count")
+        if saved_stall_windows != self.stall_windows:
+            raise ValueError("adaptive checkpoint stall window mismatch")
+        saved_improvement = float(payload.get("stall_improvement", self.stall_improvement))
+        if not math.isfinite(saved_improvement) or saved_improvement < 0.0:
+            raise ValueError("invalid stall improvement")
+        if not math.isclose(saved_improvement, self.stall_improvement, abs_tol=1e-12):
+            raise ValueError("adaptive checkpoint stall improvement mismatch")
+        best_score = payload.get("focus_best_score")
+        if best_score is not None and (not math.isfinite(float(best_score)) or not 0.0 <= float(best_score) <= 1.0):
+            raise ValueError("invalid focus best score")
+        stall_count = payload.get("focus_stall_count", 0)
+        if not isinstance(stall_count, int) or stall_count < 0:
+            raise ValueError("invalid focus stall count")
+        self.probabilities = values
+        self.windows = windows
+        self.focus_bucket = str(focus)
+        self.focus_best_score = None if best_score is None else float(best_score)
+        self.focus_stall_count = stall_count
+        repairs = payload.get("retention_repairs", 0)
+        if not isinstance(repairs, int) or repairs < 0:
+            raise ValueError("invalid retention repair count")
+        repair_buckets = payload.get("last_repair_buckets", ())
+        if not isinstance(repair_buckets, (list, tuple)) or any(
+            str(name) not in self.frontier_order for name in repair_buckets
+        ):
+            raise ValueError("invalid retention repair buckets")
+        self.retention_repairs = repairs
+        self.last_repair_buckets = tuple(str(name) for name in repair_buckets)
+
+    def apply(self, env: object) -> None:
+        # CommandManager owns a deepcopy. The live term consumes these values
+        # on its next scheduled resample; current episodes are not interrupted.
+        term = env.command_manager.get_term("twist")
+        term.cfg.bucket_probabilities = tuple(self.probabilities[name] for name in BUCKETS)
+
+
+class TransitionExposure:
+    """Bounded acquisition exposure for commands that need a moving start.
+
+    The native diagnostic showed that a policy can turn after it is already
+    walking but often does not initiate a yaw command from rest. This state
+    machine adds a small, reversible fraction of forward-to-turn transitions;
+    it never changes the six evaluator buckets or their command semantics.
+    """
+
+    version = 1
+    yaw_buckets = ("yaw", "turn-left", "turn-right")
+    mastery_threshold = 0.80
+    release_threshold = 0.88
+    increase_step = 0.05
+    release_step = 0.025
+    maximum_probability = 0.40
+
+    def __init__(self, initial_probability: float = 0.0) -> None:
+        value = float(initial_probability)
+        if not math.isfinite(value) or not 0.0 <= value <= self.maximum_probability:
+            raise ValueError("transition probability must be finite and in [0, 0.40]")
+        self.probability = value
+        self.windows = 0
+        self.repairs = 0
+        self.last_reason = "initial"
+
+    def update(self, metrics: Mapping[str, float]) -> None:
+        values = {name: float(metrics[name]) for name in self.yaw_buckets}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("transition exposure scores must be finite and in [0, 1]")
+        frontier = min(values.values())
+        if frontier < self.mastery_threshold:
+            self.probability = min(self.maximum_probability, self.probability + self.increase_step)
+            self.last_reason = "yaw_frontier_below_mastery"
+        elif frontier >= self.release_threshold:
+            self.probability = max(0.0, self.probability - self.release_step)
+            self.last_reason = "yaw_frontier_consolidated"
+        else:
+            self.last_reason = "yaw_frontier_hold"
+        self.windows += 1
+
+    def repair(self, buckets: Sequence[str]) -> bool:
+        """Increase transition coverage once after a yaw/turn retention failure."""
+        affected = tuple(str(name) for name in buckets if str(name) in self.yaw_buckets)
+        if not affected:
+            return False
+        before = self.probability
+        self.probability = min(self.maximum_probability, self.probability + self.increase_step)
+        self.repairs += 1
+        self.last_reason = "retention_repair:" + ",".join(affected)
+        return self.probability > before
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "probability": self.probability,
+            "windows": self.windows,
+            "repairs": self.repairs,
+            "last_reason": self.last_reason,
+        }
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") != self.version:
+            raise ValueError("unsupported transition exposure version")
+        probability = float(payload.get("probability", -1.0))
+        if not math.isfinite(probability) or not 0.0 <= probability <= self.maximum_probability:
+            raise ValueError("invalid transition exposure probability")
+        windows = payload.get("windows", 0)
+        repairs = payload.get("repairs", 0)
+        if not isinstance(windows, int) or windows < 0 or not isinstance(repairs, int) or repairs < 0:
+            raise ValueError("invalid transition exposure counters")
+        reason = payload.get("last_reason", "initial")
+        if not isinstance(reason, str):
+            raise ValueError("invalid transition exposure reason")
+        self.probability = probability
+        self.windows = windows
+        self.repairs = repairs
+        self.last_reason = reason
+
+    def apply(self, env: object) -> None:
+        term = env.command_manager.get_term("twist")
+        if not hasattr(term.cfg, "transition_probability"):
+            raise ValueError("transition exposure requires AdaptiveVelocityCommandCfg")
+        term.cfg.transition_probability = self.probability
 
 @dataclass(frozen=True)
 class AxisConfig:
@@ -134,6 +485,17 @@ class CapabilityGate:
         decision = self.decide(step, metrics, checkpoint=checkpoint, seed=seed)
         return decision.transition
 
+    def preservation_failures(self, metrics: Mapping[str, float]) -> tuple[str, ...]:
+        """Return mastered buckets that violate the rollback tolerance."""
+        threshold = max(axis.upper_threshold for axis in self.axes.values())
+        failures = []
+        for name in self.critical_buckets:
+            best = self.best_metrics.get(name)
+            value = float(metrics[name])
+            if best is not None and best >= threshold and value < best * (1.0 - self.preservation_tolerance):
+                failures.append(name)
+        return tuple(failures)
+
     def decide(
         self,
         step: int,
@@ -150,6 +512,9 @@ class CapabilityGate:
             raise ValueError("capability metrics must be finite")
         score = min(values.values())
         previous_best = self.best_metrics.copy()
+        if self.preservation_failures(values):
+            # Regressions below the pass threshold must not evade preservation.
+            return GateDecision(GateOutcome.PRESERVATION_FAILURE, reason="mastered bucket regressed")
         for name, value in values.items():
             self.best_metrics[name] = max(self.best_metrics.get(name, value), value)
 

@@ -1,3 +1,5 @@
+import pytest
+
 from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckRlCfg,
     AdaptiveMicroduckComRlCfg,
@@ -7,7 +9,10 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckActionRateRlCfg,
     AdaptiveMicroduckLateralRlCfg,
     AdaptiveMicroduckTrackingRlCfg,
+    AdaptiveMicroduckStrictificationRlCfg,
     AdaptiveMicroduckPushRlCfg,
+    AdaptiveMicroduckAcquisitionFeedbackRlCfg,
+    AdaptiveMicroduckLateralDriveRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -55,7 +60,9 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckTrackingRlCfg.experiment_name,
         AdaptiveMicroduckPushRlCfg.experiment_name,
     }
-    assert len(names) == 8
+    names.add(AdaptiveMicroduckAcquisitionFeedbackRlCfg.experiment_name)
+    names.add(AdaptiveMicroduckLateralDriveRlCfg.experiment_name)
+    assert len(names) == 10
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -111,23 +118,105 @@ def test_tracking_reward_separates_stationary_from_accurate_motion() -> None:
 
 
 def test_acquisition_diagnostic_freezes_other_wall_clock_curricula() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
     cfg = make_microduck_adaptive_velocity_env_cfg(
         axis_mode="all_static", diagnostic_mode="acquisition"
     )
     assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
     assert cfg.commands["twist"].rel_lateral_envs == 0.20
-    assert list(cfg.curriculum) == ["tracking_std"]
+    assert set(cfg.curriculum) == set(base.curriculum) | {"tracking_std"}
+    assert {name: cfg.curriculum[name] for name in base.curriculum} == base.curriculum
     assert cfg.curriculum["tracking_std"].params["std_stages"][-1]["std"] == 0.12
     assert cfg.rewards["track_linear_velocity"].params["std"] ** 2 > 0.099
 
 
 def test_acquisition_lateral_preserves_anchor_buckets() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
     cfg = make_microduck_adaptive_velocity_env_cfg(
         axis_mode="all_static", diagnostic_mode="acquisition_lateral"
     )
     assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
     assert cfg.commands["twist"].rel_lateral_envs == 0.50
-    assert list(cfg.curriculum) == ["tracking_std"]
+    assert set(cfg.curriculum) == set(base.curriculum) | {"tracking_std"}
+    assert {name: cfg.curriculum[name] for name in base.curriculum} == base.curriculum
+
+
+def test_acquisition_feedback_combines_staged_tracking_with_adaptive_exposure() -> None:
+    from mjlab.tasks.registry import load_env_cfg
+
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck")
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck"
+    assert cfg.adaptive_axis_mode == "composed"
+    assert cfg.adaptive_command_exposure is True
+    assert cfg.adaptive_initial_focus == "lateral"
+    assert cfg.adaptive_frontier_order[:2] == ("lateral", "forward")
+    assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"} | {"tracking_std"}
+    assert {name: cfg.curriculum[name] for name in base.curriculum if name != "standing_envs"} == {
+        name: base.curriculum[name] for name in base.curriculum if name != "standing_envs"
+    }
+    assert cfg.curriculum["tracking_std"].params["std_stages"][1]["std"] == 0.22
+    assert {"linear_velocity_error_l1", "yaw_velocity_error_l1"} <= set(cfg.rewards)
+    assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
+    assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
+    from mjlab.tasks.registry import load_env_cfg
+
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck")
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck"
+    assert cfg.adaptive_axis_mode == "composed"
+    assert cfg.adaptive_command_exposure is True
+    assert cfg.adaptive_initial_focus == "lateral"
+    assert cfg.adaptive_frontier_order[0] == "lateral"
+    assert cfg.rewards["linear_velocity_error_l1"].weight == 2.0
+    assert cfg.rewards["yaw_velocity_error_l1"].weight == 1.0
+    assert cfg.rewards["linear_velocity_error_l1"].params["yaw_deadband"] == 0.05
+    assert cfg.adaptive_frontier_stall_windows == 4
+    assert cfg.adaptive_frontier_stall_improvement == 0.05
+    assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"} | {"tracking_std"}
+    assert {name: cfg.curriculum[name] for name in base.curriculum if name != "standing_envs"} == {
+        name: base.curriculum[name] for name in base.curriculum if name != "standing_envs"
+    }
+    assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
+    assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_frontier_stall_window_override_is_explicit_and_bounded(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS", "12")
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        diagnostic_mode="lateral_drive", command_exposure=True
+    )
+    assert cfg.adaptive_frontier_stall_windows == 12
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS", "-1")
+    with pytest.raises(ValueError, match="nonnegative"):
+        make_microduck_adaptive_velocity_env_cfg(
+            diagnostic_mode="lateral_drive", command_exposure=True
+        )
+
+
+def test_strictification_bootstrap_is_bounded_and_restores_strict_profile() -> None:
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="all_static", diagnostic_mode="strictification"
+    )
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-Strictification-MicroDuck"
+    assert cfg.commands["twist"].rel_forward_envs == 0.0
+    assert cfg.commands["twist"].rel_lateral_envs == 0.25
+    assert cfg.rewards["track_linear_velocity"].weight == 4.0
+    assert cfg.rewards["track_angular_velocity"].weight == 6.0
+    assert cfg.rewards["pose"].weight == 0.5
+    assert cfg.rewards["air_time"].weight == 1.0
+    assert cfg.rewards["action_rate_l2"].weight == -0.1
+    assert cfg.terminations["root_height"].params["min_height"] == 0.0
+    stages = cfg.curriculum["strictification_profile"].params["profile_stages"]
+    assert stages[0]["rel_lateral_envs"] == 0.25
+    assert stages[1]["step"] == 500 * 24
+    assert stages[-1]["action_rate_l2"] == -0.6
+    assert AdaptiveMicroduckStrictificationRlCfg.experiment_name == (
+        "velocity_adaptive_strictification_diagnostic"
+    )
 
 
 def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
@@ -138,3 +227,66 @@ def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
     assert push.events["push_robot"].params["velocity_range"] == {"x": (-0.3, 0.3), "y": (-0.3, 0.3)}
     assert push.rewards == base.rewards
     assert push.commands == base.commands
+
+
+def test_feedback_sampler_has_single_owner_and_preserves_policy_contract():
+    from mjlab.tasks.registry import load_env_cfg
+    from mjlab_microduck.tasks.mdp import AdaptiveVelocityCommandCfg
+
+    base = make_microduck_adaptive_velocity_env_cfg()
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck")
+    assert cfg.adaptive_command_exposure
+    assert cfg.adaptive_axis_mode == "composed"
+    assert isinstance(cfg.commands["twist"], AdaptiveVelocityCommandCfg)
+    assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"}
+    assert cfg.observations == base.observations
+    assert cfg.actions == base.actions
+    assert set(cfg.rewards) == set(base.rewards) | {
+        "linear_velocity_error_l1", "yaw_velocity_error_l1"
+    }
+    assert {name: cfg.rewards[name] for name in base.rewards} == base.rewards
+    assert cfg.events == base.events
+    for name in ("head_pose", "body_pose"):
+        assert cfg.commands[name] == base.commands[name]
+    assert cfg.commands["twist"].ranges == base.commands["twist"].ranges
+
+
+def test_legacy_cohort_migration_requires_explicit_launch_flag(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE", "3")
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", raising=False)
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_evaluation_cohort_size == 3
+    assert cfg.adaptive_allow_legacy_cohort_migration is False
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", "1")
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_allow_legacy_cohort_migration is True
+
+
+def test_sensor_corner_coverage_is_opt_in_and_preserves_fixed_recipe(monkeypatch) -> None:
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", raising=False)
+    base = make_microduck_adaptive_velocity_env_cfg()
+    assert base.adaptive_sensor_corner_fraction == 0.0
+    assert "adaptive_sensor_corners" not in base.events
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", "0.25")
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_sensor_corner_fraction == 0.25
+    assert cfg.events["adaptive_sensor_corners"].mode == "startup"
+    assert cfg.events["adaptive_sensor_corners"].params["fraction"] == 0.25
+    assert cfg.observations == base.observations
+    assert cfg.actions == base.actions
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", "1.1")
+    with pytest.raises(ValueError, match="sensor corner fraction"):
+        make_microduck_adaptive_velocity_env_cfg()
+
+
+def test_registered_task_ids_match_checkpoint_provenance():
+    from mjlab.tasks.registry import load_env_cfg
+    from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES
+
+    for axis, diagnostic, feedback, _ in ADAPTIVE_RECIPES:
+        cfg = make_microduck_adaptive_velocity_env_cfg(
+            axis_mode=axis, diagnostic_mode=diagnostic, command_exposure=feedback
+        )
+        assert load_env_cfg(cfg.task_id).task_id == cfg.task_id

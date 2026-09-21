@@ -55,17 +55,7 @@ from .microduck_velocity_env_cfg import (
 )
 from .microduck_adaptive_velocity_env_cfg import (
     make_microduck_adaptive_velocity_env_cfg,
-    AdaptiveMicroduckRlCfg,
-    AdaptiveMicroduckStaticRlCfg,
-    AdaptiveMicroduckComRlCfg,
-    AdaptiveMicroduckHeadComRlCfg,
-    AdaptiveMicroduckStandingRlCfg,
-    AdaptiveMicroduckActionRateRlCfg,
-    AdaptiveMicroduckLateralRlCfg,
-    AdaptiveMicroduckTrackingRlCfg,
-    AdaptiveMicroduckAcquisitionRlCfg,
-    AdaptiveMicroduckAcquisitionLateralRlCfg,
-    AdaptiveMicroduckPushRlCfg,
+    ADAPTIVE_RECIPES,
 )
 from .adaptive_runner import AdaptiveMicroduckOnPolicyRunner
 from .microduck_standup_env_cfg import (
@@ -149,85 +139,16 @@ register_mjlab_task(
     runner_cls=GeneralistG0HybridRunner,
 )
 
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static"),
-    rl_cfg=AdaptiveMicroduckStaticRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="com"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="com"),
-    rl_cfg=AdaptiveMicroduckComRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-HeadCoM-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="head_com"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="head_com"),
-    rl_cfg=AdaptiveMicroduckHeadComRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Standing-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="standing"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, diagnostic_mode="standing"),
-    rl_cfg=AdaptiveMicroduckStandingRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-ActionRate-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="action_rate"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, diagnostic_mode="action_rate"),
-    rl_cfg=AdaptiveMicroduckActionRateRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Lateral-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, diagnostic_mode="lateral"),
-    rl_cfg=AdaptiveMicroduckLateralRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Tracking-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="tracking"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="tracking"),
-    rl_cfg=AdaptiveMicroduckTrackingRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="acquisition"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="acquisition"),
-    rl_cfg=AdaptiveMicroduckAcquisitionRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="acquisition_lateral"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="acquisition_lateral"),
-    rl_cfg=AdaptiveMicroduckAcquisitionLateralRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-Push-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="push"),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, axis_mode="all_static", diagnostic_mode="push"),
-    rl_cfg=AdaptiveMicroduckPushRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
-)
+for _axis_mode, _diagnostic, _feedback, _rl_cfg in ADAPTIVE_RECIPES:
+    _options = dict(axis_mode=_axis_mode, diagnostic_mode=_diagnostic, command_exposure=_feedback)
+    _env_cfg = make_microduck_adaptive_velocity_env_cfg(**_options)
+    register_mjlab_task(
+        task_id=_env_cfg.task_id,
+        env_cfg=_env_cfg,
+        play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, **_options),
+        rl_cfg=_rl_cfg,
+        runner_cls=AdaptiveMicroduckOnPolicyRunner,
+    )
 
 register_mjlab_task(
     task_id="Mjlab-Velocity-Rough-MicroDuck",
@@ -235,14 +156,6 @@ register_mjlab_task(
     play_env_cfg=make_microduck_velocity_env_cfg(play=True, rough=True),
     rl_cfg=MicroduckRlCfg,
     runner_cls=MicroduckOnPolicyRunner,
-)
-
-register_mjlab_task(
-    task_id="Mjlab-Velocity-Flat-Adaptive-MicroDuck",
-    env_cfg=make_microduck_adaptive_velocity_env_cfg(),
-    play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True),
-    rl_cfg=AdaptiveMicroduckRlCfg,
-    runner_cls=AdaptiveMicroduckOnPolicyRunner,
 )
 
 # VelStand — walking + fall recovery + body pose control in one policy.

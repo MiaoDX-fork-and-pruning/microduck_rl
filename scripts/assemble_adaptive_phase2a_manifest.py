@@ -10,7 +10,15 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from mjlab_microduck.evaluation.capability import BUCKETS, CapabilityReport, canonical_sha256
+from mjlab_microduck.evaluation.capability import (
+    BUCKETS,
+    CapabilityReport,
+    DEFAULT_TRACKING_TAU_S,
+    TRACKING_METRIC_SAMPLEWISE,
+    TRACKING_METRIC_SIGNED_EMA,
+    canonical_sha256,
+    tracking_error_metrics,
+)
 
 REQUIRED_ITERS = (500, 1000, 2000, 3999)
 REQUIRED_BRANCHES = ("fixed", "static")
@@ -40,7 +48,15 @@ def _read(path: Path) -> dict:
     return payload
 
 
-def _trace_raw(trace: np.lib.npyio.NpzFile, bucket: str, requested_steps: int, dt: float) -> dict[str, float]:
+def _trace_raw(
+    trace: np.lib.npyio.NpzFile,
+    bucket: str,
+    requested_steps: int,
+    dt: float,
+    *,
+    tracking_metric: str = TRACKING_METRIC_SAMPLEWISE,
+    tracking_tau_s: float = DEFAULT_TRACKING_TAU_S,
+) -> dict[str, float]:
     """Recompute gate inputs from the trace instead of trusting report summaries."""
     n = len(trace["action"])
     terminated = np.asarray(trace["terminated"], dtype=bool)
@@ -70,19 +86,47 @@ def _trace_raw(trace: np.lib.npyio.NpzFile, bucket: str, requested_steps: int, d
         angular = np.asarray(trace["angular_velocity_b"])
         if command.shape != (n, 13) or velocity.shape != (n, 3) or angular.shape != (n, 3):
             raise ValueError("native command/state trace shape mismatch")
+        if tracking_metric not in (TRACKING_METRIC_SAMPLEWISE, TRACKING_METRIC_SIGNED_EMA):
+            raise ValueError("unsupported native tracking metric")
         if bucket in ("forward", "lateral"):
             axis = 0 if bucket == "forward" else 1
-            raw["tracking_error_m_s"] = float(np.abs(command[:, axis] - velocity[:, axis]).mean())
+            samplewise, signed_ema = tracking_error_metrics(
+                velocity[:, axis], command[:, axis], dt=dt, tau_s=tracking_tau_s
+            )
+            raw["tracking_error_m_s"] = float(
+                signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+            )
+            if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+                raw["tracking_error_samplewise_m_s"] = float(samplewise)
         else:
-            raw["angular_tracking_error_rad_s"] = float(np.abs(command[:, 2] - angular[:, 2]).mean())
+            samplewise, signed_ema = tracking_error_metrics(
+                angular[:, 2], command[:, 2], dt=dt, tau_s=tracking_tau_s
+            )
+            raw["angular_tracking_error_rad_s"] = float(
+                signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+            )
+            if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+                raw["angular_tracking_error_samplewise_rad_s"] = float(samplewise)
     return raw
 
 
 def _assert_raw_matches(payload: dict, bucket: str, trace: np.lib.npyio.NpzFile, requested_steps: int) -> None:
-    dt = payload["evaluator_config"].get("step_dt", 0.02)
+    config = payload["evaluator_config"]
+    dt = config.get("step_dt", 0.02)
     if not isinstance(dt, (int, float)) or not np.isfinite(dt) or dt <= 0:
         raise ValueError("invalid native step_dt")
-    expected = _trace_raw(trace, bucket, requested_steps, dt)
+    tracking_metric = config.get("tracking_metric", TRACKING_METRIC_SAMPLEWISE)
+    tracking_tau_s = config.get("tracking_metric_tau_s", DEFAULT_TRACKING_TAU_S)
+    if not isinstance(tracking_tau_s, (int, float)) or not np.isfinite(tracking_tau_s) or tracking_tau_s <= 0:
+        raise ValueError("invalid native tracking metric tau")
+    expected = _trace_raw(
+        trace,
+        bucket,
+        requested_steps,
+        dt,
+        tracking_metric=tracking_metric,
+        tracking_tau_s=float(tracking_tau_s),
+    )
     reported = payload["buckets"][bucket]["raw"]
     for key, value in expected.items():
         if key not in reported or not np.isclose(float(reported[key]), value, rtol=1e-5, atol=1e-6):
@@ -109,6 +153,12 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
         raise ValueError("native evaluation must use the training environment profile")
     if config.get("bucket_isolation") != "fresh_environment":
         raise ValueError("native buckets require fresh_environment isolation")
+    if config.get("tracking_metric") != TRACKING_METRIC_SIGNED_EMA:
+        raise ValueError("native evaluator must use signed_ema_v1 tracking")
+    if config.get("tracking_metric_tau_s") != DEFAULT_TRACKING_TAU_S:
+        raise ValueError("native evaluator tracking tau must be 0.5 s")
+    if config.get("zero_mode") != "nominal":
+        raise ValueError("product native gate requires nominal zero without pushes")
     if canonical_sha256(config.get("commands")) != canonical_sha256(CANONICAL_COMMANDS):
         raise ValueError("native evaluator commands differ from canonical product commands")
     if expected_task is not None and metadata.get("task_id") != expected_task:
@@ -126,12 +176,15 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
     if {case.get("bucket") for case in cases} != set(BUCKETS):
         raise ValueError("native cases must contain each canonical bucket once")
     seed_manifest = payload.get("seed_manifest", {})
-    if seed_manifest.get("version") != "native-reset-dr-v3":
+    seed_manifest_version = seed_manifest.get("version")
+    if seed_manifest_version not in ("native-reset-dr-v3", "native-reset-dr-cohort-v1"):
         raise ValueError("native seed manifest version missing or unsupported")
     evaluation_seed = metadata.get("evaluation_seed")
     if isinstance(evaluation_seed, bool) or not isinstance(evaluation_seed, (int, float)) or not np.isfinite(evaluation_seed) or not float(evaluation_seed).is_integer():
         raise ValueError("native evaluation seed must be an integer")
-    if seed_manifest.get("startup_seed") != evaluation_seed or seed_manifest.get("seed_set_id") != metadata["seed_set_id"]:
+    if seed_manifest.get("seed_set_id") != metadata["seed_set_id"]:
+        raise ValueError("native seed manifest startup seed or seed set mismatch")
+    if seed_manifest_version == "native-reset-dr-v3" and seed_manifest.get("startup_seed") != evaluation_seed:
         raise ValueError("native seed manifest startup seed or seed set mismatch")
     seed_cases = seed_manifest.get("cases")
     if not isinstance(seed_cases, list) or len(seed_cases) != len(BUCKETS) or {case.get("bucket") for case in seed_cases} != set(BUCKETS):
@@ -139,8 +192,44 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
     seed_cases = {case["bucket"]: case for case in seed_cases}
     if seed_manifest.get("consumed_state_fields") != list(CONSUMED_STATE_FIELDS):
         raise ValueError("native consumed state fields do not match reset contract")
+    cohort = seed_manifest_version == "native-reset-dr-cohort-v1"
+    if cohort:
+        cohort_seeds = seed_manifest.get("cohort_seeds")
+        if (
+            not isinstance(cohort_seeds, list)
+            or not cohort_seeds
+            or any(isinstance(seed, bool) or not isinstance(seed, (int, float)) or not float(seed).is_integer() for seed in cohort_seeds)
+            or len(set(int(seed) for seed in cohort_seeds)) != len(cohort_seeds)
+            or int(evaluation_seed) != int(cohort_seeds[0])
+        ):
+            raise ValueError("native cohort seed manifest is invalid")
+        metadata_cohort = metadata.get("cohort", {})
+        if metadata_cohort.get("version") != "native-reset-dr-cohort-v1" or [int(seed) for seed in metadata_cohort.get("seeds", [])] != [int(seed) for seed in cohort_seeds]:
+            raise ValueError("native cohort metadata does not match seed manifest")
+        selected = seed_manifest.get("selected_seed_by_bucket", {})
+        if set(selected) != set(BUCKETS) or any(int(selected[bucket]) not in {int(seed) for seed in cohort_seeds} for bucket in BUCKETS):
+            raise ValueError("native cohort selected seed map is invalid")
+        members = seed_manifest.get("members")
+        if not isinstance(members, list) or {int(member.get("seed", -1)) for member in members} != {int(seed) for seed in cohort_seeds}:
+            raise ValueError("native cohort member manifest is incomplete")
+        for member in members:
+            member_path = Path(member.get("path", ""))
+            if not member_path.is_file():
+                raise ValueError("native cohort member report is missing")
+            member_payload = _read(member_path)
+            CapabilityReport.from_dict(member_payload)
+            member_digest = member_payload.get("report_sha256")
+            expected_digest = canonical_sha256({key: value for key, value in member_payload.items() if key != "report_sha256"})
+            if member.get("sha256") != member_digest or member_digest != expected_digest:
+                raise ValueError("native cohort member report hash mismatch")
     for offset, bucket in enumerate(BUCKETS):
-        if seed_cases[bucket].get("reset_seed") != evaluation_seed + offset:
+        if cohort:
+            selected_seed = int(seed_manifest["selected_seed_by_bucket"][bucket])
+            if seed_cases[bucket].get("cohort_seed") != selected_seed:
+                raise ValueError("native cohort selected seed mismatch")
+            if seed_cases[bucket].get("reset_seed") != selected_seed + offset:
+                raise ValueError("native cohort bucket reset seed mismatch")
+        elif seed_cases[bucket].get("reset_seed") != evaluation_seed + offset:
             raise ValueError("native bucket reset seed mismatch")
     for case in cases:
         steps = case.get("steps", 0)
