@@ -43,17 +43,32 @@ native and CPU six-bucket reports both failed. The frontier-order confounder is
 therefore removed; the remaining classification is a weak lateral reward/physics
 basin. Keep product thresholds and samplewise MAE fixed; evaluation semantic
 calibration remains separate.
-Blocker fingerprint: `native_lateral_acquisition`; classification: stationary
-or low-progress solution after lateral-priority exposure; decision delta:
-reject direct adoption and test a stronger lateral-aligned acquisition signal
-before changing physics or thresholds.
+
+The `lateral-drive` diagnostic then made that acquisition signal explicit: it
+kept the lateral-first frontier, raised linear L1 to 2.0, and removed the yaw
+L1 term while retaining the zero anchor, staged tracking schedule, ABI, BAM
+actuator, and product thresholds. At 500 updates, native held-out lateral MAE
+fell to 0.09859 m/s with mean lateral velocity 0.13029 m/s (late mean
+0.10871 m/s), but lateral velocity standard deviation remained 0.11170 m/s.
+Forward MAE was 0.02795 m/s, yaw MAE 0.80762 rad/s, and zero drift 0.04139 m.
+All native product buckets failed. The run had four valid `hold` windows and no
+rollback, so it is evidence of lateral acquisition with severe ripple, not a
+usable policy. Continue this exact checkpoint to cumulative 1000 updates before
+opening another reward or physics branch.
+
+Blocker fingerprint: `native_lateral_acquisition`; classification: oscillatory
+and undertrained lateral basin after direct lateral drive; decision delta:
+resume the validated acquisition checkpoint through the existing staged tracking
+schedule before changing physics, thresholds, or command semantics.
 
 The Feedback-only L1 terms now average signed velocity error before magnitude
 with tau 0.5 s. Shared state updates once per step and resets on episode or
 command changes using current error (no free startup grace period). Exact-zero
-linear commands retain instantaneous idle-speed cost. Weights remain 0.5/0.35;
-normalization floors remain 0.12 m/s and 0.8 rad/s. No action/observation
-filtering, canonical recipe, PPO, or product-threshold changes.
+linear commands retain instantaneous idle-speed cost. The base feedback weights
+remain 0.5/0.35; `lateral-drive` overrides linear L1 to 2.0 and yaw L1 to 0 for
+its diagnostic only. Normalization floors remain 0.12 m/s and 0.8 rad/s. No
+action/observation filtering, canonical recipe, PPO, or product-threshold
+changes.
 
 Proof: focused tests and smoke64/5 passed, with nonpositive penalties, zero
 NaN term, rollback-state coverage, and ONNX export. Latest feedback artifact:
@@ -77,6 +92,13 @@ Its adaptive trace contains `hold` at steps 3000/6000/9000 followed by
 lateral-first order and 28% lateral exposure. This is negative acquisition
 evidence, not a product or transfer result.
 
+Latest lateral-drive artifact:
+`/tmp/microduck-adaptive-lateral-drive-s17-500/campaign-result.json`, source
+SHA `e9c2c5a`, checkpoint `model_499.pt`, SHA256
+`9044b5655b32c38c89f4d0bff311b75a3059d368239d7aab961df13d6fc36811`. Its
+native report is at `heldout/capability.json` and its independent ONNX/CPU
+report is at `cpu-transfer/capability.json`; both are negative product results.
+
 ## Latest behavioral evidence
 
 | Held-out metric | Zero20 1000 | Zero20 1500 | Product requirement |
@@ -86,6 +108,21 @@ evidence, not a product or transfer result.
 | Lateral MAE (m/s) | 0.1252 | 0.1244 | <=0.024 |
 | Yaw MAE (rad/s) | 0.2741 | 0.3541 | <=0.12 |
 | Left/right turn yaw MAE (rad/s) | 0.2601 / 0.2659 | 0.1891 / 0.2646 | <=0.12 |
+
+The lateral-drive 500-update native held-out slice is:
+
+| Metric | Lateral-drive 500 | Product requirement |
+| --- | ---: | ---: |
+| Zero endpoint drift (m) | 0.04139 | <=0.012 |
+| Forward MAE (m/s) | 0.02795 | <=0.024 |
+| Lateral MAE (m/s) | 0.09859 | <=0.024 |
+| Yaw MAE (rad/s) | 0.80762 | <=0.12 |
+| Left/right turn yaw MAE (rad/s) | 0.78340 / 0.71512 | <=0.12 |
+
+The lateral bucket mean velocity was 0.13029 m/s, late mean 0.10871 m/s, and
+standard deviation 0.11170 m/s; action magnitude/difference means were
+0.25164/0.09476. This confirms acquisition with large ripple rather than
+samplewise tracking.
 
 Final gate scores at model_1499: zero 0.870, forward 0.857, lateral 0.000,
 yaw 0.421, turn-left 0.548, turn-right 0.371. Held-out final-DR still fails
@@ -134,6 +171,10 @@ Diagnostics completed:
   must remain failed. Do not lower thresholds to make reports pass.
 - Partial preservation and real rollback are established on the gate set;
   held-out preservation and all-six capability acquisition remain required.
+- Resume `/tmp/microduck-adaptive-lateral-drive-s17-500/.../model_499.pt` to
+  cumulative 1000 updates with the same seed and task, then inspect native
+  windows at 625/750/875/1000 for lateral MAE, ripple, zero/forward
+  preservation, and rollback before any multi-seed campaign.
 - Native battery uses MJLab/BAM with DR/noise/delay. CPU/XML-position-actuator
   rehearsal is independent transfer evidence, not proof of native quality.
 - Stop on nonfinite training, invalid provenance, resource exhaustion or
@@ -151,7 +192,7 @@ Diagnostics completed:
  tests/test_adaptive*.py tests/test_capability_metrics.py
  tests/test_mjlab_adaptive_velocity_config.py tests/test_mjlab_velocity_flat_config.py`
 
-`run_adaptive_campaign_job.py --branch feedback --seed 17 --output <new-dir>
+`run_adaptive_campaign_job.py --branch lateral-drive --seed 17 --output <new-dir>
  --iterations <cumulative-budget> --num-envs 4096 --gate-interval 125`
 uses explicit result manifests and exact checkpoint paths. Set
 `MICRODUCK_SOURCE_SHA` and import the matching immutable snapshot. All logs go

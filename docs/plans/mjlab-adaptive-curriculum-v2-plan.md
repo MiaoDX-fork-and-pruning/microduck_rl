@@ -59,9 +59,16 @@ The next diagnostic made frontier order checkpointed and lateral-first. It held
 28% lateral exposure for 500 updates, yet native lateral MAE remained
 0.1187 m/s; a forward regression triggered the expected preservation rollback
 at env step 12000, and native/CPU reports both failed. The frontier-order
-confounder is removed. The next bounded intervention should increase the
-lateral-aligned reward mass while retaining the same zero anchor, thresholds,
-ABI and rollback checks before changing physics.
+confounder is removed. The bounded `lateral-drive` intervention then increased
+linear L1 to 2.0, removed yaw L1, and retained the same zero anchor, staged
+tracking schedule, thresholds, ABI, BAM actuator, and rollback checks. At 500
+updates it reached 0.13029 m/s mean lateral velocity but 0.09859 m/s native
+lateral MAE, with 0.11170 m/s lateral standard deviation; forward MAE was
+0.02795 m/s, yaw MAE 0.80762 rad/s, and zero drift 0.04139 m. All six native
+and CPU product buckets still fail, although four native windows held without
+rollback. The next bounded proof is a cumulative-1000 continuation from its
+exact checkpoint, using the existing staged tracking schedule before another
+reward or physics branch.
 
 ## Goal
 
