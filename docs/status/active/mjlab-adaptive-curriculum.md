@@ -28,6 +28,15 @@ will write `/tmp/adaptive-push-pilot/native-1999-resume/` after
 campaign. Require raw native forward/lateral velocity and error, falls, and all
 six scores before deciding whether push robustness is useful.
 
+The continuation completed at `model_1998.pt` (the resume starts from
+iteration 499, so the final label is 1998). Its final native report is
+`/tmp/adaptive-push-pilot/native-1998-resume/`. It is valid and stable in the
+six-bucket replay, but still fails the current schema-v2 gate: zero drift
+0.0729 m, forward error 0.0942 m/s, lateral error 0.1192 m/s, yaw error
+0.2760 rad/s, and turn-left/right errors 0.2585/0.1921 rad/s. The aggregate is
+0.0. The old schema-v1 reports that passed a looser historical gate are
+superseded and do not establish a usable policy.
+
 If the 2000-update push endpoint still fails, continue with one bounded recipe
 diagnostic selected from the measured failure mode; do not start a five-branch
 or multi-seed campaign. Keep the goal active until native usability,
