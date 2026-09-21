@@ -97,8 +97,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
         initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
+        frontier_order = getattr(env.cfg, "adaptive_frontier_order", ()) or None
         self.command_exposure = (
-            CommandExposure(initial_focus=initial_focus)
+            CommandExposure(initial_focus=initial_focus, frontier_order=frontier_order)
             if getattr(env.cfg, "adaptive_command_exposure", False)
             else None
         )

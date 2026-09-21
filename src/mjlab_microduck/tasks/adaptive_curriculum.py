@@ -42,12 +42,26 @@ class CommandExposure:
     focus_mastery = 0.80
     frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
-    def __init__(self, initial_focus: str | None = None) -> None:
+    def __init__(
+        self,
+        initial_focus: str | None = None,
+        frontier_order: tuple[str, ...] | None = None,
+    ) -> None:
+        self.frontier_order = self._validate_frontier_order(frontier_order)
         self.focus_bucket = self.frontier_order[0] if initial_focus is None else initial_focus
         if self.focus_bucket not in self.frontier_order:
             raise ValueError(f"unsupported frontier bucket: {self.focus_bucket}")
         self.probabilities = self._target(self.focus_bucket)
         self.windows = 0
+
+    @classmethod
+    def _validate_frontier_order(
+        cls, frontier_order: tuple[str, ...] | None
+    ) -> tuple[str, ...]:
+        order = cls.frontier_order if frontier_order is None else tuple(frontier_order)
+        if set(order) != set(cls.frontier_order) or len(order) != len(cls.frontier_order):
+            raise ValueError("frontier order must contain each directional bucket exactly once")
+        return order
 
     @classmethod
     def _target(cls, focus: str) -> dict[str, float]:
@@ -82,6 +96,7 @@ class CommandExposure:
             "probabilities": self.probabilities.copy(),
             "windows": self.windows,
             "focus_bucket": self.focus_bucket,
+            "frontier_order": list(self.frontier_order),
         }
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
@@ -101,6 +116,9 @@ class CommandExposure:
         focus = payload.get("focus_bucket")
         if focus not in self.frontier_order:
             raise ValueError("invalid frontier focus bucket")
+        saved_order = payload.get("frontier_order")
+        if saved_order is not None and tuple(saved_order) != self.frontier_order:
+            raise ValueError("adaptive checkpoint frontier order mismatch")
         self.probabilities = values
         self.windows = windows
         self.focus_bucket = str(focus)

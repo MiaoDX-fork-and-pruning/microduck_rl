@@ -141,6 +141,7 @@ def test_acquisition_feedback_combines_staged_tracking_with_adaptive_exposure() 
     assert cfg.adaptive_axis_mode == "composed"
     assert cfg.adaptive_command_exposure is True
     assert cfg.adaptive_initial_focus == "lateral"
+    assert cfg.adaptive_frontier_order[:2] == ("lateral", "forward")
     assert list(cfg.curriculum) == ["tracking_std"]
     assert cfg.curriculum["tracking_std"].params["std_stages"][1]["std"] == 0.22
     assert {"linear_velocity_error_l1", "yaw_velocity_error_l1"} <= set(cfg.rewards)

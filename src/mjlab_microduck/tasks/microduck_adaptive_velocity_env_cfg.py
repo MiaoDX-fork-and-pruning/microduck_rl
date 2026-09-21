@@ -121,6 +121,7 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_axis_mode: str = "composed"
     adaptive_command_exposure: bool = False
     adaptive_initial_focus: str = "forward"
+    adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
     adaptive_evaluator_schema_version: int = 2
@@ -207,6 +208,9 @@ def make_microduck_adaptive_velocity_env_cfg(
                     # directly on the hard frontier instead of waiting for a
                     # failed gate window to switch from forward.
                     cfg.adaptive_initial_focus = "lateral"
+                    cfg.adaptive_frontier_order = (
+                        "lateral", "forward", "yaw", "turn-left", "turn-right"
+                    )
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
