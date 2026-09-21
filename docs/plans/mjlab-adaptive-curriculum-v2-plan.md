@@ -55,9 +55,13 @@ staged tracking width, and an initial lateral focus. It improved forward MAE to
 0.0287 m/s at 500 updates but held-out lateral MAE remained 0.1188 m/s; the
 controller's default frontier order moved focus back to forward because both
 frontiers were below mastery. Native and CPU six-bucket reports both failed.
-The next diagnostic must make frontier order checkpointed and lateral-first so
-the lateral acquisition hypothesis is actually exercised before changing
-physics or product thresholds.
+The next diagnostic made frontier order checkpointed and lateral-first. It held
+28% lateral exposure for 500 updates, yet native lateral MAE remained
+0.1187 m/s; a forward regression triggered the expected preservation rollback
+at env step 12000, and native/CPU reports both failed. The frontier-order
+confounder is removed. The next bounded intervention should increase the
+lateral-aligned reward mass while retaining the same zero anchor, thresholds,
+ABI and rollback checks before changing physics.
 
 ## Goal
 

@@ -32,18 +32,21 @@ drift was 0.0767 m. Its native six-bucket gate still failed, and the CPU
 transfer report also failed all buckets. Do not promote either checkpoint as
 a usable policy.
 
-The acquisition-feedback slice exposed a controller-specific confounder:
+The first acquisition-feedback slice exposed a controller-specific confounder:
 initial lateral focus was overwritten by the default frontier order because
-forward was also below mastery. The final exposure was forward 21.7% and
-lateral 14.3%, so the experiment did not maintain lateral priority. Next
-hypothesis: a checkpointed lateral-first frontier must hold the acquisition
-focus until lateral mastery, while retaining the zero anchor and adaptive
-rollback. Keep product thresholds and samplewise MAE fixed; evaluation
-semantic calibration remains separate.
+forward was also below mastery. A checkpointed lateral-first frontier was then
+tested for 500 updates. It held lateral at 28% exposure throughout, but native
+held-out lateral MAE remained 0.1187 m/s and yaw MAE 0.7319 rad/s; zero drift
+was 0.0528 m. Forward learned to 0.0214 m/s at the third window, then a
+preservation failure at env step 12000 triggered a real rollback. The final
+native and CPU six-bucket reports both failed. The frontier-order confounder is
+therefore removed; the remaining classification is a weak lateral reward/physics
+basin. Keep product thresholds and samplewise MAE fixed; evaluation semantic
+calibration remains separate.
 Blocker fingerprint: `native_lateral_acquisition`; classification: stationary
-or low-progress solution under tested recipes, with the previous slice also
-confounded by frontier order; decision delta: reject direct adoption and test
-a lateral-priority frontier before changing physics or thresholds.
+or low-progress solution after lateral-priority exposure; decision delta:
+reject direct adoption and test a stronger lateral-aligned acquisition signal
+before changing physics or thresholds.
 
 The Feedback-only L1 terms now average signed velocity error before magnitude
 with tau 0.5 s. Shared state updates once per step and resets on episode or
@@ -66,6 +69,13 @@ checkpoint and source SHA `b99c6e0`; all six product buckets fail. The four
 native gate windows were valid `hold` decisions with no rollback or evaluator
 error. The 64-env/5-iteration smoke and 51 focused tests passed before this
 run.
+
+Latest lateral-priority artifact:
+`/tmp/microduck-acquisition-feedback-frontier-s17-500/campaign-result.json`.
+Its adaptive trace contains `hold` at steps 3000/6000/9000 followed by
+`preservation_failure` and `rollback` at step 12000; the checkpoint stores the
+lateral-first order and 28% lateral exposure. This is negative acquisition
+evidence, not a product or transfer result.
 
 ## Latest behavioral evidence
 
