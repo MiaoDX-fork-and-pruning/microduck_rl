@@ -170,6 +170,8 @@ def test_configured_frontier_dwell_moves_to_lowest_unmastered_bucket():
     assert exposure.focus_bucket == "yaw"
     assert exposure.probabilities["yaw"] > 0.08
     assert exposure.probabilities["lateral"] < 0.28
+    exposure.update(scores)
+    assert exposure.focus_bucket == "yaw"
 
 
 def test_checkpoint_requires_and_restores_focus_bucket():

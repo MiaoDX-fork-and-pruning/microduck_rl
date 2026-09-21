@@ -89,12 +89,19 @@ class CommandExposure:
         # Advance only after the first unmastered directional bucket.  This
         # makes a frontier switch deterministic and lets an earlier bucket
         # reclaim focus if a later stage exposes a regression.
-        focus = self.frontier_order[-1]
-        for name in self.frontier_order:
-            if values[name] < self.focus_mastery:
-                focus = name
-                break
         current = self.focus_bucket
+        # Once bounded anti-stall is enabled, keep an unmastered focus long
+        # enough to learn it. Otherwise the normal frontier scan would reclaim
+        # focus for the first unmastered bucket immediately after a stall
+        # rotation, giving the newly selected bucket only one window.
+        if self.stall_windows and current in self.frontier_order and values[current] < self.focus_mastery:
+            focus = current
+        else:
+            focus = self.frontier_order[-1]
+            for name in self.frontier_order:
+                if values[name] < self.focus_mastery:
+                    focus = name
+                    break
         if self.stall_windows and current in self.frontier_order:
             current_score = values[current]
             if focus != current or current_score >= self.focus_mastery:
