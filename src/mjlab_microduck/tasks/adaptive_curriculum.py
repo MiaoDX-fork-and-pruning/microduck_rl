@@ -42,8 +42,10 @@ class CommandExposure:
     focus_mastery = 0.80
     frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
-    def __init__(self) -> None:
-        self.focus_bucket = self.frontier_order[0]
+    def __init__(self, initial_focus: str | None = None) -> None:
+        self.focus_bucket = self.frontier_order[0] if initial_focus is None else initial_focus
+        if self.focus_bucket not in self.frontier_order:
+            raise ValueError(f"unsupported frontier bucket: {self.focus_bucket}")
         self.probabilities = self._target(self.focus_bucket)
         self.windows = 0
 

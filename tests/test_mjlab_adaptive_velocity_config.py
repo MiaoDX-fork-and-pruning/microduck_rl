@@ -9,6 +9,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     AdaptiveMicroduckTrackingRlCfg,
     AdaptiveMicroduckStrictificationRlCfg,
     AdaptiveMicroduckPushRlCfg,
+    AdaptiveMicroduckAcquisitionFeedbackRlCfg,
     make_microduck_adaptive_velocity_env_cfg,
 )
 from mjlab_microduck.tasks.microduck_velocity_env_cfg import make_microduck_velocity_env_cfg
@@ -56,7 +57,8 @@ def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
         AdaptiveMicroduckTrackingRlCfg.experiment_name,
         AdaptiveMicroduckPushRlCfg.experiment_name,
     }
-    assert len(names) == 8
+    names.add(AdaptiveMicroduckAcquisitionFeedbackRlCfg.experiment_name)
+    assert len(names) == 9
 
 
 def test_diagnostic_modes_isolate_one_canonical_curriculum_term() -> None:
@@ -129,6 +131,21 @@ def test_acquisition_lateral_preserves_anchor_buckets() -> None:
     assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
     assert cfg.commands["twist"].rel_lateral_envs == 0.50
     assert list(cfg.curriculum) == ["tracking_std"]
+
+
+def test_acquisition_feedback_combines_staged_tracking_with_adaptive_exposure() -> None:
+    from mjlab.tasks.registry import load_env_cfg
+
+    cfg = load_env_cfg("Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck")
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck"
+    assert cfg.adaptive_axis_mode == "composed"
+    assert cfg.adaptive_command_exposure is True
+    assert cfg.adaptive_initial_focus == "lateral"
+    assert list(cfg.curriculum) == ["tracking_std"]
+    assert cfg.curriculum["tracking_std"].params["std_stages"][1]["std"] == 0.22
+    assert {"linear_velocity_error_l1", "yaw_velocity_error_l1"} <= set(cfg.rewards)
+    assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
+    assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
 
 
 def test_strictification_bootstrap_is_bounded_and_restores_strict_profile() -> None:

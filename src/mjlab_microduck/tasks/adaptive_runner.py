@@ -96,7 +96,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.last_gate_outcome: str | None = None
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
-        self.command_exposure = CommandExposure() if getattr(env.cfg, "adaptive_command_exposure", False) else None
+        initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
+        self.command_exposure = (
+            CommandExposure(initial_focus=initial_focus)
+            if getattr(env.cfg, "adaptive_command_exposure", False)
+            else None
+        )
         if self.command_exposure is not None:
             self.command_exposure.apply(_manager_env(env))
         evaluator_command = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND") or os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR")

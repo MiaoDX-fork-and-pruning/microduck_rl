@@ -75,6 +75,19 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     assert torch.equal(term.vel_command_w, term.vel_command_b)
 
 
+def test_acquisition_profile_can_start_on_lateral_frontier():
+    exposure = CommandExposure(initial_focus="lateral")
+    assert exposure.focus_bucket == "lateral"
+    assert exposure.probabilities["lateral"] == pytest.approx(0.28)
+    assert exposure.probabilities["zero"] == pytest.approx(0.20)
+    assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
+
+
+def test_invalid_initial_focus_is_rejected():
+    with pytest.raises(ValueError, match="unsupported frontier bucket"):
+        CommandExposure(initial_focus="sideways")
+
+
 def test_subset_reset_does_not_change_other_commands_and_survives_update():
     term = _command(n=256)
     ids = torch.arange(0, term.num_envs, 2)

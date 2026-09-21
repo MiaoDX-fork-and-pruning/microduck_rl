@@ -13,6 +13,7 @@ import sys
 
 TASKS = {
     "feedback": ("Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck", "composed"),
+    "acquisition-feedback": ("Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck", "composed"),
     "fixed": ("Mjlab-Velocity-Flat-MicroDuck", "all_static"),
     "all-static": ("Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck", "all_static"),
     "com": ("Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck", "com"),

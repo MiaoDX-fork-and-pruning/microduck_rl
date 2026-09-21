@@ -107,7 +107,8 @@ FEEDBACK_TRACKING_TAU_S = 0.5
 DIAGNOSTIC_NAMES = {
     "standing": "Standing", "action_rate": "ActionRate", "lateral": "Lateral",
     "tracking": "Tracking", "acquisition": "Acquisition",
-    "acquisition_lateral": "AcquisitionLateral", "strictification": "Strictification",
+    "acquisition_lateral": "AcquisitionLateral", "acquisition_feedback": "AcquisitionFeedback",
+    "strictification": "Strictification",
     "push": "Push",
 }
 
@@ -119,6 +120,7 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     task_id: str = "Mjlab-Velocity-Flat-Adaptive-MicroDuck"
     adaptive_axis_mode: str = "composed"
     adaptive_command_exposure: bool = False
+    adaptive_initial_focus: str = "forward"
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
     adaptive_evaluator_schema_version: int = 2
@@ -189,7 +191,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         else:
             if diagnostic_mode == "tracking":
                 cfg.rewards["track_linear_velocity"].params["std"] = DIAGNOSTIC_LINEAR_TRACKING_STD
-            elif diagnostic_mode in ("acquisition", "acquisition_lateral"):
+            elif diagnostic_mode in ("acquisition", "acquisition_lateral", "acquisition_feedback"):
                 cfg.commands["twist"].rel_lateral_envs = 0.20 if diagnostic_mode == "acquisition" else 0.50
                 cfg.curriculum = {
                     "tracking_std": CurriculumTermCfg(
@@ -200,6 +202,11 @@ def make_microduck_adaptive_velocity_env_cfg(
                         },
                     )
                 }
+                if diagnostic_mode == "acquisition_feedback":
+                    # The feedback controller owns command allocation. Start
+                    # directly on the hard frontier instead of waiting for a
+                    # failed gate window to switch from forward.
+                    cfg.adaptive_initial_focus = "lateral"
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
@@ -232,12 +239,17 @@ def make_microduck_adaptive_velocity_env_cfg(
                     },
                 )
         cfg.task_id = f"Mjlab-Velocity-Flat-Adaptive-{DIAGNOSTIC_NAMES[diagnostic_mode]}-MicroDuck"
-        cfg.adaptive_axis_mode = "all_static"
+        if diagnostic_mode != "acquisition_feedback":
+            cfg.adaptive_axis_mode = "all_static"
 
     if command_exposure:
-        if diagnostic_mode is not None or axis_mode != "composed":
-            raise ValueError("feedback exposure requires the composed recipe without diagnostics")
-        cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck"
+        if axis_mode != "composed" or diagnostic_mode not in (None, "acquisition_feedback"):
+            raise ValueError("feedback exposure requires the composed recipe or acquisition_feedback")
+        cfg.task_id = (
+            "Mjlab-Velocity-Flat-Adaptive-AcquisitionFeedback-MicroDuck"
+            if diagnostic_mode == "acquisition_feedback"
+            else "Mjlab-Velocity-Flat-Adaptive-Feedback-MicroDuck"
+        )
         cfg.adaptive_command_exposure = True
         # This controller owns the full twist mixture. Keep a uniform nominal
         # pool and remove the competing standing-fraction schedule.
@@ -298,6 +310,7 @@ AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diag
 AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
 AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
 AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
+AdaptiveMicroduckAcquisitionFeedbackRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_feedback")
 AdaptiveMicroduckStrictificationRlCfg = _adaptive_rl_cfg("velocity_adaptive_strictification_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")
 
@@ -316,6 +329,7 @@ ADAPTIVE_RECIPES = (
     ("all_static", "tracking", False, AdaptiveMicroduckTrackingRlCfg),
     ("all_static", "acquisition", False, AdaptiveMicroduckAcquisitionRlCfg),
     ("all_static", "acquisition_lateral", False, AdaptiveMicroduckAcquisitionLateralRlCfg),
+    ("composed", "acquisition_feedback", True, AdaptiveMicroduckAcquisitionFeedbackRlCfg),
     ("all_static", "strictification", False, AdaptiveMicroduckStrictificationRlCfg),
     ("all_static", "push", False, AdaptiveMicroduckPushRlCfg),
     ("composed", None, True, AdaptiveMicroduckFeedbackRlCfg),
