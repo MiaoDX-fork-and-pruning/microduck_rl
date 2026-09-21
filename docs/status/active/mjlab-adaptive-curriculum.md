@@ -83,6 +83,16 @@ fixed exact-zero and forward/turn anchor, and only then widen physical DR.
 This is the remaining high-value change because every tested recipe can stand
 and move forward, but none creates a genuine lateral gait.
 
+A 50% lateral exposure pilot was then run as
+`Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck` (`8b132de`). Its
+500-update native report is `/tmp/adaptive-acquisition-lateral-pilot/native-499/`.
+It increases mean lateral velocity from roughly `0.023` in the staged recipe
+to `0.0488 m/s`, but still misses the command (`0.1413 m/s` error), raises
+zero drift to `0.1443 m`, and leaves the aggregate at `0.0`. More lateral
+samples alone are therefore insufficient and destabilizing; the next design
+must use a small failure-conditioned bucket boost with preservation and a
+nominal anchor, rather than a fixed 50% override.
+
 If the 2000-update push endpoint still fails, continue with one bounded recipe
 diagnostic selected from the measured failure mode; do not start a five-branch
 or multi-seed campaign. Keep the goal active until native usability,
