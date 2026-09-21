@@ -39,6 +39,10 @@ def _masks(command):
 def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_floors():
     term = _command()
     exposure = CommandExposure()
+    assert exposure.focus_bucket == "forward"
+    assert exposure.probabilities == pytest.approx(
+        {name: (0.30 if name == "forward" else 0.10) for name in BUCKETS}
+    )
     env = SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda _: term))
     ids = torch.arange(term.num_envs)
     torch.manual_seed(17)
@@ -48,8 +52,11 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     for _ in range(20):
         before = exposure.probabilities.copy()
         exposure.update(scores)
-        assert max(abs(exposure.probabilities[b] - before[b]) for b in BUCKETS) <= 0.05
+        assert max(abs(exposure.probabilities[b] - before[b]) for b in BUCKETS) <= 0.050001
     exposure.apply(env)
+    assert exposure.focus_bucket == "lateral"
+    assert exposure.probabilities["lateral"] > exposure.probabilities["forward"]
+    assert all(value >= 0.10 for value in exposure.probabilities.values())
     torch.manual_seed(17)
     term._resample_command(ids)
     term._update_command()
@@ -93,6 +100,36 @@ def test_feedback_state_and_rng_reproduce_sampling_after_resume():
     torch.set_rng_state(state)
     b._resample_command(torch.arange(512))
     assert torch.equal(a.command, b.command)
+
+
+def test_focus_switch_preserves_every_anchor_bucket():
+    exposure = CommandExposure()
+    exposure.update({name: (0.9 if name != "lateral" else 0.1) for name in BUCKETS})
+    assert exposure.focus_bucket == "lateral"
+    assert exposure.probabilities["lateral"] > 0.10
+    assert all(value >= 0.10 for value in exposure.probabilities.values())
+    assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
+
+
+def test_checkpoint_requires_and_restores_focus_bucket():
+    exposure = CommandExposure()
+    exposure.update({name: (0.9 if name != "yaw" else 0.1) for name in BUCKETS})
+    payload = exposure.state_dict()
+    restored = CommandExposure()
+    restored.load_state_dict(payload)
+    assert restored.state_dict() == payload
+    payload["focus_bucket"] = "unknown"
+    with pytest.raises(ValueError, match="focus bucket"):
+        restored.load_state_dict(payload)
+
+
+def test_failed_lateral_never_uses_three_percent_retention_floor():
+    exposure = CommandExposure()
+    for _ in range(8):
+        exposure.update({name: (0.0 if name == "lateral" else 1.0) for name in BUCKETS})
+    assert exposure.focus_bucket == "lateral"
+    assert min(exposure.probabilities.values()) >= 0.10
+    assert exposure.probabilities["zero"] == pytest.approx(0.10)
 
 
 @pytest.mark.parametrize("bad", [float("nan"), float("inf"), -0.1, 1.1])

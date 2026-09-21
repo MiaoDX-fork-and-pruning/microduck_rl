@@ -16,37 +16,65 @@ from mjlab_microduck.evaluation.capability import BUCKETS
 
 
 class CommandExposure:
-    """Bounded feedback allocation, including a fixed nominal command pool.
+    """Keep learned commands alive while concentrating on one frontier.
 
-    Each capability bucket owns at least 10% of resamples; 20% retain the
-    nominal continuous distribution. Only the remaining 20% follows deficits.
-    A window moves one quarter of the way to its target allocation, limiting
-    a single bucket's change to at most five percentage points per window.
+    Twenty percent of resamples retain the nominal continuous command
+    distribution.  Each of the six capability buckets keeps a ten percent
+    anchor, and the current directional frontier receives the remaining twenty
+    percent.  A window moves one quarter of the way to the new target, so a
+    focus switch cannot erase a previously learned skill in one update.
+
+    ``zero`` is deliberately an anchor rather than a frontier: the recovery
+    and idle behavior must remain present while the controller acquires the
+    directional buckets in ``frontier_order``.
     """
 
-    version = 1
+    version = 2
     nominal_probability = 0.20
     bucket_floor = 0.10
+    focus_extra = 0.20
     update_rate = 0.25
+    focus_mastery = 0.50
+    frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
     def __init__(self) -> None:
-        self.probabilities = {name: 0.80 / len(BUCKETS) for name in BUCKETS}
+        self.focus_bucket = self.frontier_order[0]
+        self.probabilities = self._target(self.focus_bucket)
         self.windows = 0
+
+    @classmethod
+    def _target(cls, focus: str) -> dict[str, float]:
+        if focus not in cls.frontier_order:
+            raise ValueError(f"unsupported frontier bucket: {focus}")
+        target = {name: cls.bucket_floor for name in BUCKETS}
+        target[focus] += cls.focus_extra
+        return target
 
     def update(self, metrics: Mapping[str, float]) -> None:
         values = {name: float(metrics[name]) for name in BUCKETS}
         if any(not math.isfinite(value) or not 0 <= value <= 1 for value in values.values()):
             raise ValueError("exposure scores must be finite and in [0, 1]")
-        deficits = {name: 1.0 - value for name, value in values.items()}
-        total = sum(deficits.values())
+        # Advance only after the first unmastered directional bucket.  This
+        # makes a frontier switch deterministic and lets an earlier bucket
+        # reclaim focus if a later stage exposes a regression.
+        focus = self.frontier_order[-1]
+        for name in self.frontier_order:
+            if values[name] < self.focus_mastery:
+                focus = name
+                break
+        self.focus_bucket = focus
+        target = self._target(focus)
         for name in BUCKETS:
-            share = deficits[name] / total if total > 0 else 1.0 / len(BUCKETS)
-            target = self.bucket_floor + 0.20 * share
-            self.probabilities[name] += self.update_rate * (target - self.probabilities[name])
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
         self.windows += 1
 
     def state_dict(self) -> dict[str, object]:
-        return {"version": self.version, "probabilities": self.probabilities.copy(), "windows": self.windows}
+        return {
+            "version": self.version,
+            "probabilities": self.probabilities.copy(),
+            "windows": self.windows,
+            "focus_bucket": self.focus_bucket,
+        }
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
         if payload.get("version") != self.version:
@@ -55,14 +83,19 @@ class CommandExposure:
         if not isinstance(probabilities, Mapping) or set(probabilities) != set(BUCKETS):
             raise ValueError("command exposure bucket mismatch")
         values = {name: float(probabilities[name]) for name in BUCKETS}
-        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= 0.30 for value in values.values())
-                or not math.isclose(sum(values.values()), 0.80, abs_tol=1e-9)):
+        if (any(not math.isfinite(value) or not self.bucket_floor <= value <= self.bucket_floor + self.focus_extra
+                for value in values.values())
+                or not math.isclose(sum(values.values()), 1.0 - self.nominal_probability, abs_tol=1e-9)):
             raise ValueError("invalid command exposure probabilities")
         windows = payload.get("windows")
         if not isinstance(windows, int) or windows < 0:
             raise ValueError("invalid command exposure window count")
+        focus = payload.get("focus_bucket")
+        if focus not in self.frontier_order:
+            raise ValueError("invalid frontier focus bucket")
         self.probabilities = values
         self.windows = windows
+        self.focus_bucket = str(focus)
 
     def apply(self, env: object) -> None:
         # CommandManager owns a deepcopy. The live term consumes these values
