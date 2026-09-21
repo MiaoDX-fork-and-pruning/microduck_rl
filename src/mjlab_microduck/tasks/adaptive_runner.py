@@ -99,7 +99,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
         frontier_order = getattr(env.cfg, "adaptive_frontier_order", ()) or None
         self.command_exposure = (
-            CommandExposure(initial_focus=initial_focus, frontier_order=frontier_order)
+            CommandExposure(
+                initial_focus=initial_focus,
+                frontier_order=frontier_order,
+                stall_windows=int(getattr(env.cfg, "adaptive_frontier_stall_windows", 0)),
+                stall_improvement=float(getattr(env.cfg, "adaptive_frontier_stall_improvement", 0.05)),
+            )
             if getattr(env.cfg, "adaptive_command_exposure", False)
             else None
         )

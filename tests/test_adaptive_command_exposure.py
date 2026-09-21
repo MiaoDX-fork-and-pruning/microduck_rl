@@ -153,6 +153,25 @@ def test_near_pass_bucket_keeps_frontier_focus_until_gate_threshold():
     assert exposure.probabilities["forward"] > exposure.probabilities["lateral"]
 
 
+def test_configured_frontier_dwell_moves_to_lowest_unmastered_bucket():
+    exposure = CommandExposure(
+        initial_focus="lateral",
+        frontier_order=("lateral", "forward", "yaw", "turn-left", "turn-right"),
+        stall_windows=2,
+        stall_improvement=0.05,
+    )
+    scores = {name: 0.9 for name in BUCKETS}
+    scores.update(lateral=0.2, yaw=0.0, **{"turn-left": 0.0, "turn-right": 0.0})
+    exposure.update(scores)
+    assert exposure.focus_bucket == "lateral"
+    exposure.update(scores)
+    assert exposure.focus_bucket == "lateral"
+    exposure.update(scores)
+    assert exposure.focus_bucket == "yaw"
+    assert exposure.probabilities["yaw"] > 0.08
+    assert exposure.probabilities["lateral"] < 0.28
+
+
 def test_checkpoint_requires_and_restores_focus_bucket():
     exposure = CommandExposure()
     exposure.update({name: (0.9 if name != "yaw" else 0.1) for name in BUCKETS})

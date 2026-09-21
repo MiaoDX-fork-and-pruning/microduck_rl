@@ -124,6 +124,8 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_command_exposure: bool = False
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
+    adaptive_frontier_stall_windows: int = 0
+    adaptive_frontier_stall_improvement: float = 0.05
     adaptive_linear_feedback_weight: float = FEEDBACK_LINEAR_L1_WEIGHT
     adaptive_yaw_feedback_weight: float = FEEDBACK_YAW_L1_WEIGHT
     adaptive_evaluation_interval: int = 0
@@ -217,6 +219,11 @@ def make_microduck_adaptive_velocity_env_cfg(
                     cfg.adaptive_frontier_order = (
                         "lateral", "forward", "yaw", "turn-left", "turn-right"
                     )
+                    # Keep a hard frontier from starving the remaining
+                    # capabilities forever when its score oscillates below
+                    # mastery. The controller still retains all bucket floors.
+                    cfg.adaptive_frontier_stall_windows = 4
+                    cfg.adaptive_frontier_stall_improvement = 0.05
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
                     cfg.adaptive_yaw_feedback_weight = 0.0

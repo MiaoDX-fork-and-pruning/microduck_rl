@@ -46,13 +46,23 @@ class CommandExposure:
         self,
         initial_focus: str | None = None,
         frontier_order: tuple[str, ...] | None = None,
+        stall_windows: int = 0,
+        stall_improvement: float = 0.05,
     ) -> None:
+        if stall_windows < 0:
+            raise ValueError("stall_windows cannot be negative")
+        if not math.isfinite(stall_improvement) or stall_improvement < 0.0:
+            raise ValueError("stall_improvement must be finite and nonnegative")
         self.frontier_order = self._validate_frontier_order(frontier_order)
+        self.stall_windows = int(stall_windows)
+        self.stall_improvement = float(stall_improvement)
         self.focus_bucket = self.frontier_order[0] if initial_focus is None else initial_focus
         if self.focus_bucket not in self.frontier_order:
             raise ValueError(f"unsupported frontier bucket: {self.focus_bucket}")
         self.probabilities = self._target(self.focus_bucket)
         self.windows = 0
+        self.focus_best_score: float | None = None
+        self.focus_stall_count = 0
 
     @classmethod
     def _validate_frontier_order(
@@ -84,6 +94,29 @@ class CommandExposure:
             if values[name] < self.focus_mastery:
                 focus = name
                 break
+        current = self.focus_bucket
+        if self.stall_windows and current in self.frontier_order:
+            current_score = values[current]
+            if focus != current or current_score >= self.focus_mastery:
+                self.focus_best_score = None
+                self.focus_stall_count = 0
+            elif self.focus_best_score is None or current_score >= self.focus_best_score + self.stall_improvement:
+                self.focus_best_score = current_score
+                self.focus_stall_count = 0
+            else:
+                self.focus_stall_count += 1
+                if self.focus_stall_count >= self.stall_windows:
+                    alternatives = [
+                        name for name in self.frontier_order
+                        if name != current and values[name] < self.focus_mastery
+                    ]
+                    if alternatives:
+                        focus = min(
+                            alternatives,
+                            key=lambda name: (values[name], self.frontier_order.index(name)),
+                        )
+                    self.focus_best_score = values[focus]
+                    self.focus_stall_count = 0
         self.focus_bucket = focus
         target = self._target(focus)
         for name in BUCKETS:
@@ -97,6 +130,10 @@ class CommandExposure:
             "windows": self.windows,
             "focus_bucket": self.focus_bucket,
             "frontier_order": list(self.frontier_order),
+            "stall_windows": self.stall_windows,
+            "stall_improvement": self.stall_improvement,
+            "focus_best_score": self.focus_best_score,
+            "focus_stall_count": self.focus_stall_count,
         }
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
@@ -119,9 +156,27 @@ class CommandExposure:
         saved_order = payload.get("frontier_order")
         if saved_order is not None and tuple(saved_order) != self.frontier_order:
             raise ValueError("adaptive checkpoint frontier order mismatch")
+        saved_stall_windows = payload.get("stall_windows", self.stall_windows)
+        if not isinstance(saved_stall_windows, int) or saved_stall_windows < 0:
+            raise ValueError("invalid stall window count")
+        if saved_stall_windows != self.stall_windows:
+            raise ValueError("adaptive checkpoint stall window mismatch")
+        saved_improvement = float(payload.get("stall_improvement", self.stall_improvement))
+        if not math.isfinite(saved_improvement) or saved_improvement < 0.0:
+            raise ValueError("invalid stall improvement")
+        if not math.isclose(saved_improvement, self.stall_improvement, abs_tol=1e-12):
+            raise ValueError("adaptive checkpoint stall improvement mismatch")
+        best_score = payload.get("focus_best_score")
+        if best_score is not None and (not math.isfinite(float(best_score)) or not 0.0 <= float(best_score) <= 1.0):
+            raise ValueError("invalid focus best score")
+        stall_count = payload.get("focus_stall_count", 0)
+        if not isinstance(stall_count, int) or stall_count < 0:
+            raise ValueError("invalid focus stall count")
         self.probabilities = values
         self.windows = windows
         self.focus_bucket = str(focus)
+        self.focus_best_score = None if best_score is None else float(best_score)
+        self.focus_stall_count = stall_count
 
     def apply(self, env: object) -> None:
         # CommandManager owns a deepcopy. The live term consumes these values

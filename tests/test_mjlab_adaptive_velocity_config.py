@@ -162,6 +162,8 @@ def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
     assert cfg.adaptive_frontier_order[0] == "lateral"
     assert cfg.rewards["linear_velocity_error_l1"].weight == 2.0
     assert cfg.rewards["yaw_velocity_error_l1"].weight == 0.0
+    assert cfg.adaptive_frontier_stall_windows == 4
+    assert cfg.adaptive_frontier_stall_improvement == 0.05
     assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
     assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
 
