@@ -37,6 +37,28 @@ six-bucket replay, but still fails the current schema-v2 gate: zero drift
 0.0. The old schema-v1 reports that passed a looser historical gate are
 superseded and do not establish a usable policy.
 
+## Why the current adaptive recipe is not helping acquisition
+
+The native traces expose a reward loophole. The canonical linear tracking
+standard deviation is `sqrt(0.1) = 0.316 m/s`; at the held-out lateral command
+of `0.12 m/s`, a stationary body receives about 86% of the Gaussian tracking
+maximum. The final push policy's lateral trace has `0.1192 m/s` error while its
+action magnitude is only `0.069`, which is consistent with parking rather than
+learning a lateral gait. The gate detects this failure, but the current
+adaptive controller only owns CoM/head-CoM ranges; it has no action that can
+correct a failed command bucket. Meanwhile the canonical action-rate, standing,
+head-pose, and head-bias schedules continue by wall-clock step.
+
+The useful next design is therefore a two-phase adaptive recipe: freeze those
+canonical taxes during capability acquisition, tighten command tracking with a
+command-aware or `std=0.12` signal, and adapt command-bucket exposure from the
+per-bucket native scores while retaining an exact-zero anchor. Only after all
+six buckets pass should adaptive widening of CoM, head-CoM, pushes, and
+regularization begin. This keeps the production velocity factory unchanged and
+turns the gate from a passive veto into a corrective sampler. A 1500-update
+continuation of the existing `std=0.12` diagnostic is running as the first
+bounded test of the reward-signal hypothesis.
+
 If the 2000-update push endpoint still fails, continue with one bounded recipe
 diagnostic selected from the measured failure mode; do not start a five-branch
 or multi-seed campaign. Keep the goal active until native usability,
