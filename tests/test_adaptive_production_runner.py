@@ -134,6 +134,7 @@ def _runner(*, mode: str = "composed", gate=None) -> AdaptiveMicroduckOnPolicyRu
     runner.evaluation_events = []
     runner.last_evaluation_provenance = None
     runner.last_known_good_checkpoint = None
+    runner.last_known_good_buckets = ()
     runner.last_gate_outcome = None
     runner.capability_gate = gate or _gate(mode=mode)
     return runner
@@ -340,6 +341,49 @@ def test_valid_low_capability_hold_does_not_become_known_good(monkeypatch, tmp_p
 
     assert runner.last_gate_outcome == "hold"
     assert runner.last_known_good_checkpoint is None
+
+
+def test_partial_mastery_checkpoint_is_rollback_safe_before_aggregate_pass(
+    monkeypatch, tmp_path
+):
+    """Acquisition must preserve early buckets before all six can pass."""
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    checkpoint = tmp_path / "model_2.pt"
+    checkpoint.write_bytes(b"partial mastery candidate")
+    raw = _raw(low=False)
+    # Keep only zero and forward above the 0.8 capability threshold.
+    raw["lateral"]["tracking_error_m_s"] = 1.0
+    for name in ("yaw", "turn-left", "turn-right"):
+        raw[name]["angular_tracking_error_rad_s"] = 1.0
+
+    class Evaluator:
+        def __init__(self):
+            self.calls = 0
+
+        def evaluate(self, **kwargs):
+            self.calls += 1
+            return _report_with_raw(
+                checkpoint, raw if self.calls == 1 else _raw(low=True)
+            )
+
+    runner.evaluator = Evaluator()
+    runner.current_learning_iteration = 2
+    runner.completed_iterations = 3
+    runner._evaluate_window(str(checkpoint))
+
+    good = checkpoint.with_suffix(".adaptive.pt")
+    assert runner.last_gate_outcome == "hold"
+    assert runner.last_known_good_checkpoint == str(good)
+    assert runner.last_known_good_buckets == ("forward", "zero")
+    assert good.exists()
+
+    runner.current_learning_iteration = 3
+    runner.completed_iterations = 4
+    runner._evaluate_window(str(checkpoint))
+    assert runner.last_gate_outcome == "preservation_failure"
+    assert runner.evaluation_events[-1]["kind"] == "rollback"
+    assert runner.last_known_good_checkpoint == str(good)
 
 
 def test_evaluator_exception_is_audited_and_never_known_good(monkeypatch, tmp_path):

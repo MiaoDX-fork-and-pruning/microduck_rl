@@ -92,6 +92,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.evaluation_events: list[dict[str, object]] = []
         self.last_evaluation_provenance: dict[str, object] | None = None
         self.last_known_good_checkpoint: str | None = None
+        self.last_known_good_buckets: tuple[str, ...] = ()
         self.last_gate_outcome: str | None = None
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
@@ -178,12 +179,23 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 checkpoint=checkpoint_path,
                 seed=self.evaluation_seed,
             )
+            threshold = max(axis.upper_threshold for axis in self.capability_gate.axes.values())
+            mastered_before = {
+                name for name, value in previous_best.items() if value >= threshold
+            }
+            mastered_now = {name for name, value in metrics.items() if value >= threshold}
             preserved = all(
-                value >= previous_best.get(name, value) * (1 - self.capability_gate.preservation_tolerance)
-                for name, value in metrics.items()
+                metrics[name] >= previous_best[name] * (1 - self.capability_gate.preservation_tolerance)
+                for name in mastered_before
             )
-            if payload["aggregate"]["passed"] and preserved and self.last_gate_outcome != "preservation_failure":
+            # Acquisition is incremental: a checkpoint becomes rollback-safe
+            # as soon as it establishes one capability and preserves every
+            # capability mastered before it. Waiting for aggregate ``passed``
+            # meant the first useful zero/forward checkpoint was discarded,
+            # leaving preservation failures with no rollback target.
+            if (mastered_before | mastered_now) and preserved and self.last_gate_outcome != "preservation_failure":
                 self.last_known_good_checkpoint = str(Path(checkpoint_path).with_suffix(".adaptive.pt"))
+                self.last_known_good_buckets = tuple(sorted(mastered_before | mastered_now))
         # A hold also changes pass counters/EMA. Persist every boundary without
         # changing the hash of the checkpoint consumed by the evaluator. Direct
         # unit callers may provide a virtual checkpoint; the real learn loop has
@@ -393,6 +405,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "stage_values": {} if gate is None else {name: gate.stage_value(name) for name in gate.axis_order},
             "command_exposure": None if exposure is None else exposure.state_dict(),
             "last_known_good_checkpoint": self.last_known_good_checkpoint,
+            "last_known_good_buckets": list(getattr(self, "last_known_good_buckets", ())),
             "evaluation_events": list(self.evaluation_events),
             "evaluation_provenance": getattr(self, "last_evaluation_provenance", None),
             "evaluation_schema_version": int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)),
@@ -433,6 +446,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if completed < 0 or state.get("env_step", completed * self.cfg["num_steps_per_env"]) != completed * self.cfg["num_steps_per_env"]:
                 raise ValueError("adaptive checkpoint step budget mismatch")
             self.last_known_good_checkpoint = state.get("last_known_good_checkpoint")
+            buckets = state.get("last_known_good_buckets", ())
+            allowed_buckets = set(self.capability_gate.critical_buckets) if self.capability_gate is not None else set()
+            if not isinstance(buckets, (list, tuple)) or any(str(name) not in allowed_buckets for name in buckets):
+                raise ValueError("adaptive checkpoint known-good bucket mismatch")
+            self.last_known_good_buckets = tuple(str(name) for name in buckets)
             self.evaluation_events = list(state.get("evaluation_events", []))
             self.last_evaluation_provenance = state.get("evaluation_provenance")
             # Continue the same evaluation stream after a training restart.
