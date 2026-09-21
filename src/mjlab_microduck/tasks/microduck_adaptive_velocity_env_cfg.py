@@ -103,6 +103,11 @@ FEEDBACK_YAW_DEADBAND_RAD_S = 0.05
 # cycle before L1 so learning that motion is not penalized as a regression.
 FEEDBACK_TRACKING_TAU_S = 0.5
 LATERAL_DRIVE_LINEAR_L1_WEIGHT = 2.0
+# Once bounded frontier rotation hands focus to yaw, keep a direct command
+# aligned signal alive.  The previous lateral-drive recipe set this to zero,
+# so the controller increased yaw exposure without giving PPO a yaw-specific
+# acquisition gradient.
+LATERAL_DRIVE_YAW_L1_WEIGHT = 1.0
 
 
 DIAGNOSTIC_NAMES = {
@@ -226,7 +231,7 @@ def make_microduck_adaptive_velocity_env_cfg(
                     cfg.adaptive_frontier_stall_improvement = 0.05
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
-                    cfg.adaptive_yaw_feedback_weight = 0.0
+                    cfg.adaptive_yaw_feedback_weight = LATERAL_DRIVE_YAW_L1_WEIGHT
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
