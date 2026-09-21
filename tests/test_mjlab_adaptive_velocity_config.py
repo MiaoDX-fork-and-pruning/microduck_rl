@@ -152,7 +152,10 @@ def test_feedback_sampler_has_single_owner_and_preserves_policy_contract():
     assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"}
     assert cfg.observations == base.observations
     assert cfg.actions == base.actions
-    assert cfg.rewards == base.rewards
+    assert set(cfg.rewards) == set(base.rewards) | {
+        "linear_velocity_error_l1", "yaw_velocity_error_l1"
+    }
+    assert {name: cfg.rewards[name] for name in base.rewards} == base.rewards
     assert cfg.events == base.events
     for name in ("head_pose", "body_pose"):
         assert cfg.commands[name] == base.commands[name]

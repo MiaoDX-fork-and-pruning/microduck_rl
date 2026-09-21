@@ -3811,6 +3811,56 @@ def standing_phase(
     return phase.unsqueeze(-1)  # Shape: (num_envs, 1)
 
 
+def command_normalized_linear_velocity_l1(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    minimum_scale: float,
+    deadband: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Negative normalized planar tracking error; use a POSITIVE reward weight.
+
+    In body-frame m/s, return
+    ``-mean(relu(abs(v_xy - cmd_xy) - deadband)) / max(norm(cmd_xy), minimum_scale)``.
+    The mean is over x/y only. The scalar command-speed normalizer is shared by
+    both axes, so an uncommanded axis does not receive a smaller denominator.
+    ``minimum_scale`` (m/s, > 0) also gives exact-zero commands a finite idle
+    penalty; ``deadband`` (m/s, >= 0) permits small errors around any command.
+    The dimensionless result is zero inside that band and otherwise negative.
+    Vertical motion is left to the existing Gaussian tracking reward.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    assert command is not None, f"Command '{command_name}' not found."
+    error = (asset.data.root_link_lin_vel_b[:, :2] - command[:, :2]).abs()
+    scale = torch.linalg.vector_norm(command[:, :2], dim=-1).clamp(min=minimum_scale)
+    return -(error - deadband).clamp(min=0.0).mean(dim=-1) / scale
+
+
+def command_normalized_yaw_velocity_l1(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    minimum_scale: float,
+    deadband: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> torch.Tensor:
+    """Negative normalized yaw tracking error; use a POSITIVE reward weight.
+
+    In body-frame rad/s, return
+    ``-relu(abs(omega_z - cmd_z) - deadband) / max(abs(cmd_z), minimum_scale)``.
+    ``minimum_scale`` (rad/s, > 0) keeps exact-zero yaw commands finite without
+    magnifying walking yaw oscillation. ``deadband`` (rad/s, >= 0) applies to
+    idle and moving commands alike. The result is dimensionless and <= 0;
+    roll/pitch rates remain the responsibility of the existing reward stack.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    assert command is not None, f"Command '{command_name}' not found."
+    error = (asset.data.root_link_ang_vel_b[:, 2] - command[:, 2]).abs()
+    scale = command[:, 2].abs().clamp(min=minimum_scale)
+    return -(error - deadband).clamp(min=0.0) / scale
+
+
 def air_time_adaptive(
     env: ManagerBasedRlEnv,
     sensor_name: str,

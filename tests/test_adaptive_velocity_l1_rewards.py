@@ -1,0 +1,167 @@
+"""Feedback tracking keeps a gradient without taxing zero axes at tiny scales."""
+
+from copy import deepcopy
+from types import SimpleNamespace
+
+import pytest
+import torch
+
+from mjlab_microduck.tasks import mdp
+from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
+    ADAPTIVE_RECIPES,
+    FEEDBACK_LINEAR_DEADBAND_M_S,
+    FEEDBACK_LINEAR_L1_WEIGHT,
+    FEEDBACK_LINEAR_MIN_SCALE_M_S,
+    FEEDBACK_YAW_DEADBAND_RAD_S,
+    FEEDBACK_YAW_L1_WEIGHT,
+    FEEDBACK_YAW_MIN_SCALE_RAD_S,
+    make_microduck_adaptive_velocity_env_cfg,
+)
+from mjlab_microduck.tasks.microduck_velocity_env_cfg import (
+    make_microduck_velocity_env_cfg,
+)
+
+
+def _env(command, *, linear=None, angular=None):
+    command = torch.tensor(command, dtype=torch.float64)
+    zeros = torch.zeros_like(command)
+    data = SimpleNamespace(
+        root_link_lin_vel_b=zeros if linear is None else torch.tensor(linear, dtype=zeros.dtype),
+        root_link_ang_vel_b=zeros if angular is None else torch.tensor(angular, dtype=zeros.dtype),
+    )
+    return SimpleNamespace(
+        command_manager=SimpleNamespace(get_command=lambda name: command if name == "twist" else None),
+        scene={"robot": SimpleNamespace(data=data)},
+    )
+
+
+def _linear(env):
+    return mdp.command_normalized_linear_velocity_l1(
+        env,
+        command_name="twist",
+        minimum_scale=FEEDBACK_LINEAR_MIN_SCALE_M_S,
+        deadband=FEEDBACK_LINEAR_DEADBAND_M_S,
+    )
+
+
+def _yaw(env):
+    return mdp.command_normalized_yaw_velocity_l1(
+        env,
+        command_name="twist",
+        minimum_scale=FEEDBACK_YAW_MIN_SCALE_RAD_S,
+        deadband=FEEDBACK_YAW_DEADBAND_RAD_S,
+    )
+
+
+@pytest.mark.parametrize("sign", [-1, 1])
+@pytest.mark.parametrize("axis", [0, 1])
+def test_linear_tracking_improves_toward_either_command_direction(axis, sign):
+    command = torch.zeros((4, 3), dtype=torch.float64)
+    command[:, axis] = sign * 0.12
+    actual = torch.zeros_like(command)
+    actual[:, axis] = sign * torch.tensor([-0.12, 0.0, 0.06, 0.12])
+    # Vertical bouncing is already priced by the canonical Gaussian; it must
+    # not contaminate the additional planar acquisition signal.
+    actual[:, 2] = 3.0
+    reward = _linear(_env(command.tolist(), linear=actual.tolist()))
+    assert torch.all(reward <= 0)
+    assert torch.all(torch.diff(reward) > 0)
+    assert reward[-1] == 0
+
+
+def test_zero_linear_command_has_deadband_then_finite_gait_scale_penalty():
+    env = _env(
+        [[0.0, 0.0, 0.0]] * 4,
+        linear=[[0.0, 0.0, 4.0], [0.01, -0.01, 4.0], [0.07, 0.0, 4.0], [0.0, -0.13, 4.0]],
+    )
+    torch.testing.assert_close(
+        _linear(env), torch.tensor([0.0, 0.0, -0.25, -0.5], dtype=torch.float64)
+    )
+
+
+def test_linear_normalizer_uses_command_speed_for_both_axes():
+    env = _env(
+        [[0.12, 0.0, 0.0], [0.24, 0.0, 0.0], [0.144, 0.192, 0.0], [0.24, 0.0, 0.0]],
+        linear=[[0.05, 0.0, 0.0], [0.11, 0.0, 0.0], [0.014, 0.192, 0.0], [0.24, 0.13, 0.0]],
+    )
+    # The same residual fraction has equal cost for short/long/diagonal
+    # commands. Lateral oscillation during forward motion shares that speed
+    # scale; it does not divide by the zero lateral command.
+    torch.testing.assert_close(_linear(env), torch.full((4,), -0.25, dtype=torch.float64))
+
+
+def test_linear_moving_command_keeps_small_error_deadband():
+    env = _env([[0.12, 0.0, 0.8]], linear=[[0.115, -0.005, 0.0]])
+    assert _linear(env).item() == 0
+
+
+@pytest.mark.parametrize("sign", [-1, 1])
+def test_yaw_tracking_improves_toward_either_command_direction(sign):
+    env = _env(
+        [[0.12, 0.0, sign * 0.8]] * 4,
+        angular=[[3.0, -2.0, sign * value] for value in [-0.8, 0.0, 0.4, 0.8]],
+    )
+    reward = _yaw(env)
+    assert torch.all(reward <= 0)
+    assert torch.all(torch.diff(reward) > 0)
+    assert reward[-1] == 0
+
+
+def test_zero_yaw_command_has_deadband_then_finite_gait_scale_penalty():
+    env = _env(
+        [[0.12, 0.0, 0.0]] * 5,
+        angular=[[3.0, -2.0, value] for value in [0.0, 0.05, -0.05, 0.45, -0.85]],
+    )
+    torch.testing.assert_close(
+        _yaw(env), torch.tensor([0.0, 0.0, 0.0, -0.5, -1.0], dtype=torch.float64)
+    )
+
+
+def test_yaw_normalization_tracks_command_magnitude_and_ignores_roll_pitch():
+    env = _env(
+        [[0.0, 0.0, 0.8], [0.0, 0.0, 1.6], [0.0, 0.0, -1.6]],
+        angular=[[3.0, -2.0, 0.35], [6.0, -4.0, 0.75], [-3.0, 2.0, -0.75]],
+    )
+    torch.testing.assert_close(_yaw(env), torch.full((3,), -0.5, dtype=torch.float64))
+
+
+def test_yaw_moving_command_keeps_small_error_deadband():
+    env = _env([[0.12, 0.0, 0.8]], angular=[[0.0, 0.0, 0.825]])
+    assert _yaw(env).item() == 0
+
+
+def test_only_feedback_adds_positive_weight_self_negating_terms():
+    canonical = make_microduck_velocity_env_cfg()
+    original_rewards = deepcopy(canonical.rewards)
+    feedback = make_microduck_adaptive_velocity_env_cfg(command_exposure=True)
+    expected_terms = {
+        "linear_velocity_error_l1": (mdp.command_normalized_linear_velocity_l1, FEEDBACK_LINEAR_L1_WEIGHT),
+        "yaw_velocity_error_l1": (mdp.command_normalized_yaw_velocity_l1, FEEDBACK_YAW_L1_WEIGHT),
+    }
+    assert set(feedback.rewards) == set(original_rewards) | set(expected_terms)
+    assert {name: feedback.rewards[name] for name in original_rewards} == original_rewards
+    env = _env([[0.0, 0.12, 0.8]])
+    for name, (func, weight) in expected_terms.items():
+        term = feedback.rewards[name]
+        assert term.func is func
+        assert term.weight == weight > 0
+        assert (term.func(env, **term.params) * term.weight).item() < 0
+    assert FEEDBACK_LINEAR_MIN_SCALE_M_S >= 0.12
+    assert FEEDBACK_YAW_MIN_SCALE_RAD_S >= 0.8
+    assert feedback.observations == canonical.observations
+    assert feedback.actions == canonical.actions
+    assert feedback.events == canonical.events
+    assert canonical.rewards == original_rewards
+    assert make_microduck_velocity_env_cfg().rewards == original_rewards
+    for axis, diagnostic, use_feedback, _ in ADAPTIVE_RECIPES:
+        if not use_feedback:
+            cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode=axis, diagnostic_mode=diagnostic)
+            assert not set(expected_terms).intersection(cfg.rewards)
+
+    # Factory construction and later live-recipe changes must not alias either
+    # an existing canonical config or the next config built from that factory.
+    feedback.rewards["track_linear_velocity"].weight = 99.0
+    feedback.rewards["track_linear_velocity"].params["std"] = 99.0
+    assert canonical.rewards == original_rewards
+    assert make_microduck_velocity_env_cfg().rewards == original_rewards
+    assert make_microduck_adaptive_velocity_env_cfg().rewards == original_rewards

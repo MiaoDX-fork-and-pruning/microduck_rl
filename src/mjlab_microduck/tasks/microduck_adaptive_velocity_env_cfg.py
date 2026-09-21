@@ -10,7 +10,7 @@ from dataclasses import dataclass, fields
 import os
 
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.managers import CurriculumTermCfg
+from mjlab.managers import CurriculumTermCfg, RewardTermCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
 from . import mdp as microduck_mdp
@@ -33,6 +33,18 @@ ACQUISITION_TRACKING_STD_STAGES = (
     {"step": 1000 * 24, "std": 0.16},
     {"step": 1500 * 24, "std": 0.12},
 )
+
+# Feedback-only acquisition signal: at low commanded speeds the Gaussian
+# tracking reward is nearly flat around standing. These dimensionless L1
+# penalties keep a direct cost for missing the command. The normalizer floors
+# deliberately remain at gait scale: smaller denominators on uncommanded axes
+# would tax the measured lateral/yaw oscillation of a walking biped heavily.
+FEEDBACK_LINEAR_L1_WEIGHT = 1.0
+FEEDBACK_YAW_L1_WEIGHT = 0.75
+FEEDBACK_LINEAR_MIN_SCALE_M_S = 0.12
+FEEDBACK_YAW_MIN_SCALE_RAD_S = 0.8
+FEEDBACK_LINEAR_DEADBAND_M_S = 0.01
+FEEDBACK_YAW_DEADBAND_RAD_S = 0.05
 
 
 DIAGNOSTIC_NAMES = {
@@ -163,6 +175,25 @@ def make_microduck_adaptive_velocity_env_cfg(
         command.rel_world_envs = 0.0
         command.init_velocity_prob = 0.0
         cfg.commands["twist"] = command
+        # The MDP functions self-negate; positive weights keep them penalties.
+        cfg.rewards["linear_velocity_error_l1"] = RewardTermCfg(
+            func=microduck_mdp.command_normalized_linear_velocity_l1,
+            weight=FEEDBACK_LINEAR_L1_WEIGHT,
+            params={
+                "command_name": "twist",
+                "minimum_scale": FEEDBACK_LINEAR_MIN_SCALE_M_S,
+                "deadband": FEEDBACK_LINEAR_DEADBAND_M_S,
+            },
+        )
+        cfg.rewards["yaw_velocity_error_l1"] = RewardTermCfg(
+            func=microduck_mdp.command_normalized_yaw_velocity_l1,
+            weight=FEEDBACK_YAW_L1_WEIGHT,
+            params={
+                "command_name": "twist",
+                "minimum_scale": FEEDBACK_YAW_MIN_SCALE_RAD_S,
+                "deadband": FEEDBACK_YAW_DEADBAND_RAD_S,
+            },
+        )
     if play:
         cfg.adaptive_evaluation_interval = 0
     return cfg
