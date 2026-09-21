@@ -68,6 +68,21 @@ the 64-env/5-update CPU smoke pass. A fresh 500-update seed-17 pilot is queued
 after the tracking continuation; its native endpoint will decide whether this
 acquisition recipe is worth extending.
 
+The staged acquisition endpoint is now also complete at
+`/tmp/adaptive-acquisition-pilot/native-1998-resume/`. It improves forward
+tracking to `0.0378 m/s`, but zero drift is `0.1600 m` and lateral error is
+`0.1602 m/s`; yaw and turns remain `0.3199/0.2715/0.2227 rad/s`. The aggregate
+is `0.0`. A same-seed initial-distribution replay gives nearly identical
+behavior (`0.1567 m` drift and `0.1557 m/s` lateral error), so the failure is
+recipe acquisition, not just final CoM width. The staged reward signal is
+therefore insufficient by itself.
+
+The next corrective direction is command-conditioned exposure: the gate must
+increase the sampling probability of the failed lateral bucket while keeping a
+fixed exact-zero and forward/turn anchor, and only then widen physical DR.
+This is the remaining high-value change because every tested recipe can stand
+and move forward, but none creates a genuine lateral gait.
+
 If the 2000-update push endpoint still fails, continue with one bounded recipe
 diagnostic selected from the measured failure mode; do not start a five-branch
 or multi-seed campaign. Keep the goal active until native usability,
