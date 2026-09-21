@@ -98,7 +98,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
-        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "acquisition", "push"}:
+        if diagnostic_mode not in {"standing", "action_rate", "lateral", "tracking", "acquisition", "acquisition_lateral", "push"}:
             raise ValueError(f"unsupported adaptive diagnostic mode: {diagnostic_mode}")
         if diagnostic_mode == "standing":
             cfg.curriculum = {"standing_envs": canonical_curriculum["standing_envs"]}
@@ -130,6 +130,22 @@ def make_microduck_adaptive_velocity_env_cfg(
                     )
                 }
                 cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-Acquisition-MicroDuck"
+            elif diagnostic_mode == "acquisition_lateral":
+                # Same acquisition contract, but allocate half of the
+                # ordinary-motion pool to explicit lateral commands. Standing,
+                # turn-in-place, and forward anchors remain intact in the
+                # command sampler; this isolates exposure from reward changes.
+                cfg.commands["twist"].rel_lateral_envs = 0.50
+                cfg.curriculum = {
+                    "tracking_std": CurriculumTermCfg(
+                        func=microduck_mdp.velocity_tracking_std_curriculum,
+                        params={
+                            "reward_name": "track_linear_velocity",
+                            "std_stages": list(ACQUISITION_TRACKING_STD_STAGES),
+                        },
+                    )
+                }
+                cfg.task_id = "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
             else:
                 cfg.curriculum["push_strength"] = CurriculumTermCfg(
                     func=microduck_mdp.push_curriculum,
@@ -182,4 +198,5 @@ AdaptiveMicroduckActionRateRlCfg = _adaptive_rl_cfg("velocity_adaptive_action_ra
 AdaptiveMicroduckLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_lateral_diagnostic")
 AdaptiveMicroduckTrackingRlCfg = _adaptive_rl_cfg("velocity_adaptive_tracking_diagnostic")
 AdaptiveMicroduckAcquisitionRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_diagnostic")
+AdaptiveMicroduckAcquisitionLateralRlCfg = _adaptive_rl_cfg("velocity_adaptive_acquisition_lateral_diagnostic")
 AdaptiveMicroduckPushRlCfg = _adaptive_rl_cfg("velocity_adaptive_push_diagnostic")

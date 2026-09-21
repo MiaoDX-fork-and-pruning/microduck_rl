@@ -121,6 +121,15 @@ def test_acquisition_diagnostic_freezes_other_wall_clock_curricula() -> None:
     assert cfg.rewards["track_linear_velocity"].params["std"] ** 2 > 0.099
 
 
+def test_acquisition_lateral_preserves_anchor_buckets() -> None:
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="all_static", diagnostic_mode="acquisition_lateral"
+    )
+    assert cfg.task_id == "Mjlab-Velocity-Flat-Adaptive-AcquisitionLateral-MicroDuck"
+    assert cfg.commands["twist"].rel_lateral_envs == 0.50
+    assert list(cfg.curriculum) == ["tracking_std"]
+
+
 def test_push_diagnostic_only_adds_live_push_curriculum() -> None:
     base = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
     push = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static", diagnostic_mode="push")
