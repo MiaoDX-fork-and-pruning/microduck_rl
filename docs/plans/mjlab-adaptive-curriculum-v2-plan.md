@@ -49,6 +49,37 @@ three-member stage evaluation. Both use the read-only `beea4f8` source snapshot
 with 679 recorded/verified file hashes. Retained learning is still unproven;
 implementation and smoke proof do not establish policy acceptance.
 
+### CPU velocity-frame correction (2026-09-23)
+
+`931e3c9` fixes a separate measurement error: MuJoCo `mjOBJ_BODY` reports
+velocity at the CoM in rotated principal-inertia axes. The command contract
+requires the link origin and link axes (`mjOBJ_XBODY`). A controlled probe of
+the actual robot reproduces the mismatch; the corrected query returns the
+imposed linear and angular velocities at two root orientations.
+
+The 6,000-update ONNX was replayed with identical seeds, observations, actions
+and physical trajectories in every bucket. Only the recorded velocity frame
+changed. Corrected CPU scores are zero `.956`, forward `.841`, lateral `.739`,
+yaw `.636`, left `.643`, right `.721`, with lower-tail `.635991` instead of
+`.000`. This supersedes the old CPU score as a transfer-quality conclusion;
+the policy still fails the unchanged `.80` product gate. Raw replay/rotation
+proof is `/tmp/microduck-adaptive-cpu-link-frame-s17-6000/runtime-proof.json`.
+
+The CPU evaluator now declares a version-3 config, `body_link_origin`, and
+implementation hashes; the checkpoint wrapper rejects old/undeclared frames.
+Validation: 264 relevant tests passed. One existing specialist-manifest test
+cannot run because its untracked `artifacts/specialist_artifact_manifest.json`
+fixture is absent; it was explicitly deselected after confirming that failure.
+Focused Ruff and diff checks pass. The running `beea4f8` campaign remains frozen
+and will emit an old-frame CPU report, which must be replaced by a corrected
+post-run replay. Native gates and training are unaffected by this correction.
+
+The seeded CPU replay used the existing uncommitted reset-seed patch in
+`run_specialist_action_battery.py`; its exact source hashes and copied source
+files are recorded with the proof. Only the velocity-frame hunks were committed.
+A tracked-only source snapshot does not include that seed patch; consumed
+reset-seed coverage must be checked explicitly before portable product runs.
+
 ### Sustained objective
 
 Status: **ACTIVE**. Task control plane: thread
