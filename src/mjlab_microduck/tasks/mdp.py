@@ -3931,44 +3931,6 @@ def _command_velocity_error_average(
     return state["error"]
 
 
-def track_linear_velocity_yaw_averaged(
-    env: ManagerBasedRlEnv,
-    std: float,
-    command_name: str,
-    tau_s: float,
-    yaw_deadband: float = 0.05,
-    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
-) -> torch.Tensor:
-    """Gaussian tracking with signed planar averaging during yaw commands.
-
-    The sharpened acquisition Gaussian charges a turning gait for alternating
-    planar sway even when its mean translation follows the command. Average
-    signed x/y error before squaring for nonzero yaw; retain the instantaneous
-    Gaussian for idle and straight translation. Sustained planar drift remains
-    costly, including during pure yaw. Vertical velocity is always squared
-    instantaneously, so bouncing cannot disappear into the planar average.
-    Only reward state is averaged; observations and actions are unfiltered.
-    """
-    if not math.isfinite(std) or std <= 0.0:
-        raise ValueError("tracking std must be finite and positive")
-    if not math.isfinite(yaw_deadband) or yaw_deadband < 0.0:
-        raise ValueError("yaw_deadband must be finite and nonnegative")
-    asset: Entity = env.scene[asset_cfg.name]
-    command = env.command_manager.get_command(command_name)
-    assert command is not None, f"Command '{command_name}' not found."
-    actual = asset.data.root_link_lin_vel_b
-    averaged = _command_velocity_error_average(
-        env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
-    )[:, :2]
-    planar_error = torch.where(
-        (command[:, 2].abs() > yaw_deadband).unsqueeze(-1),
-        averaged,
-        actual[:, :2] - command[:, :2],
-    )
-    error = planar_error.square().sum(dim=-1) + actual[:, 2].square()
-    return torch.exp(-error / std**2)
-
-
 def command_normalized_linear_velocity_l1(
     env: ManagerBasedRlEnv,
     command_name: str,

@@ -283,16 +283,6 @@ def make_microduck_adaptive_velocity_env_cfg(
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
                     cfg.adaptive_yaw_feedback_weight = LATERAL_DRIVE_YAW_L1_WEIGHT
-                    # Native traces show successful yaw loses about 1.0 reward
-                    # to planar gait sway under the sharp std=0.12 Gaussian.
-                    # Match its planar error timescale to the feedback signal
-                    # during yaw, retaining instantaneous idle/straight/z terms.
-                    tracking = cfg.rewards["track_linear_velocity"]
-                    tracking.func = microduck_mdp.track_linear_velocity_yaw_averaged
-                    tracking.params.update(
-                        tau_s=FEEDBACK_TRACKING_TAU_S,
-                        yaw_deadband=FEEDBACK_YAW_DEADBAND_RAD_S,
-                    )
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
