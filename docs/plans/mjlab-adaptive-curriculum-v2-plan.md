@@ -4,7 +4,7 @@ Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
 unproven. The slew acquisition experiment completed 5000→5500 updates but both
 gate windows triggered retention rollback. Native cohort gate wiring is now
 implemented and verified; formal seeds 17/23/47 remain gated.
-Date: 2026-09-22
+Date: 2026-09-23
 Related:
 
 - [`mjlab_adaptive_curriculum_proposal.md`](../mjlab_adaptive_curriculum_proposal.md)
@@ -79,6 +79,17 @@ launcher defaults to `--gate-cohort-size 3`; held-out evaluation remains an
 independent single-seed check. A native 3-seed proof was validated at
 `/tmp/microduck-adaptive-cohort-proof/capability-rebuilt.json` with lower-tail
 `.72200` and `passed=false`, correctly rejecting the current policy.
+
+The subsequent sensor-reset campaign
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` completed 5,000→6,000
+updates with source `07d31a5`. It resampled IMU and encoder realizations at
+episode reset and passed the focused/config/smoke checks, but all four native
+cohort gates held at CoM stage 0 and the final gate lower-tail was `.267`.
+The held-out native lower-tail was `.653` and the CPU/XML transfer lower-tail
+was `0.000`; neither passed. This confirms the reset augmentation is wired and
+measurable, while leaving native reset/DR robustness and CPU actuator/observation
+causality unresolved. Do not spend another matched budget on reset resampling
+alone or start the formal 17/23/47 matrix from this result.
 
 The cohort repair is now closed at both boundaries: aggregation checks every
 member's provenance, evaluator config and trace hash, while the runner checks
@@ -305,7 +316,10 @@ those confounders before spending another matched-budget campaign.
 
 Do not submit another 15-job campaign until the native evaluator has a valid
 seed-consumption proof and the checkpoint ladder identifies whether the failure
-is native learning, export/observation parity, or CPU actuator transfer. A
+is native learning, export/observation parity, or CPU actuator transfer. The
+sensor-reset run now supplies seed-consumption evidence but does not identify
+the CPU/native causal split; the next bounded work must complete that A/B
+diagnosis before another full campaign. A
 policy is **usable** only when its native six-bucket report passes the product
 gate; adaptive superiority is a separate later claim.
 

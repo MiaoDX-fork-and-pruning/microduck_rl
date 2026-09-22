@@ -1,12 +1,34 @@
 # MJLab Adaptive Curriculum v2
 
-Status: **ACTIVE** — no usable policy established. Updated: 2026-09-22.
+Status: **ACTIVE** — no usable policy established. Updated: 2026-09-23.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
 Latest intent: continue authorized changes, training and checks via intuitive-flow.
 Execution is local in the main session; other worktree changes are not owned.
 
 ## Current evidence and decision
+
+The sensor-reset experiment is complete at
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` (source `07d31a5`,
+5,000→6,000 updates, seed 17, 4,096 environments, three-member native gate
+cohort). Resampling the IMU/encoder realization on every episode reset is
+implemented and isolated from evaluators, but it did not establish a retained
+six-capability policy. The four in-run gates were valid and all held at CoM
+stage 0; the last three gate lower-tail scores were `.382`, `.000`, `.000`,
+and the final gate was `.267` (final buckets: zero `.937`, forward `.683`,
+lateral `.789`, yaw `.758`, turn-left `.538`, turn-right `.267`). The adaptive
+state ended with `last_known_good_buckets=["zero"]`, so the controller did not
+claim a usable policy or advance difficulty.
+
+The final held-out native report improved to lower-tail `.653` (zero `.918`,
+forward `.871`, lateral `.790`, yaw `.653`, turn-left `.747`, turn-right
+`.798`), but still failed the product gate. CPU/XML transfer for that same
+checkpoint remained lower-tail `0.000` (zero `.956`, forward `.000`, lateral
+`.000`, yaw `.833`, turn-left `.000`, turn-right `.491`). This separates two
+remaining questions: native reset/DR robustness is incomplete, and the CPU
+rehearsal mismatch still has not been causally isolated. The sensor-reset
+mechanism is therefore evidence against repeating the same augmentation alone,
+not evidence that adaptive training is ready for formal multi-seed acceptance.
 
 Runner evaluation, bounded command exposure, checkpoint/resume and retention
 rollback operate. Both CoM axes remain at ±3 mm. Formal training seeds 17/23/47
