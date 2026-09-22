@@ -1,9 +1,10 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: Phase 0/1 infrastructure complete; r4 remains inconclusive. Phase 2A
-recipe endpoints are complete but fail usability. Runner consolidation and
-bounded command-exposure feedback are implemented; acquisition/calibration
-remain open. See the active status capsule for current proof.
+Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
+unproven. Runner consolidation, native MJLab/BAM evaluation, signed-EMA gate
+calibration, and bounded command-exposure feedback are implemented, but the
+single-seed acquisition continuation still fails the six-bucket gate across
+native reset/DR seeds. See the active status capsule for current proof.
 Date: 2026-09-22
 Related:
 
@@ -31,17 +32,17 @@ hardware success is inferred from simulation. Matched-budget comparison follows
 acquisition; the optional advisor and stronger teachers remain deferred.
 
 Feedback averages signed tracking error over 0.5 s before L1 magnitude, keeps a
-20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The latest
-`0c0b50e` diagnostic exempts pure-yaw commands from the remaining planar L1
-term while retaining idle and turn-forward alignment. At cumulative 1500,
-held-out native yaw MAE reached `0.16237 rad/s` from `0.21180` at 1000, while
-lateral stayed at `0.10197 m/s` and zero drift regressed to `0.09445 m`; only
-forward passes the six-bucket gate. The final checkpoint was saved at the
-`1500 × 24` boundary, before the `std=0.12` tracking stage had a training
-update. Evidence:
-`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1500/campaign-result.json`.
-A bounded continuation to cumulative 2000 is the last pacing diagnostic before
-opening a new command-conditioned acquisition/zero-recovery experiment.
+20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The calibrated
+product metric keeps linear/angular tracking thresholds at `0.12 m/s` and
+`0.6 rad/s`, with separate samplewise stability caps. The cumulative-3500
+`lateral-drive` continuation from seed17 completed its planned budget, but
+native held-out seed `20260915` still failed turn-left and additional native
+seeds `20260921` and `20260922` failed yaw or linear buckets. Eight
+preservation failures triggered explicit rollback; both adaptive CoM axes
+remained at stage 0. Evidence:
+`/tmp/microduck-adaptive-corrected-s17-3500/campaign-result.json`.
+This is a valid orchestration result and a negative usability result, not a
+reason to open the formal multi-seed matrix.
 
 A separate 500-update strictification diagnostic tested lighter motion costs,
 stronger tracking and 25% pure lateral sampling. Its native traces show mean
@@ -55,27 +56,15 @@ another bounded training intervention. Samplewise MAE and product thresholds
 remain fixed; any metric-semantic repair needs a separate calibration argument.
 
 The bounded acquisition-feedback slice combined 0.5 s command-aligned feedback,
-staged tracking width, and an initial lateral focus. It improved forward MAE to
-0.0287 m/s at 500 updates but held-out lateral MAE remained 0.1188 m/s; the
-controller's default frontier order moved focus back to forward because both
-frontiers were below mastery. Native and CPU six-bucket reports both failed.
-The next diagnostic made frontier order checkpointed and lateral-first. It held
-28% lateral exposure for 500 updates, yet native lateral MAE remained
-0.1187 m/s; a forward regression triggered the expected preservation rollback
-at env step 12000, and native/CPU reports both failed. The frontier-order
-confounder is removed. The bounded `lateral-drive` intervention then increased
-linear L1 to 2.0, removed yaw L1, and retained the same zero anchor, staged
-tracking schedule, thresholds, ABI, BAM actuator, and rollback checks. At 500
-updates it reached 0.13029 m/s mean lateral velocity but 0.09859 m/s native
-lateral MAE, with 0.11170 m/s lateral standard deviation; forward MAE was
-0.02795 m/s, yaw MAE 0.80762 rad/s, and zero drift 0.04139 m. All six native
-and CPU product buckets still fail, although four native windows held without
-rollback. The cumulative-1000 and cumulative-1500 continuations then confirmed
-that the pure-yaw exemption improves yaw acquisition but does not solve lateral,
-turn, or zero recovery. A final bounded continuation to cumulative 2000 is
-reserved for testing the already-approved `std=0.12` pacing boundary; a failure
-there requires a new command-conditioned acquisition contract rather than more
-blind coefficient changes.
+staged tracking width, and an initial lateral focus. It improved forward MAE at
+500 updates but did not establish lateral acquisition. The checkpointed,
+lateral-first diagnostic removed the frontier-order confounder, and the
+`lateral-drive` continuation added a yaw-specific acquisition signal. The
+pure-yaw exemption improved yaw on some windows, but the cumulative-1000,
+cumulative-1500, and cumulative-3500 native reports still show unstable
+lateral/yaw/turn retention. The next bounded experiment must therefore measure
+command-conditioned exposure and reward mass directly before changing another
+reward coefficient.
 
 ## Goal
 
