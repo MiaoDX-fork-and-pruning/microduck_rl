@@ -21,11 +21,12 @@ import pytest
 import torch
 from mjlab.envs.mdp import dr
 
-from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report
+from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report, canonical_sha256
 from mjlab_microduck.tasks.adaptive_curriculum import (
     AxisConfig,
     CapabilityGate,
     TransitionExposure,
+    evaluation_com_widths,
 )
 from mjlab_microduck.tasks.adaptive_runner import (
     AdaptiveMicroduckOnPolicyRunner,
@@ -698,6 +699,7 @@ def test_transition_checkpoint_load_is_exact_and_legacy_load_disables_live_state
         "repairs": 2,
         "last_reason": "test",
     }
+
     assert term.cfg.transition_probability == pytest.approx(0.30)
 
     # An old checkpoint has no transition state. Explicit load must clear a
@@ -712,6 +714,32 @@ def test_transition_checkpoint_load_is_exact_and_legacy_load_disables_live_state
     assert runner.transition_exposure.windows == 0
     assert runner.transition_exposure.last_reason == "legacy_checkpoint_bootstrap"
     assert term.cfg.transition_probability == 0.0
+
+
+def test_sensor_reset_fraction_is_checkpointed_and_must_match_environment(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.env.cfg.adaptive_sensor_reset_fraction = 1.0
+    source.env.event_manager.cfgs["adaptive_sensor_resample"] = SimpleNamespace(
+        params={"fraction": 1.0}
+    )
+    checkpoint = tmp_path / "sensor-reset.pt"
+    source.save(str(checkpoint))
+    saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert saved["infos"]["adaptive_curriculum"]["sensor_reset_fraction"] == 1.0
+
+    resumed = _runner()
+    with pytest.raises(ValueError, match="sensor reset fraction mismatch"):
+        resumed.load(str(checkpoint))
+
+    resumed.env.cfg.adaptive_sensor_reset_fraction = 1.0
+    resumed.env.event_manager.cfgs["adaptive_sensor_resample"] = SimpleNamespace(
+        params={"fraction": 1.0}
+    )
+    resumed.load(str(checkpoint))
+    assert resumed.env.cfg.adaptive_sensor_reset_fraction == 1.0
 
 
 def test_zero_transition_checkpoint_loads_into_legacy_command_exposure_runner(
@@ -1000,3 +1028,106 @@ def test_legacy_single_seed_checkpoint_requires_explicit_cohort_migration(
     assert destination.last_known_good_checkpoint is None
     assert destination.evaluation_events[-1]["kind"] == "cohort_rebaseline"
     assert destination.evaluation_events[-1]["legacy_known_good"]["checkpoint"] is None
+
+
+def _stage_report(checkpoint, runner, *, low=False):
+    report = _report(checkpoint, low=low)
+    values = {name: runner.capability_gate.stage_value(name) for name in runner.capability_gate.axis_order}
+    report.payload["evaluator_config"].update({
+        "distribution": "stage", "reference_env_step": 96000,
+        "stage_values": values,
+        "com_widths": evaluation_com_widths("stage", runner.capability_gate.axis_mode, values),
+    })
+    report.payload["metadata"]["evaluator_config_sha256"] = canonical_sha256(report.payload["evaluator_config"])
+    return report
+
+
+def test_stage_gate_requires_explicit_migration_and_resume_inherits_contract(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.completed_iterations = 17
+    source.current_learning_iteration = 16
+    source.capability_gate.best_metrics = {name: 0.9 for name in BUCKETS}
+    source.capability_gate.states["com_range"].ema_score = 0.9
+    source.last_known_good_checkpoint = "old-final-distribution.pt"
+    source.last_known_good_buckets = BUCKETS
+    checkpoint = tmp_path / "legacy-final.pt"
+    source.save(str(checkpoint))
+    saved = torch.load(checkpoint, weights_only=False)
+    saved["infos"]["adaptive_curriculum"].pop("evaluation_distribution")
+    torch.save(saved, checkpoint)
+
+    destination = _runner()
+    destination.env.cfg.adaptive_evaluation_distribution = "stage"
+    with pytest.raises(ValueError, match="explicit migration"):
+        destination.load(str(checkpoint))
+    destination.env.cfg.adaptive_allow_distribution_migration = True
+    destination.load(str(checkpoint))
+    assert destination.evaluation_distribution == "stage"
+    assert destination.completed_iterations == 17
+    assert torch.equal(destination.alg.state["weight"], source.alg.state["weight"])
+    assert destination.capability_gate.best_metrics == {}
+    assert destination.capability_gate.states["com_range"].ema_score is None
+    assert destination.last_known_good_checkpoint is None
+    assert destination.last_known_good_buckets == ()
+    assert destination.evaluation_events[-1]["kind"] == "distribution_rebaseline"
+    stage_checkpoint = tmp_path / "stage.pt"
+    destination.save(str(stage_checkpoint))
+
+    resumed = _runner()
+    resumed.load(str(stage_checkpoint))
+    assert resumed.evaluation_distribution == "stage"
+    assert resumed.adaptive_checkpoint_info()["adaptive_curriculum"]["evaluation_distribution"] == "stage"
+    assert resumed.evaluation_events == destination.evaluation_events
+
+
+def test_stage_advance_does_not_treat_old_difficulty_as_new_mastery(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    runner.evaluation_distribution = "stage"
+    first = tmp_path / "stage0.eval.pt"
+    runner.save(str(first))
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _stage_report(first, runner))
+    runner._evaluate_window(str(first))
+    assert runner.last_gate_outcome == "advance"
+    assert runner.capability_gate.stage_value("com_range") == 0.005
+    assert runner.capability_gate.best_metrics == {}
+    assert runner.last_known_good_checkpoint is None
+    assert runner.last_known_good_buckets == ()
+    assert all(state.ema_score is None for state in runner.capability_gate.states.values())
+    assert runner.evaluation_events[-1]["kind"] == "stage_evidence_rebaseline"
+
+    resumed = _runner()
+    resumed.load(str(first.with_suffix(".adaptive.pt")))
+    assert resumed.evaluation_distribution == "stage"
+    assert resumed.capability_gate.stage_value("com_range") == 0.005
+    assert resumed.capability_gate.best_metrics == {}
+    next_checkpoint = tmp_path / "stage1.eval.pt"
+    resumed.save(str(next_checkpoint))
+    resumed.evaluator = SimpleNamespace(evaluate=lambda **kw: _stage_report(next_checkpoint, resumed, low=True))
+    resumed._evaluate_window(str(next_checkpoint))
+    assert resumed.last_gate_outcome == "regress"
+    assert not any(event["kind"] == "rollback" for event in resumed.evaluation_events)
+
+
+@pytest.mark.parametrize("mutation", [
+    lambda config: config.update(distribution="final"),
+    lambda config: config["stage_values"].update(com_range=0.005),
+    lambda config: config["com_widths"].update(com_range=0.015),
+    lambda config: config.update(reference_env_step=0),
+])
+def test_stage_gate_rejects_wrong_distribution_without_mutating_gate(monkeypatch, tmp_path, mutation):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    runner.evaluation_distribution = "stage"
+    checkpoint = tmp_path / "candidate.pt"
+    runner.save(str(checkpoint))
+    before = runner.capability_gate.state_dict()
+    report = _stage_report(checkpoint, runner)
+    mutation(report.payload["evaluator_config"])
+    report.payload["metadata"]["evaluator_config_sha256"] = canonical_sha256(report.payload["evaluator_config"])
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: report)
+    runner._evaluate_window(str(checkpoint))
+    assert runner.last_gate_outcome == "evaluation_error"
+    assert runner.capability_gate.state_dict() == before
+    assert runner.last_known_good_checkpoint is None

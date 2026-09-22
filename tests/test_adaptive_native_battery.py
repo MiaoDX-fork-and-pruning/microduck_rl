@@ -24,6 +24,50 @@ native = _load("run_adaptive_native_battery")
 manifest = _load("assemble_adaptive_phase2a_manifest")
 
 
+def test_stage_native_construction_uses_checkpoint_com_and_final_reference(monkeypatch, tmp_path):
+    import torch
+    from mjlab_microduck.tasks.adaptive_curriculum import evaluation_com_widths
+
+    checkpoint = tmp_path / "stage.pt"
+    task = "Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck"
+    torch.save({"infos": {"adaptive_curriculum": {
+        "version": 1, "task_id": task, "axis_mode": "composed",
+        "enabled_axes": ["com_range", "head_com_range"],
+        "states": {"com_range": {"current_stage": 1}, "head_com_range": {"current_stage": 0}},
+        "stage_values": {"com_range": 0.005, "head_com_range": 0.003},
+    }}}, checkpoint)
+
+    class CapturedConfiguration(Exception):
+        pass
+
+    def construct(*, cfg, device):
+        assert cfg.events["randomize_com"].params["ranges"] == (-0.005, 0.005)
+        assert cfg.events["randomize_head_com"].params["ranges"] == (-0.003, 0.003)
+        assert "com_range" not in cfg.curriculum
+        assert "head_com_range" not in cfg.curriculum
+        raise CapturedConfiguration
+
+    monkeypatch.setattr("mjlab.envs.ManagerBasedRlEnv", construct)
+    with pytest.raises(CapturedConfiguration):
+        native.run_native(checkpoint, tmp_path / "stage-evidence", task=task,
+                          axis_mode="composed", seed=17, steps=300, device="cpu", distribution="stage")
+    assert evaluation_com_widths("stage", "com", {"com_range": 0.005}) == {
+        "com_range": 0.005, "head_com_range": 0.010,
+    }
+
+
+@pytest.mark.parametrize("values", [
+    {}, {"com_range": 0.004, "head_com_range": 0.003},
+    {"com_range": float("nan"), "head_com_range": 0.003},
+    {"com_range": 0.003, "head_com_range": 0.003, "unowned": 0.003},
+])
+def test_stage_native_rejects_missing_or_unrecognized_stage_values(values):
+    from mjlab_microduck.tasks.adaptive_curriculum import evaluation_com_widths
+
+    with pytest.raises(ValueError):
+        evaluation_com_widths("stage", "composed", values)
+
+
 @pytest.mark.parametrize("distribution,widths", [("initial", (0.003, 0.003)), ("final", (0.015, 0.010))])
 def test_native_construction_disables_training_rehearsal(monkeypatch, tmp_path, distribution, widths):
     from mjlab.envs.mdp import dr

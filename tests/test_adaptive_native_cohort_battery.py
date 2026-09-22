@@ -184,12 +184,12 @@ def test_cohort_report_cannot_forge_selected_member(tmp_path):
 
 
 def test_run_cohort_scrubs_training_transition_overrides(monkeypatch, tmp_path):
-    for name in cohort._TRANSITION_ENV_NAMES:
+    for name in cohort._TRAINING_ONLY_ENV_NAMES:
         monkeypatch.setenv(name, "training-only")
     calls = []
 
     def fake_run_native(checkpoint, output, **kwargs):
-        assert all(name not in os.environ for name in cohort._TRANSITION_ENV_NAMES)
+        assert all(name not in os.environ for name in cohort._TRAINING_ONLY_ENV_NAMES)
         calls.append(kwargs["seed"])
         payload = _member(tmp_path, kwargs["seed"])
         output.mkdir(parents=True, exist_ok=True)

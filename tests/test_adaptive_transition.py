@@ -178,6 +178,7 @@ def test_runner_checkpoint_payload_persists_transition_exposure():
     runner.command_exposure = None
     runner.transition_exposure = TransitionExposure(0.30)
     runner.final_com_fraction = 0.0
+    runner.env.cfg.adaptive_sensor_reset_fraction = 0.0
     runner.bucket_feedback = None
     runner.last_known_good_checkpoint = None
     runner.last_known_good_buckets = ()
@@ -187,3 +188,4 @@ def test_runner_checkpoint_payload_persists_transition_exposure():
     restored = TransitionExposure()
     restored.load_state_dict(payload["transition_exposure"])
     assert restored.state_dict() == runner.transition_exposure.state_dict()
+    assert payload["sensor_reset_fraction"] == 0.0

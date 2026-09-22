@@ -8,6 +8,7 @@ an evaluator or training adapter owns feeding it frozen battery metrics.
 from copy import deepcopy
 from dataclasses import dataclass, fields
 import os
+from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import CurriculumTermCfg, EventTermCfg, RewardTermCfg
@@ -86,6 +87,36 @@ STRICTIFICATION_PROFILE_STAGES = (
     },
 )
 
+
+def _resume_sensor_reset_fraction() -> float | None:
+    """Read the persisted sensor coverage before constructing a resume env.
+
+    The adaptive runner restores its state after the environment exists, so a
+    reset event must be registered during config construction. The launcher
+    normally propagates this value as an environment variable; this fallback
+    also makes direct ``train`` resumes reproduce the checkpoint distribution.
+    """
+
+    checkpoint_name = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
+    if not checkpoint_name:
+        return None
+    checkpoint = Path(checkpoint_name)
+    if not checkpoint.is_file():
+        raise ValueError(f"adaptive resume checkpoint does not exist: {checkpoint}")
+    import torch
+
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    state = (payload.get("infos") or {}).get("adaptive_curriculum")
+    if not isinstance(state, dict) or "sensor_reset_fraction" not in state:
+        return None
+    try:
+        fraction = float(state["sensor_reset_fraction"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("adaptive checkpoint sensor reset fraction must be numeric") from exc
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError("adaptive checkpoint sensor reset fraction must be in [0, 1]")
+    return fraction
+
 # Feedback-only acquisition signal: at low commanded speeds the Gaussian
 # tracking reward is nearly flat around standing. These dimensionless,
 # command-aligned L1 penalties keep a direct cost for missing the requested
@@ -144,6 +175,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # Optional adaptive-only startup coverage for coupled sensor DR corners.
     # The canonical fixed Velocity recipe keeps the ordinary independent draws.
     adaptive_sensor_corner_fraction: float = 0.0
+    # Optional adaptive-only reset resampling for the coupled sensor realization.
+    # The realization stays fixed within an episode and is redrawn on reset.
+    adaptive_sensor_reset_fraction: float = 0.0
     # None inherits the checkpoint (or zero on a fresh run). An explicit value
     # starts a recorded experiment override after resume; at most 20% is final.
     adaptive_final_com_fraction: float | None = None
@@ -156,6 +190,10 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # campaign must opt in explicitly when it re-baselines that evidence for a
     # larger native cohort while preserving the PPO state and cumulative budget.
     adaptive_allow_legacy_cohort_migration: bool = False
+    # None inherits a resumed checkpoint, otherwise preserves the legacy final
+    # gate. Changing this contract requires explicit evidence rebaselining.
+    adaptive_evaluation_distribution: str | None = None
+    adaptive_allow_distribution_migration: bool = False
     adaptive_evaluator_schema_version: int = 2
     adaptive_seed_set_id: str = "adaptive-gate-20260916"
     adaptive_evaluation_timeout_s: int = 900
@@ -244,6 +282,12 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_allow_legacy_cohort_migration = (
         os.environ.get("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", "0") == "1"
     )
+    cfg.adaptive_evaluation_distribution = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION")
+    if cfg.adaptive_evaluation_distribution not in (None, "final", "stage"):
+        raise ValueError("adaptive evaluation distribution must be final or stage")
+    cfg.adaptive_allow_distribution_migration = (
+        os.environ.get("MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION", "0") == "1"
+    )
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
@@ -261,6 +305,30 @@ def make_microduck_adaptive_velocity_env_cfg(
             mode="startup",
             params={
                 "fraction": cfg.adaptive_sensor_corner_fraction,
+                "max_angle_deg": 6.0,
+                "bias_range": (-0.015, 0.015),
+            },
+        )
+    sensor_reset_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION")
+    if sensor_reset_fraction is None:
+        resumed_fraction = _resume_sensor_reset_fraction()
+        if resumed_fraction is not None:
+            cfg.adaptive_sensor_reset_fraction = resumed_fraction
+    else:
+        try:
+            cfg.adaptive_sensor_reset_fraction = float(sensor_reset_fraction)
+        except ValueError as exc:
+            raise ValueError("adaptive sensor reset fraction must be numeric") from exc
+        if not 0.0 <= cfg.adaptive_sensor_reset_fraction <= 1.0:
+            raise ValueError("adaptive sensor reset fraction must be in [0, 1]")
+    if cfg.adaptive_sensor_corner_fraction > 0.0 and cfg.adaptive_sensor_reset_fraction > 0.0:
+        raise ValueError("sensor corner and sensor reset coverage are mutually exclusive")
+    if cfg.adaptive_sensor_reset_fraction > 0.0:
+        cfg.events["adaptive_sensor_resample"] = EventTermCfg(
+            func=microduck_mdp.randomize_sensor_realization,
+            mode="reset",
+            params={
+                "fraction": cfg.adaptive_sensor_reset_fraction,
                 "max_angle_deg": 6.0,
                 "bias_range": (-0.015, 0.015),
             },

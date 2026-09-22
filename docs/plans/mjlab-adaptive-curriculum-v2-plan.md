@@ -1,10 +1,11 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
-unproven. The slew acquisition experiment completed 5000→5500 updates but both
-gate windows triggered retention rollback. Native cohort gate wiring is now
-implemented and verified; formal seeds 17/23/47 remain gated.
-Date: 2026-09-22
+unproven. The 6,000-update sensor-reset policy still fails native and CPU product
+checks. Stage-aware acquisition gates are implemented and verified by real
+smoke; a bounded 6,000→6,500 campaign is running. Formal seeds 17/23/47 remain
+gated.
+Date: 2026-09-23
 Related:
 
 - [`mjlab_adaptive_curriculum_proposal.md`](../mjlab_adaptive_curriculum_proposal.md)
@@ -12,6 +13,43 @@ Related:
 - [`status/active/mjlab-adaptive-curriculum.md`](../status/active/mjlab-adaptive-curriculum.md)
 
 ## Active execution contract
+
+### Stage-aware gate repair (2026-09-23)
+
+Training stayed at ±3 mm CoM while the in-run evaluator always defaulted to
+the final ±15 mm body / ±10 mm head distribution. The same checkpoint and
+three-member gate cohort scored `.267` on final and `.701514` on initial CoM;
+neither meets `.80`. The diagnostic is
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/diagnostic-initial-com/capability.json`.
+
+The native/cohort evaluator now accepts `--distribution stage`. It validates
+checkpoint axis indices against recorded stage values, substitutes only the
+owned CoM axes, and keeps the final reference step for all other curricula.
+Distribution, stage values and full CoM widths enter the evaluator config hash;
+the runner rejects reports and cohort members with mismatched distributions.
+Every stage change discards incomparable EMA/mastery/rollback evidence while
+preserving difficulty, PPO state and transition history. Retention is measured
+within a stage; passing an early stage does not establish product usability.
+
+Campaigns default to stage gates for fresh adaptive runs and inherit the saved
+contract on resume (legacy checkpoints mean `final`). An explicit change uses
+`--gate-distribution stage --rebaseline-gate`; it preserves the policy,
+optimizer, cumulative budget and exposure probabilities while clearing old
+gate evidence. Direct runner resumes inherit the saved distribution when no
+override is supplied. Independent held-out native and CPU checks retain the
+final product distribution and original thresholds.
+
+Validation: 250 adaptive/config/capability tests pass, as do focused Ruff
+(`E4,E7,E9,F`) and diff checks. The real 64-env/5-update smoke at
+`/tmp/microduck-adaptive-stage-gate-smoke-beea4f8/runtime-proof.json` validates
+three-member stage gating, final-distribution held-out separation, sensor reset,
+and ONNX/CPU execution. The bounded 6,000→6,500 campaign is running at
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`, preceded by a fixed-checkpoint
+three-member stage evaluation. Both use the read-only `beea4f8` source snapshot
+with 679 recorded/verified file hashes. Retained learning is still unproven;
+implementation and smoke proof do not establish policy acceptance.
+
+### Sustained objective
 
 Status: **ACTIVE**. Task control plane: thread
 `01a0c2ae-6895-7700-accd-89a0e7a46e1b`, workspace `holy-ape`.
@@ -79,6 +117,34 @@ launcher defaults to `--gate-cohort-size 3`; held-out evaluation remains an
 independent single-seed check. A native 3-seed proof was validated at
 `/tmp/microduck-adaptive-cohort-proof/capability-rebuilt.json` with lower-tail
 `.72200` and `passed=false`, correctly rejecting the current policy.
+
+The subsequent sensor-reset campaign
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` completed 5,000→6,000
+updates with source `07d31a5`. It resampled IMU and encoder realizations at
+episode reset and passed the focused/config/smoke checks, but all four native
+cohort gates held at CoM stage 0 and the final gate lower-tail was `.267`.
+The held-out native lower-tail was `.653` and the CPU/XML transfer lower-tail
+was `0.000`; neither passed. This confirms the reset augmentation is wired and
+measurable, while leaving native reset/DR robustness and CPU actuator/observation
+causality unresolved. Do not spend another matched budget on reset resampling
+alone or start the formal 17/23/47 matrix from this result.
+
+A bounded XML actuator probe at
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/cpu-actuator-ab.jsonl`
+changed the deployment recipe without changing the checkpoint. Current-limit
+only traces were identical to the baseline; a 1–2 step action delay changed
+turn metrics but left forward/lateral below the tracking gate and the lower-tail
+at `0.0`. This is useful negative evidence for the CPU diagnosis, but it is
+not a matched BAM-vs-XML experiment and does not authorize a product or
+training conclusion by itself.
+
+The sensor-reset checkpoint contract is now implemented and verified: the
+fraction is persisted in adaptive metadata, full loads fail closed on a live
+configuration mismatch, campaign resumes propagate the saved value before
+constructing the environment, and direct resumes recover it from the explicit
+checkpoint path. The 222-test adaptive/config suite, focused lint, real 64-env
+smoke, and one-update direct resume all pass. This removes a reproducibility
+blocker while leaving the native usability and CPU-transfer gates unresolved.
 
 The cohort repair is now closed at both boundaries: aggregation checks every
 member's provenance, evaluator config and trace hash, while the runner checks
@@ -305,7 +371,10 @@ those confounders before spending another matched-budget campaign.
 
 Do not submit another 15-job campaign until the native evaluator has a valid
 seed-consumption proof and the checkpoint ladder identifies whether the failure
-is native learning, export/observation parity, or CPU actuator transfer. A
+is native learning, export/observation parity, or CPU actuator transfer. The
+sensor-reset run now supplies seed-consumption evidence but does not identify
+the CPU/native causal split; the next bounded work must complete that A/B
+diagnosis before another full campaign. A
 policy is **usable** only when its native six-bucket report passes the product
 gate; adaptive superiority is a separate later claim.
 

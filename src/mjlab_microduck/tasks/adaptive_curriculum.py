@@ -12,7 +12,7 @@ import math
 from typing import Mapping, Sequence
 from enum import StrEnum
 
-from mjlab_microduck.evaluation.capability import BUCKETS
+from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
 
 
 class CommandExposure:
@@ -569,6 +569,15 @@ class CapabilityGate:
             "trace": [item.as_dict() for item in self.trace],
         }
 
+    def reset_evidence(self, *, step: int = -1) -> None:
+        """Keep difficulty/history, discard scores from another distribution."""
+        self.best_metrics = {}
+        for state in self.states.values():
+            state.pass_count = 0
+            state.fail_count = 0
+            state.ema_score = None
+            state.last_transition_step = step
+
     def stage_value(self, axis_name: str) -> object:
         """Return the live stage value an MJLab adapter should apply."""
         if axis_name not in self.axes:
@@ -618,6 +627,34 @@ ADAPTIVE_AXIS_CONFIGS = (
         min_dwell_steps=10 * 24,
     ),
 )
+
+
+def evaluation_com_widths(
+    distribution: str, axis_mode: str, stage_values: Mapping[str, float] | None = None
+) -> dict[str, float]:
+    """Resolve frozen evaluator widths without changing the product distribution.
+
+    Stage evaluation substitutes only controller-owned axes. Other axes and
+    curricula retain the final reference used by the product battery.
+    """
+    if distribution not in ("initial", "final", "stage"):
+        raise ValueError("invalid evaluation distribution")
+    axes = resolve_enabled_axes(axis_mode)
+    widths = {
+        axis.name: float(axis.stages[0 if distribution == "initial" else -1])
+        for axis in ADAPTIVE_AXIS_CONFIGS
+    }
+    if distribution == "stage":
+        if not axes or not isinstance(stage_values, Mapping) or set(stage_values) != set(axes):
+            raise ValueError("stage evaluation requires exactly the enabled axis values")
+        configs = {axis.name: axis for axis in ADAPTIVE_AXIS_CONFIGS}
+        for name, value in stage_values.items():
+            if isinstance(value, bool) or value not in configs[name].stages:
+                raise ValueError(f"unrecognized evaluation stage value: {name}")
+            widths[name] = float(value)
+    elif stage_values:
+        raise ValueError("stage values require stage evaluation")
+    return widths
 
 
 def apply_stage_to_env(env: object, axis_name: str, stage_value: object) -> None:
