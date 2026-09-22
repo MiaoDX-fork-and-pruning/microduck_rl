@@ -87,6 +87,7 @@ def main() -> int:
     start_iterations = 0
     saved_final_com_fraction = 0.0
     saved_sensor_reset_fraction = 0.0
+    saved_action_rate_relief_scope = "all"
     saved_transition_probability = 0.0
     saved_transition_mode = "forward"
     transition_mode_override_requested = args.transition_mode is not None
@@ -103,6 +104,9 @@ def main() -> int:
         saved_fraction = state.get("final_com_fraction", 0.0)
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
         saved_sensor_fraction = state.get("sensor_reset_fraction", 0.0)
+        saved_relief = state.get("action_rate_relief")
+        if isinstance(saved_relief, dict):
+            saved_action_rate_relief_scope = saved_relief.get("scope", "all")
         saved_sensor_reset_fraction = 0.0 if saved_sensor_fraction is None else float(saved_sensor_fraction)
         if not 0.0 <= saved_sensor_reset_fraction <= 1.0:
             parser.error("checkpoint sensor reset fraction must be in [0, 1]")
@@ -157,6 +161,9 @@ def main() -> int:
     environment.pop("MICRODUCK_ADAPTIVE_RESULT_FILE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
+    environment.setdefault("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", saved_action_rate_relief_scope)
+    if environment["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"] not in ("all", "pure_yaw"):
+        parser.error("action-rate relief scope must be all or pure_yaw")
     if args.resume:
         # The checkpoint owns this training-distribution setting. Recreate it
         # before the environment is constructed, even when the shell that
@@ -204,6 +211,7 @@ def main() -> int:
         "task_id": task_id,
         "axis_mode": axis_mode,
         "source_sha": source_sha,
+        "action_rate_relief_scope": environment["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"],
         "sensor_reset_fraction": environment.get(
             "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
             str(saved_sensor_reset_fraction),
@@ -268,6 +276,7 @@ def main() -> int:
         # native and CPU reports must use the product DR distribution.
         "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
         "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+        "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE",
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
     ):

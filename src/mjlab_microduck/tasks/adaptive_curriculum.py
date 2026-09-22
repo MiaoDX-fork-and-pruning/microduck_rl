@@ -385,9 +385,11 @@ class AdaptiveActionRateRelief:
     gives the yaw frontier a bounded, checkpointed relief window and restores
     the canonical curriculum afterward.  It is driven only by frozen gate
     metrics; it never changes evaluator commands or acceptance thresholds.
+    The optional pure-yaw scope leaves the other commands at canonical
+    smoothing strength and only uses pure-yaw capability to open or close it.
     """
 
-    version = 1
+    version = 2
     yaw_buckets = ("yaw", "turn-left", "turn-right")
 
     def __init__(
@@ -398,6 +400,7 @@ class AdaptiveActionRateRelief:
         release_threshold: float = 0.80,
         active_windows: int = 4,
         cooldown_windows: int = 1,
+        scope: str = "all",
     ) -> None:
         values = (relief_weight, trigger_threshold, release_threshold)
         if any(not math.isfinite(float(value)) for value in values):
@@ -410,6 +413,10 @@ class AdaptiveActionRateRelief:
             raise ValueError("action-rate relief active windows must be positive")
         if type(cooldown_windows) is not int or cooldown_windows < 0:
             raise ValueError("action-rate relief cooldown windows must be nonnegative")
+        if scope not in ("all", "pure_yaw"):
+            raise ValueError("action-rate relief scope must be all or pure_yaw")
+        self.scope = scope
+        self.yaw_buckets = ("yaw",) if scope == "pure_yaw" else type(self).yaw_buckets
         self.relief_weight = float(relief_weight)
         self.trigger_threshold = float(trigger_threshold)
         self.release_threshold = float(release_threshold)
@@ -481,6 +488,7 @@ class AdaptiveActionRateRelief:
         return {
             "version": self.version,
             "relief_weight": self.relief_weight,
+            "scope": self.scope,
             "trigger_threshold": self.trigger_threshold,
             "release_threshold": self.release_threshold,
             "active_windows": self.active_windows,
@@ -494,8 +502,11 @@ class AdaptiveActionRateRelief:
         }
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
-        if payload.get("version") != self.version:
+        if payload.get("version") not in (1, self.version):
             raise ValueError("unsupported action-rate relief version")
+        saved_scope = "all" if payload["version"] == 1 else payload.get("scope")
+        if saved_scope != self.scope:
+            raise ValueError("action-rate relief scope mismatch")
         for name, expected in (
             ("relief_weight", self.relief_weight),
             ("trigger_threshold", self.trigger_threshold),
@@ -544,6 +555,7 @@ class AdaptiveActionRateRelief:
     def apply(self, env: object) -> None:
         """Expose the live override to the canonical reward curriculum."""
         setattr(env, "_adaptive_action_rate_weight", self.relief_weight if self.active else None)
+        setattr(env, "_adaptive_action_rate_scope", self.scope)
 
 @dataclass(frozen=True)
 class AxisConfig:

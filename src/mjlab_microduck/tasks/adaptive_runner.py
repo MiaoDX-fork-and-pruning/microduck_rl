@@ -420,6 +420,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 release_threshold=float(getattr(env.cfg, "adaptive_action_rate_relief_release", 0.80)),
                 active_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_windows", 4)),
                 cooldown_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_cooldown_windows", 1)),
+                scope=getattr(env.cfg, "adaptive_action_rate_relief_scope", "all"),
             )
             if getattr(env.cfg, "adaptive_action_rate_relief", False)
             else None

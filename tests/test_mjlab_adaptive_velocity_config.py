@@ -195,6 +195,35 @@ def test_action_rate_relief_is_opt_in_to_lateral_drive_recipe() -> None:
     ).adaptive_action_rate_relief is False
 
 
+@pytest.mark.parametrize("saved_scope", [None, "pure_yaw"])
+def test_resume_restores_action_rate_relief_scope_before_env_creation(monkeypatch, tmp_path, saved_scope):
+    import torch
+    from mjlab_microduck.tasks import mdp
+
+    relief = {"version": 1} if saved_scope is None else {"version": 2, "scope": saved_scope}
+    checkpoint = tmp_path / "relief.pt"
+    torch.save({"infos": {"adaptive_curriculum": {"action_rate_relief": relief}}}, checkpoint)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", raising=False)
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
+    assert cfg.adaptive_action_rate_relief_scope == (saved_scope or "all")
+    assert (cfg.rewards["action_rate_l2"].func is mdp.adaptive_action_rate_l2) == (saved_scope == "pure_yaw")
+
+
+def test_pure_yaw_relief_experiment_is_explicit_and_validated(monkeypatch):
+    from mjlab_microduck.tasks import mdp
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", "pure_yaw")
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
+    assert cfg.adaptive_action_rate_relief_scope == "pure_yaw"
+    assert cfg.rewards["action_rate_l2"].func is mdp.adaptive_action_rate_l2
+    base = make_microduck_adaptive_velocity_env_cfg()
+    assert base.rewards["action_rate_l2"].func is not mdp.adaptive_action_rate_l2
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", "invalid")
+    with pytest.raises(ValueError, match="relief scope"):
+        make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
+
+
 def test_frontier_stall_window_override_is_explicit_and_bounded(monkeypatch) -> None:
     monkeypatch.setenv("MICRODUCK_ADAPTIVE_FRONTIER_STALL_WINDOWS", "12")
     cfg = make_microduck_adaptive_velocity_env_cfg(

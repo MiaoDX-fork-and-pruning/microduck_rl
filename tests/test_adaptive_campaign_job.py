@@ -196,3 +196,39 @@ def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(
     assert campaign.main() == 0
     config = json.loads((output / "campaign-config.json").read_text())
     assert config["sensor_reset_fraction"] == "1.0"
+
+
+def test_resumed_job_preserves_pure_yaw_scope_in_smoke_and_training_only(monkeypatch, tmp_path):
+    task, _ = campaign.TASKS["lateral-drive"]
+    checkpoint = tmp_path / "pure-yaw.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, task=task, completed=5)
+    saved = torch.load(checkpoint, weights_only=False)
+    saved["infos"]["adaptive_curriculum"]["action_rate_relief"] = {"version": 2, "scope": "pure_yaw"}
+    torch.save(saved, checkpoint)
+    output = tmp_path / "continuation"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "reviewed-source")
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", raising=False)
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "lateral-drive", "--seed", "17",
+        "--output", str(output), "--iterations", "7", "--num-envs", "64",
+        "--gate-interval", "1", "--resume", str(checkpoint),
+    ])
+
+    def run(command, **kwargs):
+        env = kwargs["env"]
+        if Path(command[0]).name == "train":
+            assert env["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"] == "pure_yaw"
+            if Path(kwargs["cwd"]).name == "training":
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]),
+                              output / "training/model_6.pt", task=task)
+        else:
+            assert "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE" not in env
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    config = json.loads((output / "campaign-config.json").read_text())
+    assert config["action_rate_relief_scope"] == "pure_yaw"

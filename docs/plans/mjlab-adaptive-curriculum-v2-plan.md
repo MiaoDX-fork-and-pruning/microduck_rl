@@ -5,8 +5,9 @@ unproven. Bounded adaptive smoothing relief improved native yaw in one matched
 250-update window, but a later candidate was rolled back, the retained policy
 fails native/CPU acceptance, and a 10-seed stage diagnostic exposes startup and
 lateral-survival failures. Fixed sensor-bias ablations confirm calibration
-sensitivity in yaw while lateral falls persist. Formal training seeds 17/23/47
-remain gated.
+sensitivity in yaw; matched push ablations locate the lateral recovery regression.
+A bounded pure-yaw-only relief treatment is implemented for comparison; real smoke
+and training are next. Formal training seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
 
@@ -120,12 +121,41 @@ conditions. This confirms calibration sensitivity in the tested yaw cases,
 while ruling out calibration removal as a sufficient repair for the lateral
 failure. It is not product acceptance and does not explain CPU overspeed.
 
-Next decision: target calibration robustness while retaining product sensor DR;
-isolate physical reset/dynamics behind the persistent lateral fall before
-selecting a bounded training treatment that preserves existing turns. Keep CPU
-rate transfer as a separate diagnosis. No new training is running. Any treatment
-requires a bounded budget, immutable source, smoke64/5 and retained-policy
-native/CPU verification. Formal multi-seed campaigns remain gated on acquisition.
+### Bounded pure-yaw relief comparison
+
+The lateral fall is triggered by a seeded push at 3.9 s. Holding recorded
+physical/sensor reset state and the pre-push trace fixed, half/no push changes
+lateral survival from failure to full survival and scores .298→.801/.807. The
+matched 6500 canonical-smoothing control also survives full push (.790), with
+identical recorded initial state and actor observation. Actual qvel write
+proof and the original cached-velocity logging limitation are recorded at
+`/tmp/microduck-relief-6500-push-sensitivity/analysis-summary.json`.
+
+Hypothesis: restricting relief to pure-yaw commands retains its acquisition
+benefit while avoiding the lateral recovery regression caused during global
+relief training. This remains a training hypothesis, not a proven repair.
+
+Implementation is opt-in through
+`MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE=pure_yaw`: positive action-rate
+costs are scaled only for zero-planar/nonzero-yaw commands, with the canonical
+manager weight and other command costs retained. Pure-yaw capability controls
+the existing bounded window. Versioned state preserves the scope through resume
+and rollback; legacy controllers remain global and mismatches fail closed.
+Default LateralDrive stays global pending evidence. Product pushes, sensors,
+commands, reward signs, ABI and gates are unchanged. Focused tests pass; real
+smoke and training proof are next.
+
+Training contract: exact common 6250 checkpoint, seed 17, 4096 environments,
+250 updates to 6500, gate seeds 20260815–17, stage distribution and existing
+transition settings. The starting checkpoint has no relief controller and may
+bootstrap this explicit treatment. Use a clean committed snapshot plus the
+recorded CPU seed overlay and smoke64/5 before the budget. Verify actual
+weighted action-rate costs in the live environment. Compare both existing
+250-update controls, retained stage/final/CPU metrics and the seed-20260916
+full-push rollout. Failure to preserve lateral recovery or yaw learning rejects
+this treatment as sufficient. Do not extend its budget without a changed
+hypothesis. Fresh held-out seeds, multi-training-seed proof and CPU transfer
+remain required even if this diagnostic comparison improves.
 
 ## Goal
 

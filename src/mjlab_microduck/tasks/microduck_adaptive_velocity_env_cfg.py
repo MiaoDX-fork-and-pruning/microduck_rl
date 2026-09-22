@@ -88,15 +88,8 @@ STRICTIFICATION_PROFILE_STAGES = (
 )
 
 
-def _resume_sensor_reset_fraction() -> float | None:
-    """Read the persisted sensor coverage before constructing a resume env.
-
-    The adaptive runner restores its state after the environment exists, so a
-    reset event must be registered during config construction. The launcher
-    normally propagates this value as an environment variable; this fallback
-    also makes direct ``train`` resumes reproduce the checkpoint distribution.
-    """
-
+def _resume_adaptive_state() -> dict | None:
+    """Read settings needed to construct the environment before runner load."""
     checkpoint_name = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
     if not checkpoint_name:
         return None
@@ -107,7 +100,13 @@ def _resume_sensor_reset_fraction() -> float | None:
 
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     state = (payload.get("infos") or {}).get("adaptive_curriculum")
-    if not isinstance(state, dict) or "sensor_reset_fraction" not in state:
+    return state if isinstance(state, dict) else None
+
+
+def _resume_sensor_reset_fraction() -> float | None:
+    """Recreate checkpointed reset coverage before the environment exists."""
+    state = _resume_adaptive_state()
+    if state is None or "sensor_reset_fraction" not in state:
         return None
     try:
         fraction = float(state["sensor_reset_fraction"])
@@ -176,6 +175,7 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_action_rate_relief_release: float = 0.80
     adaptive_action_rate_relief_windows: int = 4
     adaptive_action_rate_relief_cooldown_windows: int = 1
+    adaptive_action_rate_relief_scope: str = "all"
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -402,6 +402,15 @@ def make_microduck_adaptive_velocity_env_cfg(
                     # The controller temporarily softens action smoothing while
                     # the strict native capability gate stays unchanged.
                     cfg.adaptive_action_rate_relief = True
+                    scope = os.environ.get("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE")
+                    if scope is None:
+                        saved = (_resume_adaptive_state() or {}).get("action_rate_relief")
+                        scope = saved.get("scope", "all") if isinstance(saved, dict) else "all"
+                    if scope not in ("all", "pure_yaw"):
+                        raise ValueError("action-rate relief scope must be all or pure_yaw")
+                    cfg.adaptive_action_rate_relief_scope = scope
+                    if scope == "pure_yaw":
+                        cfg.rewards["action_rate_l2"].func = microduck_mdp.adaptive_action_rate_l2
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can

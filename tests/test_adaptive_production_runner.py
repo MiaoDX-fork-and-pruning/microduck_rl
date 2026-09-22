@@ -165,10 +165,11 @@ def test_legacy_resume_clears_previous_live_relief(monkeypatch, tmp_path, legacy
     assert resumed.env._adaptive_action_rate_weight is None
 
 
-def test_relief_round_trip_and_expiry_survive_policy_rollback(monkeypatch, tmp_path):
+@pytest.mark.parametrize("scope", ["all", "pure_yaw"])
+def test_relief_round_trip_and_expiry_survive_policy_rollback(monkeypatch, tmp_path, scope):
     _fake_parent_io(monkeypatch)
     runner = _runner(gate=_gate(pass_windows=100))
-    runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2)
+    runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2, scope=scope)
     known_metrics = {**dict.fromkeys(BUCKETS, 0.9), "yaw": 0.2}
     runner.record_capability_metrics(known_metrics)
     assert runner.env._adaptive_action_rate_weight == -0.2
@@ -194,10 +195,11 @@ def test_relief_round_trip_and_expiry_survive_policy_rollback(monkeypatch, tmp_p
             runner.save(str(repair))
             state = runner.action_rate_relief.state_dict()
             runner = _runner(gate=_gate(pass_windows=100))
-            runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2)
+            runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2, scope=scope)
             runner.load(str(repair))
             assert runner.action_rate_relief.state_dict() == state
             assert runner.env._adaptive_action_rate_weight == -0.2
+            assert runner.env._adaptive_action_rate_scope == scope
     assert not runner.action_rate_relief.active
     assert runner.action_rate_relief.remaining_windows == 0
     assert runner.env._adaptive_action_rate_weight is None
@@ -211,6 +213,18 @@ def test_full_resume_cannot_silently_drop_inactive_relief_controller(monkeypatch
     runner.save(str(checkpoint))
     destination = _runner()
     with pytest.raises(ValueError, match="action-rate relief mismatch"):
+        destination.load(str(checkpoint))
+
+
+def test_full_resume_rejects_changed_action_rate_relief_scope(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.action_rate_relief = AdaptiveActionRateRelief(scope="pure_yaw")
+    checkpoint = tmp_path / "pure-yaw.pt"
+    source.save(str(checkpoint))
+    destination = _runner()
+    destination.action_rate_relief = AdaptiveActionRateRelief()
+    with pytest.raises(ValueError, match="scope mismatch"):
         destination.load(str(checkpoint))
 
 

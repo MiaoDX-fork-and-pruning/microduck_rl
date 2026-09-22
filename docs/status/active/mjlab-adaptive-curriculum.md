@@ -95,12 +95,43 @@ Seed 20260919 yaw rises from .146 to .807 without encoder bias (mean rate
 .744→.859 with identity IMU. Seed 20260916 lateral still falls in all four
 conditions. These are diagnostic interventions, not product acceptance.
 
-Next decision: calibration robustness now has direct evidence. Keep product
-sensor DR, diagnose the persistent lateral fall under physical reset/dynamics,
-and select a bounded treatment that preserves turns. CPU overspeed remains a
-separate unresolved transfer problem. No training or diagnostic process is
-currently running. Any new training needs an evidence-backed contract,
-immutable source, smoke64/5 and unchanged native/CPU acceptance.
+The push ablation is complete:
+`/tmp/microduck-relief-6500-push-sensitivity/analysis-summary.json`.
+The failing lateral rollout receives a world-frame velocity increment
+(+.284, -.295) m/s at step 195 (3.9 s). Half/no push survives with scores
+.801/.807, compared with .298 at full push. Initial sensor/physical fields and
+pre-push trace prefixes match. The matched 6500 canonical-smoothing control
+also survives full push (.790), with identical recorded initial state and raw
+actor observation. The earlier probe's immediate root-link velocity delta was
+cached and invalid; the separate `push-write-proof` qvel trace supplies the
+actual write. This supports testing narrower relief, not weakening product pushes.
+
+## Current implementation and experiment
+
+The next treatment is **pure-yaw-only action smoothing relief**. The opt-in
+`MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE=pure_yaw` keeps canonical action-rate
+costs for idle, forward, lateral and mixed turns; only zero-planar/nonzero-yaw
+commands receive the bounded relief. Trigger/release use pure-yaw capability.
+Scope is checkpointed, inherited by direct/campaign resumes, and checked on
+load. Legacy v1 controllers retain global scope; evaluators strip the launch
+setting. Default LateralDrive remains global until behavioral evidence supports
+promotion. No observation, action, DR, push or acceptance change is included.
+
+Proof: 97 focused adaptive/config/cohort/campaign tests passed, then 13 campaign
+tests passed after adding the scope-inheritance regression. Focused Ruff passes.
+New-source smoke and training are next; no training process is currently running.
+
+Bounded comparison: resume the exact original 6250 `model_6249.eval.adaptive.pt`
+from the stage-gate campaign, seed 17, 4096 envs, 250 additional updates to 6500,
+stage gate seeds 20260815–17 and diagnostic final seed 20260915. The source has
+no relief controller, so this is an explicit treatment bootstrap, not a silent
+scope change on a saved controller. Compare existing no-relief and global-relief
+250-update controls, then the seed-20260916 full-push case and retained native/
+CPU traces. A useful treatment must retain yaw learning without the lateral
+recovery regression; full product acceptance still requires all six buckets.
+Use an immutable source plus the explicit CPU seed overlay, smoke64/5 before
+long training, and verify live per-command weighted costs. Do not simply
+extend a failing treatment. Sensor robustness and CPU overspeed remain open.
 
 ## Remaining acceptance and boundaries
 
