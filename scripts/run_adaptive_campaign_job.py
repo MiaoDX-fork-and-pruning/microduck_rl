@@ -166,7 +166,18 @@ def main() -> int:
         )
     if transition_mode_override_requested:
         environment["MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE"] = "1"
-    config = {**vars(args), "resume": str(args.resume) if args.resume else None, "start_completed_iterations": start_iterations, "output": str(output), "task_id": task_id, "axis_mode": axis_mode, "source_sha": source_sha}
+    config = {
+        **vars(args),
+        "resume": str(args.resume) if args.resume else None,
+        "start_completed_iterations": start_iterations,
+        "output": str(output),
+        "task_id": task_id,
+        "axis_mode": axis_mode,
+        "source_sha": source_sha,
+        "sensor_reset_fraction": os.environ.get(
+            "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION", "0"
+        ),
+    }
     (output / "campaign-config.json").write_text(json.dumps(config, indent=2) + "\n")
     train = str(Path(sys.executable).parent / "train")
     for phase, envs, iterations in (("smoke", 64, 5), ("training", args.num_envs, args.iterations - start_iterations)):
