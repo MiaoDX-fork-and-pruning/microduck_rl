@@ -60,6 +60,8 @@ def main() -> int:
                         help="Final-CoM rehearsal fraction (0..0.20); defaults to checkpoint value or zero")
     parser.add_argument("--transition-probability", type=float, default=None,
                         help="Initial forward-to-yaw transition probability (0..0.40); defaults to checkpoint value or zero")
+    parser.add_argument("--transition-mode", choices=("forward", "zero"), default=None,
+                        help="Transition bootstrap mode; defaults to checkpoint mode or forward")
     parser.add_argument("--gate-seed", type=int, default=20260815)
     parser.add_argument("--heldout-seed", type=int, default=20260915)
     args = parser.parse_args()
@@ -74,6 +76,8 @@ def main() -> int:
     start_iterations = 0
     saved_final_com_fraction = 0.0
     saved_transition_probability = 0.0
+    saved_transition_mode = "forward"
+    transition_mode_override_requested = args.transition_mode is not None
     if args.resume:
         import torch
 
@@ -87,6 +91,7 @@ def main() -> int:
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
         transition_state = state.get("transition_exposure") or {}
         saved_transition_probability = float(transition_state.get("probability", 0.0))
+        saved_transition_mode = str(state.get("transition_bootstrap_mode", "forward"))
         if state.get("num_envs") != args.num_envs:
             parser.error("resume must retain num-envs for comparable cumulative transition accounting")
         if state.get("evaluation_seed") is not None and state["evaluation_seed"] != args.gate_seed:
@@ -99,6 +104,10 @@ def main() -> int:
         parser.error("final CoM rehearsal fraction must be in [0, 0.20]")
     if args.transition_probability is None:
         args.transition_probability = saved_transition_probability
+    if args.transition_mode is None:
+        args.transition_mode = saved_transition_mode
+    if args.transition_mode not in ("forward", "zero"):
+        parser.error("transition mode must be forward or zero")
     if not 0.0 <= args.transition_probability <= 0.40:
         parser.error("transition acquisition probability must be in [0, 0.40]")
     if args.transition_probability and args.branch not in (
@@ -122,11 +131,13 @@ def main() -> int:
     environment.pop("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", None)
     environment.pop("MICRODUCK_ADAPTIVE_RESULT_FILE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
+    environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
     environment.update({
         "PYTHONUNBUFFERED": "1",
         "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
         "MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION": str(args.final_com_fraction),
         "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY": str(args.transition_probability),
+        "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
         "MICRODUCK_ADAPTIVE_SEED_SET_ID": f"adaptive-gate-{args.gate_seed}",
         "MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND": (
@@ -142,6 +153,8 @@ def main() -> int:
         environment["MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE"] = str(
             args.transition_probability
         )
+    if transition_mode_override_requested:
+        environment["MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE"] = "1"
     config = {**vars(args), "resume": str(args.resume) if args.resume else None, "start_completed_iterations": start_iterations, "output": str(output), "task_id": task_id, "axis_mode": axis_mode, "source_sha": source_sha}
     (output / "campaign-config.json").write_text(json.dumps(config, indent=2) + "\n")
     train = str(Path(sys.executable).parent / "train")

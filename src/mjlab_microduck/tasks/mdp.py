@@ -4842,6 +4842,9 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         )
         if not math.isfinite(probability) or not 0.0 <= probability <= 0.40:
             raise ValueError("transition_probability must be finite and in [0, 0.40]")
+        bootstrap_mode = str(getattr(cfg, "transition_bootstrap_mode", "forward"))
+        if bootstrap_mode not in ("forward", "zero"):
+            raise ValueError("transition_bootstrap_mode must be 'forward' or 'zero'")
         if (
             len(duration) != 2
             or not all(math.isfinite(value) for value in duration)
@@ -4901,6 +4904,9 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
                     (self.num_envs,), -1, dtype=torch.long, device=self.device
                 )
         probability = float(getattr(self.cfg, "transition_probability", 0.0))
+        bootstrap_mode = str(getattr(self.cfg, "transition_bootstrap_mode", "forward"))
+        if bootstrap_mode not in ("forward", "zero"):
+            raise ValueError("transition_bootstrap_mode must be 'forward' or 'zero'")
         self._transition_active[env_ids] = False
         self._transition_elapsed[env_ids] = 0.0
         self._transition_target[env_ids] = self.vel_command_b[env_ids]
@@ -4928,10 +4934,16 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         target = self._transition_target[selected_ids].clone()
         bootstrap = target.clone()
         pure_yaw = buckets[eligible][selected] == 3
-        if torch.any(pure_yaw):
-            max_forward = max(abs(float(value)) for value in self.cfg.ranges.lin_vel_x)
-            bootstrap[pure_yaw, 0] = max_forward * forward_fraction[pure_yaw]
-        bootstrap[:, 1:] = 0.0
+        if bootstrap_mode == "forward":
+            if torch.any(pure_yaw):
+                max_forward = max(abs(float(value)) for value in self.cfg.ranges.lin_vel_x)
+                bootstrap[pure_yaw, 0] = max_forward * forward_fraction[pure_yaw]
+            bootstrap[:, 1:] = 0.0
+        else:
+            # Hold the exact idle command before switching to the sampled yaw
+            # or turn target. This supplies direct zero→rotation transitions;
+            # the original forward bootstrap remains the default recipe.
+            bootstrap.zero_()
         self.vel_command_b[selected_ids] = bootstrap
         self.vel_command_w[selected_ids] = bootstrap
         self._transition_target[selected_ids] = target
@@ -4941,9 +4953,9 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         # Reward feedback tracks the command actually shown to the policy. It
         # is a forward lesson during the lead-in, then returns to yaw/turn.
         if hasattr(self, "bucket_ids"):
-            self.bucket_ids[selected_ids] = 1
-        self.is_forward_env[selected_ids] = True
-        self.is_standing_env[selected_ids] = False
+            self.bucket_ids[selected_ids] = 1 if bootstrap_mode == "forward" else 0
+        self.is_forward_env[selected_ids] = bootstrap_mode == "forward"
+        self.is_standing_env[selected_ids] = bootstrap_mode == "zero"
 
     def _update_command(self) -> None:
         super()._update_command()
@@ -4960,6 +4972,7 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         if hasattr(self, "bucket_ids"):
             self.bucket_ids[ids] = self._transition_target_bucket[ids]
         self.is_forward_env[ids] = False
+        self.is_standing_env[ids] = False
         self._transition_active[ids] = False
 
     def _resample_command(self, env_ids: torch.Tensor) -> None:
@@ -5009,6 +5022,7 @@ class AdaptiveVelocityCommandCfg(VelocityCommandCommandOnlyCfg):
     bucket_probabilities: tuple[float, ...] = (0.8 / 6,) * 6
     # Opt-in acquisition aid. Zero preserves the previous command stream.
     transition_probability: float = 0.0
+    transition_bootstrap_mode: str = "forward"
     transition_duration_s: tuple[float, float] = (1.0, 2.0)
     transition_forward_fraction: tuple[float, float] = (0.25, 0.75)
 

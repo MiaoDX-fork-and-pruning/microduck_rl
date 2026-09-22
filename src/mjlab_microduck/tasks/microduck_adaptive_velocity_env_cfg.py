@@ -129,10 +129,12 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_command_exposure: bool = False
     adaptive_transition_acquisition: bool = False
     adaptive_transition_probability: float = 0.0
+    adaptive_transition_bootstrap_mode: str = "forward"
     # A launch-only value is applied after a full checkpoint restore.  Keeping
     # this separate from the persisted controller state makes explicit CLI
     # overrides deterministic while ordinary resumes remain exact.
     adaptive_transition_probability_override: float | None = None
+    adaptive_transition_bootstrap_mode_override: bool = False
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -158,6 +160,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     diagnostic_mode: str | None = None,
     command_exposure: bool = False,
     transition_probability: float | None = None,
+    transition_bootstrap_mode: str | None = None,
 ) -> ManagerBasedRlEnvCfg:
     """Return the static initial slice used by adaptive curriculum experiments."""
 
@@ -198,6 +201,16 @@ def make_microduck_adaptive_velocity_env_cfg(
         # remains behaviorally disabled; the object only owns its counters.
         cfg.adaptive_transition_acquisition = True
     if command_exposure:
+        requested_bootstrap_mode = transition_bootstrap_mode
+        if requested_bootstrap_mode is None:
+            mode_env = os.environ.get("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE")
+            requested_bootstrap_mode = "forward" if mode_env is None else mode_env
+        if requested_bootstrap_mode not in ("forward", "zero"):
+            raise ValueError("transition bootstrap mode must be 'forward' or 'zero'")
+        cfg.adaptive_transition_bootstrap_mode = requested_bootstrap_mode
+        cfg.adaptive_transition_bootstrap_mode_override = transition_bootstrap_mode is not None
+        if os.environ.get("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE") == "1":
+            cfg.adaptive_transition_bootstrap_mode_override = True
         transition_override = os.environ.get("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE")
         if transition_override is not None:
             cfg.adaptive_transition_probability_override = float(transition_override)
@@ -331,6 +344,7 @@ def make_microduck_adaptive_velocity_env_cfg(
         command.init_velocity_prob = 0.0
         cfg.commands["twist"] = command
         command.transition_probability = cfg.adaptive_transition_probability
+        command.transition_bootstrap_mode = cfg.adaptive_transition_bootstrap_mode
         if cfg.adaptive_transition_acquisition:
             command.transition_duration_s = (1.0, 2.0)
             command.transition_forward_fraction = (0.25, 0.75)

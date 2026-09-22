@@ -769,6 +769,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "transition_exposure": None
             if getattr(self, "transition_exposure", None) is None
             else self.transition_exposure.state_dict(),
+            "transition_bootstrap_mode": getattr(
+                self.env.cfg, "adaptive_transition_bootstrap_mode", "forward"
+            ),
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
@@ -821,6 +824,17 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if exposure is not None:
                 exposure.load_state_dict(state["command_exposure"])
             saved_transition = state.get("transition_exposure")
+            saved_bootstrap_mode = str(state.get("transition_bootstrap_mode", "forward"))
+            current_bootstrap_mode = str(
+                getattr(self.env.cfg, "adaptive_transition_bootstrap_mode", "forward")
+            )
+            if saved_bootstrap_mode not in ("forward", "zero"):
+                raise ValueError("invalid adaptive checkpoint transition bootstrap mode")
+            if (
+                saved_bootstrap_mode != current_bootstrap_mode
+                and not getattr(self.env.cfg, "adaptive_transition_bootstrap_mode_override", False)
+            ):
+                raise ValueError("adaptive checkpoint transition bootstrap mode mismatch")
             if saved_transition is not None:
                 if transition_exposure is None:
                     # A zero-probability state is behaviorally disabled. It

@@ -11,7 +11,7 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
 )
 
 
-def _term(*, probability=0.0, num_envs=64):
+def _term(*, probability=0.0, mode="forward", num_envs=64):
     cfg = make_microduck_adaptive_velocity_env_cfg(
         command_exposure=True, transition_probability=probability
     ).commands["twist"]
@@ -19,6 +19,7 @@ def _term(*, probability=0.0, num_envs=64):
     cfg.bucket_probabilities = (0.0, 0.0, 0.0, 1.0, 0.0, 0.0)
     cfg.transition_duration_s = (1.0, 1.0)
     cfg.transition_forward_fraction = (0.5, 0.5)
+    cfg.transition_bootstrap_mode = mode
     env = SimpleNamespace(
         device="cpu", num_envs=num_envs, common_step_counter=0, step_dt=0.02
     )
@@ -66,6 +67,28 @@ def test_zero_to_yaw_uses_forward_bootstrap_then_restores_target():
     assert not torch.any(term._transition_active)
     torch.testing.assert_close(term.command, target)
     assert torch.all(term.bucket_ids == 3)
+
+
+def test_zero_bootstrap_holds_idle_command_then_restores_yaw_target():
+    term = _term(probability=0.4, mode="zero")
+    ids = torch.arange(term.num_envs)
+    torch.manual_seed(7)
+    term._resample_command(ids)
+    active = term._transition_active.clone()
+    target = term._transition_target.clone()
+    assert torch.any(active)
+    assert torch.all(term.command[active] == 0.0)
+    assert torch.all(term.bucket_ids[active] == 0)
+    assert torch.all(term.is_standing_env[active])
+    term._transition_elapsed[active] = term._transition_duration[active]
+    term._update_command()
+    assert not torch.any(term._transition_active)
+    torch.testing.assert_close(term.command, target)
+    assert torch.all(term.bucket_ids == 3)
+    assert not torch.any(term.is_standing_env[active])
+    term._env.common_step_counter = 1
+    term.compute(0.02)
+    torch.testing.assert_close(term.command[active], target[active])
 
 
 def test_reset_compute_does_not_advance_transition_timer():
@@ -126,11 +149,18 @@ def test_config_is_zero_by_default_and_transition_is_opt_in():
     assert feedback.adaptive_transition_acquisition
     assert feedback.adaptive_transition_probability == pytest.approx(0.20)
     assert feedback.commands["twist"].transition_probability == pytest.approx(0.20)
+    assert feedback.adaptive_transition_bootstrap_mode == "forward"
     zero = make_microduck_adaptive_velocity_env_cfg(
         command_exposure=True, transition_probability=0.0
     )
     assert zero.adaptive_transition_acquisition
     assert zero.commands["twist"].transition_probability == 0.0
+    zero_mode = make_microduck_adaptive_velocity_env_cfg(
+        command_exposure=True, transition_probability=0.20,
+        transition_bootstrap_mode="zero",
+    )
+    assert zero_mode.adaptive_transition_bootstrap_mode == "zero"
+    assert zero_mode.adaptive_transition_bootstrap_mode_override
     with pytest.raises(ValueError, match="command_exposure"):
         make_microduck_adaptive_velocity_env_cfg(transition_probability=0.20)
 
