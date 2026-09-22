@@ -219,6 +219,9 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+        # Sensor-corner coverage is a training-only augmentation.  Frozen
+        # native and CPU reports must use the product DR distribution.
+        "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

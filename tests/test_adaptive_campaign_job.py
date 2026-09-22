@@ -104,6 +104,7 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
                 "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
                 "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
                 "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+                "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
             ):
                 assert name not in kwargs["env"]
             report = Path(command[command.index("--output") + 1])

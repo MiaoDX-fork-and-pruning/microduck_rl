@@ -30,12 +30,16 @@ from run_adaptive_native_battery import run_native
 
 
 COHORT_MANIFEST_VERSION = "native-reset-dr-cohort-v1"
-_TRANSITION_ENV_NAMES = (
+_TRAINING_ONLY_ENV_NAMES = (
     "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
     "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
     "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
     "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+    "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
 )
+# Keep the old name as a compatibility alias for existing contract tests and
+# callers that only know about transition overrides.
+_TRANSITION_ENV_NAMES = _TRAINING_ONLY_ENV_NAMES
 
 
 def resolve_cohort_seeds(
@@ -76,10 +80,10 @@ def resolve_cohort_seeds(
 
 @contextmanager
 def _native_evaluator_environment():
-    """Keep training-only transition overrides out of every native member."""
-    saved = {name: os.environ.get(name) for name in _TRANSITION_ENV_NAMES}
+    """Keep training-only acquisition and sensor coverage out of native members."""
+    saved = {name: os.environ.get(name) for name in _TRAINING_ONLY_ENV_NAMES}
     try:
-        for name in _TRANSITION_ENV_NAMES:
+        for name in _TRAINING_ONLY_ENV_NAMES:
             os.environ.pop(name, None)
         yield
     finally:
