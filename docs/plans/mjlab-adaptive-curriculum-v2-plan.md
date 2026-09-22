@@ -66,6 +66,14 @@ lateral/yaw/turn retention. The next bounded experiment must therefore measure
 command-conditioned exposure and reward mass directly before changing another
 reward coefficient.
 
+The final native traces support that diagnosis: held-out mean velocity bias is
+small (`-0.015 / -0.0025 m/s` forward/lateral and `+0.014 rad/s` yaw), while
+samplewise ripple remains large (`0.0217 / 0.1070 m/s` and `0.2227 rad/s`).
+The extra reset/DR seeds move the failing bucket between yaw and linear
+commands. The next contract must record bucket-conditioned sample counts and
+weighted reward mass, rather than treating a single checkpoint's aggregate as
+an acquisition explanation.
+
 ## Goal
 
 Build an automated MJLab training system that can adjust bounded difficulty

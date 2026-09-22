@@ -45,6 +45,14 @@ and rollback to `model_3249.eval.adaptive.pt`; the campaign's
 `status: evaluated` therefore means artifacts were produced, not that the
 policy passed. There is still no usable policy.
 
+The diagnostic traces also separate command bias from gait ripple: on the
+held-out trace, mean velocity bias is about `-0.015 m/s` forward and
+`-0.0025 m/s` lateral while samplewise MAE is `0.0217 / 0.1070`; yaw mean
+bias is about `+0.014 rad/s` while samplewise MAE is `0.2227`. Across the two
+additional seeds, the failures move between yaw and linear buckets. This makes
+the remaining blocker a command-conditioned acquisition/retention problem,
+not evidence that the signed-EMA metric is simply measuring a fixed DC bias.
+
 ## Next decision and experiment boundary
 
 Blocker fingerprint: `native_command_conditioned_acquisition_and_retention`.
