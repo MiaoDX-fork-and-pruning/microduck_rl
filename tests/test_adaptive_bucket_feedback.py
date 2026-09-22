@@ -65,3 +65,11 @@ def test_bucket_feedback_rejects_wrong_reward_schema():
     payload["term_names"] = ["different"]
     with pytest.raises(ValueError, match="reward term mismatch"):
         tracker.load_state_dict(payload)
+
+
+def test_bucket_feedback_buffers_remain_mutable_when_created_in_rollout_mode():
+    with torch.inference_mode():
+        tracker = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
+    assert not tracker.sample_count.is_inference()
+    tracker.record(torch.tensor([0]), torch.tensor([[1.0]]))
+    tracker.reset()

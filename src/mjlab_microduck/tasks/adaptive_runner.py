@@ -67,16 +67,21 @@ class BucketFeedbackTracker:
         self.term_names = names
         self.device = torch.device(device)
         self.step_dt = float(step_dt)
-        self.sample_count = torch.zeros(
-            len(COMMAND_FEEDBACK_BUCKETS), dtype=torch.long, device=self.device
-        )
-        self.unclassified_count = torch.zeros((), dtype=torch.long, device=self.device)
-        self.reward_mass = torch.zeros(
-            (len(COMMAND_FEEDBACK_BUCKETS), len(names)),
-            dtype=torch.float32,
-            device=self.device,
-        )
-        self.reward_abs_mass = torch.zeros_like(self.reward_mass)
+        # The rollout loop runs under ``torch.inference_mode``.  Keep tracker
+        # buffers as ordinary mutable tensors because window snapshots reset
+        # them after evaluation in normal mode, and checkpoint restore writes
+        # into them outside the rollout context.
+        with torch.inference_mode(False):
+            self.sample_count = torch.zeros(
+                len(COMMAND_FEEDBACK_BUCKETS), dtype=torch.long, device=self.device
+            )
+            self.unclassified_count = torch.zeros((), dtype=torch.long, device=self.device)
+            self.reward_mass = torch.zeros(
+                (len(COMMAND_FEEDBACK_BUCKETS), len(names)),
+                dtype=torch.float32,
+                device=self.device,
+            )
+            self.reward_abs_mass = torch.zeros_like(self.reward_mass)
 
     def reset(self) -> None:
         self.sample_count.zero_()
