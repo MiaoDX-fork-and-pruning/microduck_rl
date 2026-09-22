@@ -66,7 +66,13 @@ Implementation proof: the severe-gap and deterministic tie cases fail on the
 old controller. The relevant suite now reports 269 passed, 1 deselected (the
 existing absent specialist-manifest fixture), including actual seeded command
 resampling and equivalent save/resume decisions. Focused Ruff and diff checks
-pass. GPU smoke and the matched behavioral experiment remain required.
+pass. The repair is committed as `96fd557`. Real smoke64/5 passed at
+`/tmp/microduck-adaptive-deficit-smoke-96fd557/runtime-proof.json`, including
+stage/final distribution separation and six verified consumed CPU reset seeds.
+The matched behavioral replay is running at
+`/tmp/microduck-adaptive-deficit-s17-6500-96fd557/`; its contract and source
+manifest explicitly include the existing CPU reset-seed overlay. Behavioral
+improvement remains unproven.
 
 ### Stage-aware gate repair (2026-09-23)
 

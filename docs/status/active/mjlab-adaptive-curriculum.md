@@ -13,7 +13,7 @@ the sustained execution objective remains active.
 ## Current evidence
 
 The 6,000→6,500 seed-17 campaign has finished (`execution-status.json` is
-`evaluated`); no training process remains. It is not accepted. Validated compact
+`evaluated`). It is not accepted. Validated compact
 evidence and exact checkpoint/report paths:
 `/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/experiment-summary.json`.
 Scores are normalized capability scores, not success rates; the pass boundary
@@ -67,6 +67,15 @@ before feedback diverges, actual subsequent exposure and retained six-bucket
 scores. Stop after 500 updates; do not repeat an unchanged unsuccessful budget.
 The canonical plan owns the full experiment contract.
 
+The repair is committed as `96fd557`. The paired replay is now running under
+PID `2704387` at `/tmp/microduck-adaptive-deficit-s17-6500-96fd557/`.
+Its `experiment-contract.json` records the exact source/checkpoint, settings,
+comparison, budget and stop condition. Read `execution-status.json` before
+acting on a missing process. Source is frozen at
+`/tmp/microduck-adaptive-deficit-source-96fd557/`, with 679 verified files and
+the explicitly hashed pre-existing CPU reset-seed overlay; its source label is
+`96fd557-cpu-seed-overlay-5ae829076760`. No behavioral result exists yet.
+
 The frozen control's old-frame CPU report is superseded by
 `/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/cpu-transfer-link-frame/capability.json`.
 Its checkpoint and source hashes were verified. The seeded CPU proof used an
@@ -88,14 +97,18 @@ Do not silently describe such a run as the plain committed source tree.
 - Teacher repair: the two severe-deficit regressions fail on old logic; all
   269 relevant tests now pass (the same missing-fixture test is deselected).
   Real command resampling increases yaw while keeping anchors, and resumed
-  feedback matches uninterrupted decisions. Focused Ruff/diff checks pass;
-  GPU smoke and behavioral comparison are next.
+  feedback matches uninterrupted decisions. Focused Ruff/diff checks pass.
+- Real GPU smoke64/5 with the new source passed, including the three-member
+  ±3 mm stage gate, final ±15/±10 mm held-out distribution, checkpointed sensor
+  reset, normalized ONNX and body-link-frame CPU execution. All six consumed
+  reset-noise arrays match their declared seeds. Proof:
+  `/tmp/microduck-adaptive-deficit-smoke-96fd557/runtime-proof.json`.
 - Sensor reset is checkpointed and restored; actor 61D/action 14D, normalized
   ONNX, command isolation and native cohort provenance are verified.
-- Next proof: regression of the actual .784 lateral / .248 yaw vector, bounded
-  real command resampling, identical decisions after resume, then smoke64/5
-  and the matched 500-update teacher experiment. A sampling repair alone does
-  not prove policy recovery.
+- Next proof: inspect the matched replay's 6250 gate before allocation differs,
+  then its 6500 gate, retained checkpoint and native final/corrected CPU reports.
+  Compare actual sampled fractions and protected zero/turn capabilities.
+  A sampling repair alone does not prove policy recovery.
 - A potential retention gap to assess: migration discards old evidence but the
   external before-training stage report is not yet an in-run rollback baseline.
   Do not infer mastery from old final-distribution reports.
