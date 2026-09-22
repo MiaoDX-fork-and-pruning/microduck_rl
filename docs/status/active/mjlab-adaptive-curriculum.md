@@ -6,7 +6,8 @@ Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
 The user authorized sustained necessary changes, training and checks through
 `intuitive-flow`. Latest user requested status; the execution objective remains
 active. Latest slice: teacher allocation repair and an inconclusive behavioral
-comparison. No training process is currently running.
+comparison. The boundary-controlled replay and a 10-seed native yaw
+robustness diagnostic are complete; no training process is currently running.
 
 ## Current evidence
 
@@ -58,23 +59,32 @@ is `stopped_invalid_experiment_premise` at
 `/tmp/microduck-adaptive-deficit-s17-6500-7000-96fd557/execution-status.json`.
 Do not restart it or treat it as behavioral evidence.
 
-## Next required proof
+## Remaining blocker and next proof
 
-Blocker fingerprint: `severe_deficit_intervention_not_yet_trained`.
-Use the original control's exact 6250 evaluation boundary, where the measured
-stage vector contains lateral .796 and yaw .000. Its pre/post-evaluation
-checkpoints and report already exist under the control's training run. Reapply
-the new controller decision to that same evaluated actor and compare matched
-resumed training with the old decision. First verify identical policy,
-optimizer, budget, gate and RNG and a changed teacher allocation. Do not count
-an extra gate window or manually assign mastery. Capture the actual sampled
-fractions before attributing any capability difference to allocation.
+Blocker fingerprint: `direct_command_yaw_under_reset_dr_robustness`.
+The strict boundary treatment and its matched no-injection control both
+completed the same 6250→6500 budget. The treatment changed only the teacher
+decision from lateral focus to yaw focus, increased yaw sampling from about
+8.2% to 12.5%, and still degraded native held-out yaw to `.129` (corrected CPU
+to `0`). The control retained native held-out lower-tail `.528` and corrected
+CPU lower-tail `.458`; neither is accepted. These are rejection results, not
+retained-policy scores.
 
-Budget and launch must follow that concrete intervention contract and the
-existing smoke64/5 requirement. A sampling change alone is not policy recovery.
-Native stage, retained policy, final held-out and corrected CPU reports remain
-separate. The missing before-training rollback baseline after distribution
-migration is a distinct gap to assess; do not silently mix it into a comparison.
+The exact 6250 actor was then evaluated natively over ten reset/DR seeds at the
+stage distribution (CoM and head-CoM ±3 mm):
+`/tmp/microduck-yaw-robustness-6250-96fd557/capability-stage.json`. The
+conservative aggregate lower tail is `0.000`. Pure yaw scores by seed were
+`0, .766, .035, 0, .038, 0, 0, 0, 0, 0`; no member reached `.80`, while all
+yaw rollouts survived without falling. The manifest records the same DR ranges
+and reset sources for every member, with consumed-state hashes, so this proves
+reset/DR sensitivity but does not yet identify one scalar friction, armature or
+CoM realization as the cause.
+
+Do not repeat direct-yaw exposure or turn-proxy exposure as if either repaired
+the policy. The next bounded intervention must target reset-conditioned pure-yaw
+acquisition and should record the realized reset/DR state needed to distinguish
+an initialization sensitivity from a missing yaw behavior. Keep the smoke64/5
+contract, native-vs-CPU separation, and exact retained-policy rollback rules.
 
 ## Proven implementation and portability
 
