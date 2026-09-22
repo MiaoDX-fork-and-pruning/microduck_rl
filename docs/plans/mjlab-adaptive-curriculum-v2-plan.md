@@ -13,7 +13,10 @@ noise diagnostic exposes deterministic startup failure masked by stochastic
 rollouts. A matched low-entropy consolidation comparison now retains an improved
 6750 actor: five of six buckets pass in one final-native diagnostic, CPU yaw and
 lateral improve, and the known sensor/push failures improve. Native cohort and
-CPU acceptance still fail. A bounded 6750→7000 continuation is running; formal
+CPU acceptance still fail. The bounded 6750→7000 continuation completed and was
+retained, but regressed CPU right-turn stability; stop unchanged extensions.
+6750 remains the better product diagnostic reference. Corrected CPU current
+limits and a fixed-actor delay comparison do not resolve overspeed. Formal
 training seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
@@ -48,7 +51,7 @@ normalization thresholds .12 m/s and .6 rad/s and separate samplewise stability
 caps. Scores are normalized capability, not success probability. Keep the .80
 pass threshold, 20% exact-zero anchor, nominal exposure and directional floors.
 
-### Current retained consolidation policy
+### Best retained consolidation reference
 
 Authoritative evidence:
 `/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
@@ -66,7 +69,7 @@ Learned mean action std is .101 (start .280; rejected control .291).
 
 Scores (zero/forward/lateral/yaw/left/right): stage gate cohort
 .961/.782/.783/.790/.838/.777; final-native diagnostic seed 20260915
-.936/.875/.812/.857/.815/.797; CPU .966/.892/.861/.531/.698/.788.
+.936/.875/.812/.857/.815/.797; corrected CPU v4 .966/.892/.861/.531/.700/.788.
 Native/CPU yaw means are .817/1.104 rad/s for a .8 command. CPU overspeed is
 smaller than the previous 1.390, but remains a blocker. Every-bucket .80 mastery
 is still absent. CoM axes remain at ±3 mm.
@@ -78,16 +81,69 @@ match six recorded reset fields and the initial raw actor observation. Twelve
 native/ONNX action parity cases pass (max error 7.16e-7); export correctness does
 not establish transfer. These seeds remain diagnostic, not fresh held-out proof.
 
-Continuation contract: one further 250-update window from this exact 6750
-checkpoint, seed 17, 4096 envs, inherited global relief and adaptive command
-teacher (now focused on lateral), unchanged stage gate and CPU/final evaluators.
-Pass `--agent.algorithm.entropy-coef 0.0` explicitly: the current checkpoint does
-not persist/inherit that standard PPO setting. No entropy controller or default
-promotion is included. Require retained improvement in remaining native deficits
-and CPU tracking; rollback or stagnant/worse native and CPU behavior stops
-unchanged budget extension and routes to a transfer comparison.
-Output: `/tmp/microduck-adaptive-entropy-continuation-s17-250`, session `43041`.
-It uses the same immutable source plus a hashed launch wrapper and smoke64/5.
+### Completed 7000 continuation: stop unchanged budget
+
+The follow-up consumed another 250 updates from that exact 6750 checkpoint,
+seed 17, 4096 envs, inherited global relief and adaptive command teacher,
+unchanged stage gate and immutable source. Smoke64/5 passed. The retained
+7000 actor equals its candidate and known-good snapshot across all 13 actor
+tensors; no rollback. Mean action std fell .101→.072. Session `43041` ended.
+Evidence: `/tmp/microduck-adaptive-entropy-continuation-s17-250/experiment-summary.json`.
+Checkpoint SHA: `94c29a191bea9bc7bdfdc7e5f93fcd68fc621845d188f56b02229219a548ee86`.
+
+Scores (zero/forward/lateral/yaw/left/right): stage cohort
+.981/.819/.776/.746/.843/.776; final-native diagnostic
+.937/.877/.797/.866/.764/.797; corrected CPU v4
+.975/.892/.851/.761/.699/.000. Native/CPU yaw rates .824/.946 rad/s improve CPU
+overspeed, but native lateral/left and CPU right stability regress. CPU right
+survives and turns at -.990 rad/s: samplewise error .615 exceeds the .6 stability
+cap; filtered error .201 alone would score .665. It is not idle.
+
+The declared stop criterion fired: no further unchanged low-entropy window.
+6750 stays the better product diagnostic reference. Entropy zero remains an
+explicit `--agent.algorithm.entropy-coef 0.0` override; adaptive checkpoints do
+not persist/inherit it and a default resume returns to .01. No automatic
+entropy-consolidation controller or default change has behavioral acceptance.
+
+### Corrected CPU rehearsal and paired delay diagnosis
+
+`918bfb6` shares the runtime's 1.75 A current cap (±.6405236195572268 Nm) with the
+CPU battery, which previously used XML ±.96 Nm. CPU remains an XML position-PD
+rehearsal, distinct from native BAM. Evaluator v4 records its actuator profile
+and hashes inference implementation as well as battery/rollout code.
+Focused proof: 30 tests pass; two missing-specialist-artifact failures reproduce
+on pre-fix `610fbc5`. Focused Ruff/diff pass; no added `infer_policy.py` findings.
+
+Full v4 recheck: `/tmp/microduck-cpu-v4-recheck-6750-7000/summary.json`.
+Both existing normalized ONNX artifacts verify by hash; all 12 six-second cases
+are finite 61D/14D. Reset perturbations and initial observations match v3.
+6750 exactly reproduces the earlier manually aligned current-limit diagnostic.
+The current fix changes a few scores slightly, but leaves yaw and the 7000
+right-turn failure unchanged. Product acceptance still fails for both actors.
+
+Fixed-6750 delay comparison:
+`/tmp/microduck-actuator-delay-6750/analysis-summary.json`.
+Native delay 3–6 counts 5 ms physics steps, so training latency is 15–30 ms.
+The optional CPU inference delay counts 20 ms policy steps; product default is
+zero. Diagnostic CPU interventions explicitly delay position targets at the
+physics timebase with first-command startup clamping. Native bypass still runs
+the original buffer and consumes its RNG, then applies the undelayed command.
+
+Native nominal/zero-delay yaw scores .857/.861 and rates .817/.811 rad/s;
+CPU 0/15/20/30 ms scores .531/.345/.291/.223 and rates
+1.104/1.229/1.271/1.313 rad/s. This rejects actuator-delay mismatch as a sufficient
+explanation or repair for the tested yaw overspeed. Keep product delay defaults.
+All recorded physical/sensor resets, first native observation and sampled-lag
+sequences match; nominal native reproduces earlier final trace arrays exactly.
+All 36 trace hashes and native/ONNX parity pass. One fixed actor and one reused
+diagnostic seed limit the conclusion; this is not held-out acceptance.
+
+Diagnostic source: `/tmp/microduck-current-limit-source-918bfb6`, git archive plus
+the unchanged pre-existing CPU seed overlay; 681 files verified before/after.
+Manifest SHA: `a22c92f5a416f33e954e49ecc47055a0345e177e71ed870ba9267ae85e6be791`.
+No training has run on this source. Next isolate BAM versus XML position-PD
+response with a fixed actor and matched physical state before selecting another
+training treatment; new-source long training requires smoke64/5.
 
 ### Pre-consolidation reference and measured limits
 
@@ -147,7 +203,7 @@ install/config/model compile passes; fresh-environment GPU and remote execution
 remain unproven. Existing tests and smoke artifacts are linked from the capsule
 and earlier experiment summaries.
 
-### Current decision-changing diagnostic
+### Pre-consolidation sensor diagnosis
 
 Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
 Relief helped yaw but did not resolve startup/DR robustness or CPU transfer;

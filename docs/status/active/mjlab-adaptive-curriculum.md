@@ -7,10 +7,12 @@ The user authorized sustained necessary changes, training and checks through
 `intuitive-flow`; the status request does not cancel execution.
 Project-status writer: not assigned; project-status delta: none.
 
-## Current retained policy
+## Latest result and best diagnostic reference
 
 Phase 0/1 automation works; Phase 2A usable-policy acquisition remains open.
-A matched low-entropy consolidation experiment retains a new **6750 actor**.
+The latest **7000 actor** was retained by the native gate, but regressed in CPU
+right-turn stability. **6750 remains the better product diagnostic reference**.
+No training or diagnostic process is running. Do not extend the same treatment.
 Every capability bucket must score **≥ .80**; scores below are not success rates.
 Both adaptive CoM axes remain at stage 0 (±3 mm).
 
@@ -18,7 +20,7 @@ Both adaptive CoM axes remain at stage 0 (±3 mm).
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Stage gate, worst of 20260815–17 | .961 | .782 | .783 | .790 | .838 | .777 |
 | Final-native diagnostic, 20260915 | .936 | .875 | .812 | .857 | .815 | .797 |
-| CPU rehearsal, 20260915 | .966 | .892 | .861 | .531 | .698 | .788 |
+| CPU v4 rehearsal, 20260915 | .966 | .892 | .861 | .531 | .700 | .788 |
 
 Native final has five passing buckets; cohort and CPU acceptance still fail.
 CPU yaw mean is 1.104 rad/s for a .8 command, improved from 1.390 but still fast.
@@ -43,22 +45,32 @@ Each comparison matches six recorded reset fields and the initial observation.
 Twelve ONNX action-parity cases pass (max error 7.16e-7). Those paths are linked
 from the authoritative summary. Previously consumed seeds remain diagnostic.
 
-## Running now and next decision
+## Completed continuation and next decision
 
 Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
-Classification changed: stochastic rollout performance masked deterministic
-startup failure; low-entropy consolidation improves both startup and transfer,
-while remaining native tracking deficits and CPU speed bias prevent acceptance.
+Classification: low-entropy consolidation improves deterministic acquisition,
+but native tracking/DR robustness and CPU actuator-path transfer remain open.
+Last decision delta: the extra window regresses product behavior; current-limit
+alignment and a paired actuator-delay probe do not resolve yaw overspeed.
 
-A **single further 250-update window, 6750→7000**, is running in session `43041`.
-Poll that handle; do not restart on timeout. Root output:
-`/tmp/microduck-adaptive-entropy-continuation-s17-250` (arm `continuation-250`).
-Launch wrapper: `/tmp/run_microduck_entropy_continuation.py`.
-Training seed 17, 4096 envs, same source and gate seeds/distribution, inherited
-global relief and adaptive command teacher (now focused on lateral). The wrapper
-passed smoke64/5 with entropy zero verified, records real argv, checks saved
-agent entropy, and automatically performs retained native-final and CPU
-evaluations. Training was observed at update 6825/7000, action std about .09.
+The single authorized follow-up, **6750→7000**, completed in session `43041`
+after smoke64/5. Seed 17, 4096 envs, explicit entropy zero, unchanged training
+source and gate distribution. All 13 retained actor tensors equal the candidate
+and known-good snapshot; no rollback. Mean action std fell .101→.072.
+
+| Retained 7000 actor | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stage gate, worst of 20260815–17 | .981 | .819 | .776 | .746 | .843 | .776 |
+| Final-native diagnostic, 20260915 | .937 | .877 | .797 | .866 | .764 | .797 |
+| CPU v4 rehearsal, 20260915 | .975 | .892 | .851 | .761 | .699 | .000 |
+
+CPU right turns and survives: mean -.990 rad/s; samplewise angular error .615
+exceeds the .6 cap. Its .201 filtered error alone would score .665. Do not call
+it idle. Native/CPU yaw means are .824/.946 rad/s for a .8 command.
+Authoritative training summary:
+`/tmp/microduck-adaptive-entropy-continuation-s17-250/experiment-summary.json`.
+Retained checkpoint SHA:
+`94c29a191bea9bc7bdfdc7e5f93fcd68fc621845d188f56b02229219a548ee86`.
 
 **Entropy zero is an explicit standard PPO CLI override, not inherited from
 adaptive checkpoint metadata.** Ordinary default resumes would restore .01.
@@ -66,13 +78,33 @@ Every continuation must pass `--agent.algorithm.entropy-coef 0.0` and verify the
 saved config. Do not claim an automatic entropy controller exists or change the
 default before behavioral proof.
 
-Success for this bounded follow-up: retain improvement in remaining native
-buckets and CPU tracking. Rollback or stagnant/worse native and CPU results
-stops unchanged budget extension; investigate transfer mismatch next. When it
-ends, verify `model_6999.eval.pt` versus the retained checkpoint/known-good actor,
-consumed budget, source hashes, actual angular rates and all report/trace hashes.
-The previous summarizer hardcodes 6749 and is not the continuation summarizer.
-Fresh held-out seeds and the full acceptance below remain mandatory.
+Next: isolate BAM versus XML position-PD response with a fixed actor and matched
+physical state, then choose a bounded adaptive-training change from that evidence.
+Do not change runtime delay or relax acceptance. Fresh held-out seeds and the
+full acceptance below remain mandatory.
+
+## CPU harness and delay evidence
+
+`918bfb6` makes the battery share `infer_policy.py`'s 1.75 A default current
+limit (M6 kt × current = ±.64052362 Nm) and records the XML position-PD profile.
+The old battery used XML ±.96 Nm. CPU is a separate rehearsal, not native BAM.
+Full normalized-ONNX v4 rechecks for both actors complete at
+`/tmp/microduck-cpu-v4-recheck-6750-7000/summary.json`. All 12 cases remain finite
+61D/14D with identical reset perturbations and initial observations. The 6750
+traces exactly reproduce the earlier manually aligned runtime diagnostic.
+Yaw and the 7000 right-turn failure are unchanged; both actors fail acceptance.
+
+Fixed-6750 delay comparison:
+`/tmp/microduck-actuator-delay-6750/analysis-summary.json`.
+Native 3–6 lag units are **5 ms physics steps (15–30 ms)**; the optional CPU
+inference buffer counts 20 ms control steps. CPU product default stays zero.
+Native nominal/zero-delay yaw: score .857/.861, rate .817/.811 rad/s. CPU
+0/15/20/30 ms yaw: score .531/.345/.291/.223, rate 1.104/1.229/1.271/1.313.
+Delay mismatch is not a sufficient cause or repair for this tested overspeed.
+Native zero-delay still consumes the original buffer/RNG; recorded physical and
+sensor resets, first observation and sampled lag sequences match. Native nominal
+exactly reproduces previous final traces. All 36 trace hashes, native/ONNX parity
+and 681 source files pass. One reused diagnostic seed; no new acceptance claim.
 
 ## Evidence behind the current treatment
 
@@ -101,14 +133,20 @@ exposure-only, sensor-resampling-only or unchanged global-relief budgets.
 
 ## Implementation and proof boundaries
 
-Source: `/tmp/microduck-adaptive-pure-yaw-source-610fbc5`, `git archive 610fbc5`
+Training source: `/tmp/microduck-adaptive-pure-yaw-source-610fbc5`, `git archive 610fbc5`
 plus the existing CPU seed overlay. All 680 files are verified unchanged.
 Manifest file SHA: `5c2e75579942e6f46d1e8c94a6d6fb6f72de0c3eca11049553e54141948d5d58`.
 Source label: `610fbc5-cpu-seed-overlay-5ae829076760`.
 `610fbc5` added opt-in checkpointed pure-yaw relief; default scope remains global.
 98 distinct focused tests, focused Ruff/diff checks, real smoke64/5 and separate
 live weighted-cost/61D/14D/unfiltered-action proof passed before these runs.
-This turn changes only task docs and explicit temporary experiment wrappers.
+Current CPU/delay diagnostic source:
+`/tmp/microduck-current-limit-source-918bfb6`, 681 verified files, manifest SHA
+`a22c92f5a416f33e954e49ecc47055a0345e177e71ed870ba9267ae85e6be791`.
+No training has run on this source; a new long run requires smoke64/5.
+The current-limit fix has 30 passing focused tests; two failures require absent
+pre-existing specialist artifacts and reproduce on pre-fix `610fbc5`.
+Focused Ruff/diff pass; `infer_policy.py` has no new Ruff findings.
 Earlier infrastructure: 269 relevant tests and fresh locked non-editable install/
 config/model compile pass. Fresh-env GPU and remote execution remain unproven.
 Full `mdp.py` Ruff has 17 pre-existing findings. CPU link-frame fix is `931e3c9`;
