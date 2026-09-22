@@ -91,6 +91,15 @@ measurable, while leaving native reset/DR robustness and CPU actuator/observatio
 causality unresolved. Do not spend another matched budget on reset resampling
 alone or start the formal 17/23/47 matrix from this result.
 
+A bounded XML actuator probe at
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/cpu-actuator-ab.jsonl`
+changed the deployment recipe without changing the checkpoint. Current-limit
+only traces were identical to the baseline; a 1–2 step action delay changed
+turn metrics but left forward/lateral below the tracking gate and the lower-tail
+at `0.0`. This is useful negative evidence for the CPU diagnosis, but it is
+not a matched BAM-vs-XML experiment and does not authorize a product or
+training conclusion by itself.
+
 The cohort repair is now closed at both boundaries: aggregation checks every
 member's provenance, evaluator config and trace hash, while the runner checks
 the persisted member manifest and recomputes the worst-member selection before

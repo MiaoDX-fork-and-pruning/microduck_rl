@@ -30,6 +30,16 @@ rehearsal mismatch still has not been causally isolated. The sensor-reset
 mechanism is therefore evidence against repeating the same augmentation alone,
 not evidence that adaptive training is ready for formal multi-seed acceptance.
 
+A bounded deployment-side actuator probe is recorded in
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/cpu-actuator-ab.jsonl`.
+On the same XML scene and ONNX, adding a 1.75 A current limit produced the
+same six traces as the unlimited position-actuator run. Adding a 1–2 step
+action delay changed turn tracking (for example, turn-left `.345`→`.105`),
+but forward/lateral still scored below the tracking gate and the aggregate
+remained `0.0`. This rules out the current-limit switch as a standalone
+explanation and makes delay a sensitivity factor, while leaving the full
+BAM-vs-XML dynamics/observation split unresolved.
+
 Runner evaluation, bounded command exposure, checkpoint/resume and retention
 rollback operate. Both CoM axes remain at ±3 mm. Formal training seeds 17/23/47
 remain gated on a retained six-capability policy; no video/hardware usability or
