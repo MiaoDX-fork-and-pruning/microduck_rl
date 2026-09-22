@@ -18,6 +18,7 @@ from pathlib import Path
 
 from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
+    AdaptiveActionRateRelief,
     CapabilityGate,
     CommandExposure,
     TransitionExposure,
@@ -412,10 +413,23 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if getattr(env.cfg, "adaptive_transition_acquisition", False)
             else None
         )
+        self.action_rate_relief = (
+            AdaptiveActionRateRelief(
+                relief_weight=float(getattr(env.cfg, "adaptive_action_rate_relief_weight", -0.2)),
+                trigger_threshold=float(getattr(env.cfg, "adaptive_action_rate_relief_trigger", 0.55)),
+                release_threshold=float(getattr(env.cfg, "adaptive_action_rate_relief_release", 0.80)),
+                active_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_windows", 4)),
+                cooldown_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_cooldown_windows", 1)),
+            )
+            if getattr(env.cfg, "adaptive_action_rate_relief", False)
+            else None
+        )
         if self.command_exposure is not None:
             self.command_exposure.apply(_manager_env(env))
         if self.transition_exposure is not None:
             self.transition_exposure.apply(_manager_env(env))
+        if self.action_rate_relief is not None:
+            self.action_rate_relief.apply(_manager_env(env))
         evaluator_command = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND") or os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR")
         if evaluator_command and self.evaluation_interval > 0:
             self.evaluator = CommandCapabilityEvaluator(
@@ -899,6 +913,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             transition_state = (
                 None if transition_exposure is None else transition_exposure.state_dict()
             )
+            action_rate_relief = getattr(self, "action_rate_relief", None)
+            action_rate_relief_state = (
+                None if action_rate_relief is None else action_rate_relief.state_dict()
+            )
             final_com_fraction = getattr(self, "final_com_fraction", 0.0)
             if self.last_known_good_checkpoint:
                 self.rollback(self.last_known_good_checkpoint)
@@ -928,6 +946,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 if transition_exposure.repair(repair_buckets):
                     transition_exposure.apply(_manager_env(self.env))
                 event["transition_exposure"] = transition_exposure.state_dict()
+            action_rate_relief = getattr(self, "action_rate_relief", None)
+            if action_rate_relief is not None and action_rate_relief_state is not None:
+                action_rate_relief.load_state_dict(action_rate_relief_state)
+                action_rate_relief.update(metrics)
+                action_rate_relief.apply(_manager_env(self.env))
+                event["action_rate_relief"] = action_rate_relief.state_dict()
             return None
         exposure = getattr(self, "command_exposure", None)
         if exposure is not None:
@@ -939,6 +963,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             transition_exposure.update(metrics)
             transition_exposure.apply(_manager_env(self.env))
             event["transition_exposure"] = transition_exposure.state_dict()
+        action_rate_relief = getattr(self, "action_rate_relief", None)
+        if action_rate_relief is not None:
+            action_rate_relief.update(metrics)
+            action_rate_relief.apply(_manager_env(self.env))
+            event["action_rate_relief"] = action_rate_relief.state_dict()
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
@@ -972,6 +1001,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "transition_exposure": None
             if getattr(self, "transition_exposure", None) is None
             else self.transition_exposure.state_dict(),
+            "action_rate_relief": None
+            if getattr(self, "action_rate_relief", None) is None
+            else self.action_rate_relief.state_dict(),
             "transition_bootstrap_mode": getattr(
                 self.env.cfg, "adaptive_transition_bootstrap_mode", "forward"
             ),
@@ -1016,6 +1048,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         gate = deepcopy(self.capability_gate)
         exposure = deepcopy(getattr(self, "command_exposure", None))
         transition_exposure = deepcopy(getattr(self, "transition_exposure", None))
+        action_rate_relief = deepcopy(getattr(self, "action_rate_relief", None))
         completed = self.current_learning_iteration + 1
         distribution = getattr(self, "evaluation_distribution", "final")
         if state:
@@ -1144,6 +1177,23 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                     "repairs": 0,
                     "last_reason": "legacy_checkpoint_bootstrap",
                 })
+            saved_action_rate_relief = state.get("action_rate_relief")
+            if saved_action_rate_relief is not None:
+                if action_rate_relief is None:
+                    if bool(saved_action_rate_relief.get("active", False)):
+                        raise ValueError("adaptive checkpoint action-rate relief mismatch")
+                else:
+                    action_rate_relief.load_state_dict(saved_action_rate_relief)
+            elif (
+                action_rate_relief is not None
+                and gate is not None
+                and set(action_rate_relief.yaw_buckets) <= set(gate.best_metrics)
+            ):
+                # Legacy adaptive checkpoints predate this controller. Seed a
+                # bounded window from their measured yaw deficit so a resume
+                # can repair the missing behavior immediately rather than
+                # waiting for the next evaluation interval.
+                action_rate_relief.bootstrap(gate.best_metrics)
             feedback_state = state.get("command_feedback")
             if feedback_state is not None:
                 tracker = self._ensure_bucket_feedback()
@@ -1186,12 +1236,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 self.evaluation_seed = int(state["evaluation_seed"])
             if state.get("evaluation_seed_set_id") is not None and not legacy_cohort_migration:
                 self.evaluation_seed_set_id = str(state["evaluation_seed_set_id"])
-        elif gate is not None or exposure is not None or transition_exposure is not None:
+        elif gate is not None or exposure is not None or transition_exposure is not None or action_rate_relief is not None:
             raise ValueError("resume requires adaptive state; use actor-only load for a warm start")
         self.capability_gate = gate
         self.evaluation_distribution = distribution
         self.command_exposure = exposure
         self.transition_exposure = transition_exposure
+        self.action_rate_relief = action_rate_relief
         self.completed_iterations = completed
         manager_env = _manager_env(self.env)
         manager_env.common_step_counter = completed * self.cfg["num_steps_per_env"]
@@ -1202,6 +1253,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             exposure.apply(manager_env)
         if transition_exposure is not None:
             transition_exposure.apply(manager_env)
+        if action_rate_relief is not None:
+            action_rate_relief.apply(manager_env)
         saved_fraction = (state or {}).get("final_com_fraction", 0.0)
         self._set_final_com_fraction(0.0 if saved_fraction is None else float(saved_fraction))
         if infos and infos.get("adaptive_rng_state"):

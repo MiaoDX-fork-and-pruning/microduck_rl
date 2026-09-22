@@ -176,12 +176,23 @@ def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
     assert cfg.rewards["linear_velocity_error_l1"].params["yaw_deadband"] == 0.05
     assert cfg.adaptive_frontier_stall_windows == 4
     assert cfg.adaptive_frontier_stall_improvement == 0.05
+    assert cfg.adaptive_action_rate_relief is True
+    assert cfg.adaptive_action_rate_relief_weight == -0.2
+    assert cfg.adaptive_action_rate_relief_windows == 4
     assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"} | {"tracking_std"}
     assert {name: cfg.curriculum[name] for name in base.curriculum if name != "standing_envs"} == {
         name: base.curriculum[name] for name in base.curriculum if name != "standing_envs"
     }
     assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
     assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_action_rate_relief_is_opt_in_to_lateral_drive_recipe() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert base.adaptive_action_rate_relief is False
+    assert make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="composed", diagnostic_mode="acquisition_feedback"
+    ).adaptive_action_rate_relief is False
 
 
 def test_frontier_stall_window_override_is_explicit_and_bounded(monkeypatch) -> None:

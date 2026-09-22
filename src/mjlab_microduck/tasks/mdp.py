@@ -3489,6 +3489,15 @@ def reward_weight(
     """
     del env_ids
     term_cfg = env.reward_manager.get_term_cfg(reward_name)
+    # The adaptive runner may install a bounded, checkpointed relief window
+    # for action-rate smoothing while a directional frontier is still being
+    # acquired.  Leave all other reward curricula untouched, and let the
+    # canonical stages resume automatically once the runner clears the
+    # override.
+    adaptive_override = getattr(env, "_adaptive_action_rate_weight", None)
+    if reward_name == "action_rate_l2" and adaptive_override is not None:
+        term_cfg.weight = float(adaptive_override)
+        return torch.tensor([term_cfg.weight])
     for stage in weight_stages:
         if env.common_step_counter > stage["step"]:
             term_cfg.weight = stage["weight"]

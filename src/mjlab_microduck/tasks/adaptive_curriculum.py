@@ -374,6 +374,161 @@ class TransitionExposure:
             raise ValueError("transition exposure requires AdaptiveVelocityCommandCfg")
         term.cfg.transition_probability = self.probability
 
+
+class AdaptiveActionRateRelief:
+    """Temporarily release action smoothing when yaw acquisition stalls.
+
+    The canonical Velocity curriculum reaches ``action_rate_l2=-1.0`` long
+    before the adaptive gate can prove all directional capabilities.  That
+    regularizer is useful for a settled gait, but it can tax the first large
+    corrective action needed to acquire pure yaw from rest.  This controller
+    gives the yaw frontier a bounded, checkpointed relief window and restores
+    the canonical curriculum afterward.  It is driven only by frozen gate
+    metrics; it never changes evaluator commands or acceptance thresholds.
+    """
+
+    version = 1
+    yaw_buckets = ("yaw", "turn-left", "turn-right")
+
+    def __init__(
+        self,
+        *,
+        relief_weight: float = -0.2,
+        trigger_threshold: float = 0.55,
+        release_threshold: float = 0.80,
+        active_windows: int = 4,
+        cooldown_windows: int = 1,
+    ) -> None:
+        values = (relief_weight, trigger_threshold, release_threshold)
+        if any(not math.isfinite(float(value)) for value in values):
+            raise ValueError("action-rate relief parameters must be finite")
+        if relief_weight > 0.0:
+            raise ValueError("action-rate relief weight must be nonpositive")
+        if not 0.0 <= trigger_threshold < release_threshold <= 1.0:
+            raise ValueError("action-rate relief thresholds must be ordered in [0, 1]")
+        if not isinstance(active_windows, int) or active_windows < 1:
+            raise ValueError("action-rate relief active windows must be positive")
+        if not isinstance(cooldown_windows, int) or cooldown_windows < 0:
+            raise ValueError("action-rate relief cooldown windows must be nonnegative")
+        self.relief_weight = float(relief_weight)
+        self.trigger_threshold = float(trigger_threshold)
+        self.release_threshold = float(release_threshold)
+        self.active_windows = active_windows
+        self.cooldown_windows = cooldown_windows
+        self.active = False
+        self.remaining_windows = 0
+        self.cooldown_remaining = 0
+        self.triggers = 0
+        self.last_frontier: float | None = None
+        self.last_reason = "initial"
+
+    def _frontier(self, metrics: Mapping[str, float]) -> float:
+        values = []
+        for name in self.yaw_buckets:
+            value = float(metrics[name])
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError("action-rate relief metrics must be finite and in [0, 1]")
+            values.append(value)
+        frontier = min(values)
+        self.last_frontier = frontier
+        return frontier
+
+    def bootstrap(self, metrics: Mapping[str, float]) -> None:
+        """Restore a useful relief window when resuming a legacy checkpoint."""
+        frontier = self._frontier(metrics)
+        if frontier < self.trigger_threshold:
+            self.active = True
+            self.remaining_windows = self.active_windows
+            self.cooldown_remaining = 0
+            self.triggers += 1
+            self.last_reason = "legacy_checkpoint_deficit"
+
+    def update(self, metrics: Mapping[str, float]) -> None:
+        """Consume one capability window and update the bounded relief state."""
+        frontier = self._frontier(metrics)
+        if self.active:
+            if frontier >= self.release_threshold:
+                self.active = False
+                self.remaining_windows = 0
+                self.last_reason = "yaw_frontier_released"
+            else:
+                self.remaining_windows -= 1
+                if self.remaining_windows <= 0:
+                    self.active = False
+                    self.cooldown_remaining = self.cooldown_windows
+                    self.last_reason = "bounded_relief_expired"
+                else:
+                    self.last_reason = "yaw_frontier_relief_hold"
+            return
+        if self.cooldown_remaining:
+            self.cooldown_remaining -= 1
+            self.last_reason = "relief_cooldown"
+            return
+        if frontier < self.trigger_threshold:
+            self.active = True
+            self.remaining_windows = self.active_windows
+            self.triggers += 1
+            self.last_reason = "yaw_frontier_deficit"
+        else:
+            self.last_reason = "yaw_frontier_above_trigger"
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "relief_weight": self.relief_weight,
+            "trigger_threshold": self.trigger_threshold,
+            "release_threshold": self.release_threshold,
+            "active_windows": self.active_windows,
+            "cooldown_windows": self.cooldown_windows,
+            "active": self.active,
+            "remaining_windows": self.remaining_windows,
+            "cooldown_remaining": self.cooldown_remaining,
+            "triggers": self.triggers,
+            "last_frontier": self.last_frontier,
+            "last_reason": self.last_reason,
+        }
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") != self.version:
+            raise ValueError("unsupported action-rate relief version")
+        for name, expected in (
+            ("relief_weight", self.relief_weight),
+            ("trigger_threshold", self.trigger_threshold),
+            ("release_threshold", self.release_threshold),
+        ):
+            if not math.isclose(float(payload.get(name)), expected, abs_tol=1e-12):
+                raise ValueError(f"action-rate relief {name} mismatch")
+        for name, expected in (
+            ("active_windows", self.active_windows),
+            ("cooldown_windows", self.cooldown_windows),
+        ):
+            if int(payload.get(name, -1)) != expected:
+                raise ValueError(f"action-rate relief {name} mismatch")
+        active = payload.get("active")
+        remaining = payload.get("remaining_windows")
+        cooldown = payload.get("cooldown_remaining")
+        triggers = payload.get("triggers")
+        if not isinstance(active, bool) or not isinstance(remaining, int) or remaining < 0:
+            raise ValueError("invalid action-rate relief active state")
+        if not isinstance(cooldown, int) or cooldown < 0 or not isinstance(triggers, int) or triggers < 0:
+            raise ValueError("invalid action-rate relief counters")
+        frontier = payload.get("last_frontier")
+        if frontier is not None and (not math.isfinite(float(frontier)) or not 0.0 <= float(frontier) <= 1.0):
+            raise ValueError("invalid action-rate relief frontier")
+        reason = payload.get("last_reason", "initial")
+        if not isinstance(reason, str):
+            raise ValueError("invalid action-rate relief reason")
+        self.active = active
+        self.remaining_windows = remaining
+        self.cooldown_remaining = cooldown
+        self.triggers = triggers
+        self.last_frontier = None if frontier is None else float(frontier)
+        self.last_reason = reason
+
+    def apply(self, env: object) -> None:
+        """Expose the live override to the canonical reward curriculum."""
+        setattr(env, "_adaptive_action_rate_weight", self.relief_weight if self.active else None)
+
 @dataclass(frozen=True)
 class AxisConfig:
     """Stages and hysteresis settings for one difficulty axis."""

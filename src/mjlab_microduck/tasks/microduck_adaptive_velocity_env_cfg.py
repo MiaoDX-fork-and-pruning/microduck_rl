@@ -166,6 +166,16 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # overrides deterministic while ordinary resumes remain exact.
     adaptive_transition_probability_override: float | None = None
     adaptive_transition_bootstrap_mode_override: bool = False
+    # A bounded reward relief used by the lateral-drive adaptive recipe when
+    # the yaw frontier is still unacquired.  The runner owns its state and
+    # persists it in the adaptive checkpoint; the canonical action-rate
+    # curriculum remains the fallback outside the relief window.
+    adaptive_action_rate_relief: bool = False
+    adaptive_action_rate_relief_weight: float = -0.2
+    adaptive_action_rate_relief_trigger: float = 0.55
+    adaptive_action_rate_relief_release: float = 0.80
+    adaptive_action_rate_relief_windows: int = 4
+    adaptive_action_rate_relief_cooldown_windows: int = 1
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -387,6 +397,11 @@ def make_microduck_adaptive_velocity_env_cfg(
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
                     cfg.adaptive_yaw_feedback_weight = LATERAL_DRIVE_YAW_L1_WEIGHT
+                    # The current blocker is a severe yaw acquisition deficit,
+                    # not sensor noise. Enable the bounded adaptive relief so
+                    # the controller can temporarily release the -1.0
+                    # action-rate tax while it searches for that first motion.
+                    cfg.adaptive_action_rate_relief = True
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
