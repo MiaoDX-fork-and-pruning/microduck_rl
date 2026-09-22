@@ -20,6 +20,7 @@ from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
     CapabilityGate,
     CommandExposure,
+    TransitionExposure,
     apply_stage_to_env,
 )
 from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
@@ -260,8 +261,19 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if getattr(env.cfg, "adaptive_command_exposure", False)
             else None
         )
+        self.transition_exposure = (
+            TransitionExposure(
+                initial_probability=float(
+                    getattr(env.cfg, "adaptive_transition_probability", 0.0)
+                )
+            )
+            if getattr(env.cfg, "adaptive_transition_acquisition", False)
+            else None
+        )
         if self.command_exposure is not None:
             self.command_exposure.apply(_manager_env(env))
+        if self.transition_exposure is not None:
+            self.transition_exposure.apply(_manager_env(env))
         evaluator_command = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND") or os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR")
         if evaluator_command and self.evaluation_interval > 0:
             self.evaluator = CommandCapabilityEvaluator(
@@ -653,6 +665,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             # exposure from the old known-good checkpoint.
             exposure = getattr(self, "command_exposure", None)
             exposure_state = None if exposure is None else exposure.state_dict()
+            transition_exposure = getattr(self, "transition_exposure", None)
+            transition_state = (
+                None if transition_exposure is None else transition_exposure.state_dict()
+            )
             final_com_fraction = getattr(self, "final_com_fraction", 0.0)
             if self.last_known_good_checkpoint:
                 self.rollback(self.last_known_good_checkpoint)
@@ -664,6 +680,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if exposure is not None and exposure_state is not None:
                 exposure.load_state_dict(exposure_state)
                 exposure.apply(_manager_env(self.env))
+            transition_exposure = getattr(self, "transition_exposure", None)
+            if transition_exposure is not None and transition_state is not None:
+                transition_exposure.load_state_dict(transition_state)
+                transition_exposure.apply(_manager_env(self.env))
             repair_buckets = tuple(name for name in regressed_buckets if name != "zero")
             if exposure is not None and repair_buckets:
                 repaired = exposure.repair(
@@ -674,12 +694,21 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 exposure.apply(_manager_env(self.env))
                 event["retention_repair"] = list(repaired)
                 event["command_exposure"] = exposure.state_dict()
+            if transition_exposure is not None:
+                if transition_exposure.repair(repair_buckets):
+                    transition_exposure.apply(_manager_env(self.env))
+                event["transition_exposure"] = transition_exposure.state_dict()
             return None
         exposure = getattr(self, "command_exposure", None)
         if exposure is not None:
             exposure.update(metrics)
             exposure.apply(_manager_env(self.env))
             event["command_exposure"] = exposure.state_dict()
+        transition_exposure = getattr(self, "transition_exposure", None)
+        if transition_exposure is not None:
+            transition_exposure.update(metrics)
+            transition_exposure.apply(_manager_env(self.env))
+            event["transition_exposure"] = transition_exposure.state_dict()
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
@@ -705,6 +734,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "num_envs": getattr(self.env, "num_envs", None),
             "stage_values": {} if gate is None else {name: gate.stage_value(name) for name in gate.axis_order},
             "command_exposure": None if exposure is None else exposure.state_dict(),
+            "transition_exposure": None
+            if getattr(self, "transition_exposure", None) is None
+            else self.transition_exposure.state_dict(),
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
@@ -739,6 +771,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         state = (infos or {}).get("adaptive_curriculum")
         gate = deepcopy(self.capability_gate)
         exposure = deepcopy(getattr(self, "command_exposure", None))
+        transition_exposure = deepcopy(getattr(self, "transition_exposure", None))
         completed = self.current_learning_iteration + 1
         if state:
             if state.get("version", 1) != 1:
@@ -755,6 +788,16 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint command exposure mismatch")
             if exposure is not None:
                 exposure.load_state_dict(state["command_exposure"])
+            saved_transition = state.get("transition_exposure")
+            if saved_transition is not None:
+                if transition_exposure is None:
+                    raise ValueError("adaptive checkpoint transition exposure mismatch")
+                transition_exposure.load_state_dict(saved_transition)
+            elif transition_exposure is not None:
+                # Explicitly opting into the mechanism while loading an older
+                # checkpoint starts a fresh exposure state; ordinary resumes
+                # still restore exact transition state when it is present.
+                transition_exposure.last_reason = "legacy_checkpoint_bootstrap"
             feedback_state = state.get("command_feedback")
             if feedback_state is not None:
                 tracker = self._ensure_bucket_feedback()
@@ -783,10 +826,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 self.evaluation_seed = int(state["evaluation_seed"])
             if state.get("evaluation_seed_set_id") is not None:
                 self.evaluation_seed_set_id = str(state["evaluation_seed_set_id"])
-        elif gate is not None or exposure is not None:
+        elif gate is not None or exposure is not None or transition_exposure is not None:
             raise ValueError("resume requires adaptive state; use actor-only load for a warm start")
         self.capability_gate = gate
         self.command_exposure = exposure
+        self.transition_exposure = transition_exposure
         self.completed_iterations = completed
         manager_env = _manager_env(self.env)
         manager_env.common_step_counter = completed * self.cfg["num_steps_per_env"]
@@ -795,6 +839,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 apply_stage_to_env(manager_env, name, gate.stage_value(name))
         if exposure is not None:
             exposure.apply(manager_env)
+        if transition_exposure is not None:
+            transition_exposure.apply(manager_env)
         self._set_final_com_fraction(float((state or {}).get("final_com_fraction", 0.0)))
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])

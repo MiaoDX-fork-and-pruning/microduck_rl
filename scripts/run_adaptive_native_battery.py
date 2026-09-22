@@ -172,6 +172,10 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
             # Actor-only load must evaluate exactly the requested distribution,
             # independent of the launch environment or checkpoint rehearsal.
             cfg.adaptive_final_com_fraction = 0.0
+            cfg.adaptive_transition_acquisition = False
+            cfg.adaptive_transition_probability = 0.0
+            if hasattr(cfg.commands.get("twist"), "transition_probability"):
+                cfg.commands["twist"].transition_probability = 0.0
         # Evaluation uses an explicit frozen DR distribution. The training
         # curriculum is otherwise evaluated at ``reference_step`` during reset
         # and can silently overwrite the ranges before the first sample.

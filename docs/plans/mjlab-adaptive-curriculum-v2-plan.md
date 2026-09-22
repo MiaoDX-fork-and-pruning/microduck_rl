@@ -2,10 +2,10 @@
 
 Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
 unproven. Command-conditioned evidence and retention repair operate, including
-persistent exposure across repeated policy rollbacks. The cumulative-5000
-candidate passes 5/6 held-out buckets but fails four buckets on the gate seed;
-no formal multi-seed campaign is ready. The active status capsule owns the
-current proof, candidate/retained-policy distinction and next experiment.
+persistent exposure across repeated policy rollbacks. The zero→yaw diagnostic
+identified missing command-initiation coverage; a bounded, opt-in transition
+acquisition slice is implemented and has passed focused/native smoke proof. A
+matched training comparison is still required before formal multi-seed runs.
 Date: 2026-09-22
 Related:
 
@@ -47,38 +47,36 @@ and rollback still restore saved state. Immutable-checkpoint regression cases
 (`873db35`) fail on the old implementation and pass continuously and across
 restart. Native windows demonstrate repair counts increasing through 3, 4 and 5.
 
-The current bounded campaign is
-`/tmp/microduck-adaptive-evidence-s17-5000-cadence/`. It trained for 500 updates
-at 4096 envs with a 500-update evaluation interval, after smoke64/5. Its
-candidate's gate lower-tail is `0.70988`, triggering preservation failure and
-rollback. Independent evaluation of that rejected candidate on the held-out
-seed gives `0.79519`: only lateral fails (signed-EMA error `0.0245773 m/s`;
-the unchanged 0.80 pass boundary requires at most `0.024 m/s`). The restored
-policy's held-out lower-tail remains `0.42439`; both CoM axes stay at stage 0.
-The compact artifact is `retention-summary.json`. Candidate learning, retained
-policy quality, and CPU transfer remain separate verdicts.
+Latest comparison:
+`/tmp/microduck-adaptive-com-rehearsal-s17-5000/comparison-summary.json`.
+The 20% final-CoM rehearsal branch repeats the no-rehearsal control's exact
+cumulative-4500 checkpoint, 4096 envs, 500-update budget/cadence and evaluation
+seeds. Gate minimum moves 0.70988→0.71551, with four failures in both. Held-out
+minimum moves 0.79519→0.0: the new candidate remains upright but yaw averages
+0.10769 rad/s under a 0.8 rad/s command. Rollback leaves retained-policy minimum
+0.42439 and CPU/XML transfer 0.0. Both CoM axes remain at stage 0. Candidate
+progress, retained-policy quality and CPU transfer remain separate verdicts.
 
-The paired initial/final-distribution probe under
-`/tmp/microduck-adaptive-stage0-diagnostic-s17-4500/` also fails both profiles
-(`0.78202` / `0.67967`) for the retained policy. It does not establish that
-stage 0 is mastered or justify lowering the product gate. The next experiment
-must use raw command traces, sampled DR and reward mass to isolate acquisition
-or retention interference. Another unchanged continuation or coefficient-only
-search is insufficient. Optional advisors and stronger teachers remain parked;
-formal seeds 17/23/47 and matched-budget comparison follow acquisition.
+`da51889` provides opt-in `--final-com-fraction` (0..0.20), explicit launch and
+checkpoint persistence, and live-setting preservation through automatic policy
+rollback. Explicit load restores saved state. Only adaptive-owned axes use the
+mixture; stock non-accumulation/recomputation and live stage ranges are preserved.
+Native evaluation disables training rehearsal. 183 adaptive/config tests,
+native cohort/partial-reset proof, smoke64/5 and normalized smoke ONNX export
+pass. The run used a verified read-only source snapshot; gate and held-out
+reset/DR inputs match the control exactly. No new Ruff findings were introduced.
 
-The next bounded comparison adds opt-in final-CoM rehearsal: 20% of environment
-IDs sample final trunk/head CoM ranges while the remainder follow adaptive
-stages. It repeats the existing cumulative-4500→5000 segment from the same
-checkpoint, command exposure, evaluation seeds and 500-update gate cadence.
-This tests a distribution-coverage hypothesis; the seed differences do not
-establish CoM as their cause. The runner checkpoints this setting and preserves
-it through automatic policy rollback; explicit load remains exact. The launcher
-records `--final-com-fraction` and inherits it on ordinary resume. Evaluation
-always disables training rehearsal and freezes its requested distribution.
-183 adaptive/config tests and a native cohort/partial-reset probe pass; smoke
-and the training comparison are pending. Current proof and decision rules stay
-in the existing active capsule.
+Decision: this bounded rehearsal setting is insufficient and is not selected
+for the default procedure. Fresh runs still default to zero. The paired native
+zero→yaw/forward→yaw diagnostic then isolated command initiation as the active
+failure class. The selected repair is an opt-in `TransitionExposure` controller:
+it exposes yaw and moving-turn buckets to a 1–2 s forward bootstrap, adapts
+probability within `[0, 0.40]`, persists through checkpoint/resume/rollback,
+and is disabled in the frozen evaluator. Focused tests, a CUDA/MJLab/BAM probe,
+and 64-env/5-update smoke pass. The next proof is a matched 4500→5000 update
+comparison at initial probability `0.20` and final-CoM rehearsal `0`; formal
+seeds 17/23/47, fresh held-out/video/deployment acceptance and matched-budget
+comparison remain required.
 
 ## Goal
 

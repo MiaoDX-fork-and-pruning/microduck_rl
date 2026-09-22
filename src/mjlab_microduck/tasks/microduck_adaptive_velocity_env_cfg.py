@@ -127,6 +127,8 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     task_id: str = "Mjlab-Velocity-Flat-Adaptive-MicroDuck"
     adaptive_axis_mode: str = "composed"
     adaptive_command_exposure: bool = False
+    adaptive_transition_acquisition: bool = False
+    adaptive_transition_probability: float = 0.0
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -151,6 +153,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     axis_mode: str = "composed",
     diagnostic_mode: str | None = None,
     command_exposure: bool = False,
+    transition_probability: float | None = None,
 ) -> ManagerBasedRlEnvCfg:
     """Return the static initial slice used by adaptive curriculum experiments."""
 
@@ -176,6 +179,17 @@ def make_microduck_adaptive_velocity_env_cfg(
     # This metadata is consumed by AdaptiveMicroduckOnPolicyRunner. It is kept
     # on the env config so each CloudML branch has an explicit axis contract.
     cfg.adaptive_axis_mode = axis_mode
+    requested_transition = transition_probability
+    if requested_transition is None and command_exposure:
+        transition_env = os.environ.get("MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY")
+        requested_transition = None if transition_env is None else float(transition_env)
+    if requested_transition is not None:
+        if not command_exposure:
+            raise ValueError("transition acquisition requires command_exposure=True")
+        if not 0.0 <= requested_transition <= 0.40:
+            raise ValueError("transition acquisition probability must be in [0, 0.40]")
+        cfg.adaptive_transition_probability = float(requested_transition)
+        cfg.adaptive_transition_acquisition = bool(requested_transition > 0.0)
     cfg.task_id = {
         "all_static": "Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck",
         "com": "Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck",
@@ -303,6 +317,10 @@ def make_microduck_adaptive_velocity_env_cfg(
         command.rel_world_envs = 0.0
         command.init_velocity_prob = 0.0
         cfg.commands["twist"] = command
+        command.transition_probability = cfg.adaptive_transition_probability
+        if cfg.adaptive_transition_acquisition:
+            command.transition_duration_s = (1.0, 2.0)
+            command.transition_forward_fraction = (0.25, 0.75)
         # The MDP functions self-negate; positive weights keep them penalties.
         cfg.rewards["linear_velocity_error_l1"] = RewardTermCfg(
             func=microduck_mdp.command_normalized_linear_velocity_l1,

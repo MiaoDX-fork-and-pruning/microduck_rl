@@ -58,6 +58,8 @@ def main() -> int:
     parser.add_argument("--gate-interval", type=int, default=250)
     parser.add_argument("--final-com-fraction", type=float, default=None,
                         help="Final-CoM rehearsal fraction (0..0.20); defaults to checkpoint value or zero")
+    parser.add_argument("--transition-probability", type=float, default=None,
+                        help="Initial forward-to-yaw transition probability (0..0.40); defaults to checkpoint value or zero")
     parser.add_argument("--gate-seed", type=int, default=20260815)
     parser.add_argument("--heldout-seed", type=int, default=20260915)
     args = parser.parse_args()
@@ -70,6 +72,7 @@ def main() -> int:
     task_id, axis_mode = TASKS[args.branch]
     start_iterations = 0
     saved_final_com_fraction = 0.0
+    saved_transition_probability = 0.0
     if args.resume:
         import torch
 
@@ -80,6 +83,8 @@ def main() -> int:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
         start_iterations = int(state["completed_iterations"])
         saved_final_com_fraction = float(state.get("final_com_fraction", 0.0))
+        transition_state = state.get("transition_exposure") or {}
+        saved_transition_probability = float(transition_state.get("probability", 0.0))
         if state.get("num_envs") != args.num_envs:
             parser.error("resume must retain num-envs for comparable cumulative transition accounting")
         if state.get("evaluation_seed") is not None and state["evaluation_seed"] != args.gate_seed:
@@ -90,6 +95,14 @@ def main() -> int:
         args.final_com_fraction = saved_final_com_fraction
     if not 0.0 <= args.final_com_fraction <= 0.20:
         parser.error("final CoM rehearsal fraction must be in [0, 0.20]")
+    if args.transition_probability is None:
+        args.transition_probability = saved_transition_probability
+    if not 0.0 <= args.transition_probability <= 0.40:
+        parser.error("transition acquisition probability must be in [0, 0.40]")
+    if args.transition_probability and args.branch not in (
+        "feedback", "acquisition-feedback", "lateral-drive"
+    ):
+        parser.error("transition acquisition requires a command-exposure branch")
     if args.final_com_fraction and axis_mode == "all_static":
         parser.error("final CoM rehearsal requires an adaptive CoM axis")
     source_sha = os.environ["MICRODUCK_SOURCE_SHA"]
@@ -110,6 +123,7 @@ def main() -> int:
         "PYTHONUNBUFFERED": "1",
         "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
         "MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION": str(args.final_com_fraction),
+        "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY": str(args.transition_probability),
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
         "MICRODUCK_ADAPTIVE_SEED_SET_ID": f"adaptive-gate-{args.gate_seed}",
         "MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND": (
@@ -150,6 +164,13 @@ def main() -> int:
         )
         if float(adaptive_state.get("final_com_fraction", 0.0)) != args.final_com_fraction:
             raise ValueError("training result lost the configured final CoM rehearsal fraction")
+        transition_state = adaptive_state.get("transition_exposure")
+        if args.transition_probability > 0.0:
+            if not isinstance(transition_state, dict):
+                raise ValueError("training result lost transition exposure state")
+            final_transition_probability = float(transition_state.get("probability", -1.0))
+            if not 0.0 <= final_transition_probability <= 0.40:
+                raise ValueError("training result contains invalid transition probability")
         if adaptive and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
                                 for event in adaptive_state["evaluation_events"]):
             raise ValueError("adaptive run produced no valid evaluation windows")

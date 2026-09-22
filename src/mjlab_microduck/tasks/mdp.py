@@ -4830,6 +4830,138 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
     Bucket order matches evaluation.capability.BUCKETS.
     """
 
+    def __init__(self, cfg, env: ManagerBasedRlEnv):
+        super().__init__(cfg, env)
+        probability = float(getattr(cfg, "transition_probability", 0.0))
+        duration = tuple(
+            float(value) for value in getattr(cfg, "transition_duration_s", (1.0, 2.0))
+        )
+        forward_fraction = tuple(
+            float(value)
+            for value in getattr(cfg, "transition_forward_fraction", (0.25, 0.75))
+        )
+        if not math.isfinite(probability) or not 0.0 <= probability <= 0.40:
+            raise ValueError("transition_probability must be finite and in [0, 0.40]")
+        if (
+            len(duration) != 2
+            or not all(math.isfinite(value) for value in duration)
+            or not 0.0 < duration[0] <= duration[1]
+        ):
+            raise ValueError("transition_duration_s must be a positive increasing pair")
+        if (
+            len(forward_fraction) != 2
+            or not all(math.isfinite(value) for value in forward_fraction)
+            or not 0.0 < forward_fraction[0] <= forward_fraction[1] <= 1.0
+        ):
+            raise ValueError("transition_forward_fraction must be within (0, 1]")
+        self._transition_active = torch.zeros(
+            self.num_envs, dtype=torch.bool, device=self.device
+        )
+        self._transition_elapsed = torch.zeros(self.num_envs, device=self.device)
+        self._transition_duration = torch.zeros(self.num_envs, device=self.device)
+        self._transition_target = torch.zeros(
+            (self.num_envs, 3), device=self.device
+        )
+        self._transition_target_bucket = torch.full(
+            (self.num_envs,), -1, dtype=torch.long, device=self.device
+        )
+        self._transition_start_step = torch.full(
+            (self.num_envs,), -1, dtype=torch.long, device=self.device
+        )
+
+    def compute(self, dt: float) -> None:
+        """Advance command timing without consuming transition time on reset."""
+        self._update_metrics()
+        self.time_left -= dt
+        resample_env_ids = (self.time_left <= 0.0).nonzero().flatten()
+        if len(resample_env_ids) > 0:
+            self._resample(resample_env_ids)
+        if dt > 0.0 and self._transition_active.any():
+            step = int(getattr(self._env, "common_step_counter", -1))
+            eligible = self._transition_active & (self._transition_start_step < step)
+            self._transition_elapsed[eligible] += float(dt)
+        self._update_command()
+
+    def _set_transition_state(self, env_ids: torch.Tensor, buckets: torch.Tensor) -> None:
+        """Start bounded forward lead-ins and attribute them to forward."""
+        if not hasattr(self, "_transition_active"):
+            with torch.inference_mode(False):
+                self._transition_active = torch.zeros(
+                    self.num_envs, dtype=torch.bool, device=self.device
+                )
+                self._transition_elapsed = torch.zeros(self.num_envs, device=self.device)
+                self._transition_duration = torch.zeros(self.num_envs, device=self.device)
+                self._transition_target = torch.zeros(
+                    (self.num_envs, 3), device=self.device
+                )
+                self._transition_target_bucket = torch.full(
+                    (self.num_envs,), -1, dtype=torch.long, device=self.device
+                )
+                self._transition_start_step = torch.full(
+                    (self.num_envs,), -1, dtype=torch.long, device=self.device
+                )
+        probability = float(getattr(self.cfg, "transition_probability", 0.0))
+        self._transition_active[env_ids] = False
+        self._transition_elapsed[env_ids] = 0.0
+        self._transition_target[env_ids] = self.vel_command_b[env_ids]
+        self._transition_target_bucket[env_ids] = buckets
+        step = int(getattr(self._env, "common_step_counter", -1))
+        self._transition_start_step[env_ids] = step
+        if probability <= 0.0:
+            return
+        eligible = (buckets >= 3) & (buckets <= 5)
+        if not torch.any(eligible):
+            return
+        eligible_ids = env_ids[eligible]
+        selected = torch.rand(len(eligible_ids), device=self.device) < probability
+        selected_ids = eligible_ids[selected]
+        if len(selected_ids) == 0:
+            return
+        duration_lo, duration_hi = getattr(self.cfg, "transition_duration_s", (1.0, 2.0))
+        frac_lo, frac_hi = getattr(self.cfg, "transition_forward_fraction", (0.25, 0.75))
+        duration = torch.empty(len(selected_ids), device=self.device).uniform_(
+            duration_lo, duration_hi
+        )
+        forward_fraction = torch.empty(len(selected_ids), device=self.device).uniform_(
+            frac_lo, frac_hi
+        )
+        target = self._transition_target[selected_ids].clone()
+        bootstrap = target.clone()
+        pure_yaw = buckets[eligible][selected] == 3
+        if torch.any(pure_yaw):
+            max_forward = max(abs(float(value)) for value in self.cfg.ranges.lin_vel_x)
+            bootstrap[pure_yaw, 0] = max_forward * forward_fraction[pure_yaw]
+        bootstrap[:, 1:] = 0.0
+        self.vel_command_b[selected_ids] = bootstrap
+        self.vel_command_w[selected_ids] = bootstrap
+        self._transition_target[selected_ids] = target
+        self._transition_duration[selected_ids] = duration
+        self._transition_elapsed[selected_ids] = 0.0
+        self._transition_active[selected_ids] = True
+        # Reward feedback tracks the command actually shown to the policy. It
+        # is a forward lesson during the lead-in, then returns to yaw/turn.
+        if hasattr(self, "bucket_ids"):
+            self.bucket_ids[selected_ids] = 1
+        self.is_forward_env[selected_ids] = True
+        self.is_standing_env[selected_ids] = False
+
+    def _update_command(self) -> None:
+        super()._update_command()
+        if not hasattr(self, "_transition_active") or not self._transition_active.any():
+            return
+        complete = self._transition_active & (
+            self._transition_elapsed >= self._transition_duration
+        )
+        ids = complete.nonzero(as_tuple=False).flatten()
+        if len(ids) == 0:
+            return
+        self.vel_command_b[ids] = self._transition_target[ids]
+        self.vel_command_w[ids] = self._transition_target[ids]
+        if hasattr(self, "bucket_ids"):
+            self.bucket_ids[ids] = self._transition_target_bucket[ids]
+        self.is_forward_env[ids] = False
+        self._transition_active[ids] = False
+
     def _resample_command(self, env_ids: torch.Tensor) -> None:
         super()._resample_command(env_ids)
         if len(env_ids) == 0:
@@ -4869,11 +5001,16 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
                         if bucket == 3 else (1.0 if bucket == 4 else -1.0))
                 self.vel_command_b[ids, 2] = sign * torch.empty(len(ids), device=self.device).uniform_(0.4 * max_yaw, max_yaw)
             self.vel_command_w[ids] = self.vel_command_b[ids]
+        self._set_transition_state(env_ids, buckets)
 
 
 @_dataclass(kw_only=True)
 class AdaptiveVelocityCommandCfg(VelocityCommandCommandOnlyCfg):
     bucket_probabilities: tuple[float, ...] = (0.8 / 6,) * 6
+    # Opt-in acquisition aid. Zero preserves the previous command stream.
+    transition_probability: float = 0.0
+    transition_duration_s: tuple[float, float] = (1.0, 2.0)
+    transition_forward_fraction: tuple[float, float] = (0.25, 0.75)
 
     def build(self, env: ManagerBasedRlEnv) -> AdaptiveVelocityCommand:
         return AdaptiveVelocityCommand(self, env)

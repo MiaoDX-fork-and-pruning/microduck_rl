@@ -278,6 +278,92 @@ class CommandExposure:
         term = env.command_manager.get_term("twist")
         term.cfg.bucket_probabilities = tuple(self.probabilities[name] for name in BUCKETS)
 
+
+class TransitionExposure:
+    """Bounded acquisition exposure for commands that need a moving start.
+
+    The native diagnostic showed that a policy can turn after it is already
+    walking but often does not initiate a yaw command from rest. This state
+    machine adds a small, reversible fraction of forward-to-turn transitions;
+    it never changes the six evaluator buckets or their command semantics.
+    """
+
+    version = 1
+    yaw_buckets = ("yaw", "turn-left", "turn-right")
+    mastery_threshold = 0.80
+    release_threshold = 0.88
+    increase_step = 0.05
+    release_step = 0.025
+    maximum_probability = 0.40
+
+    def __init__(self, initial_probability: float = 0.0) -> None:
+        value = float(initial_probability)
+        if not math.isfinite(value) or not 0.0 <= value <= self.maximum_probability:
+            raise ValueError("transition probability must be finite and in [0, 0.40]")
+        self.probability = value
+        self.windows = 0
+        self.repairs = 0
+        self.last_reason = "initial"
+
+    def update(self, metrics: Mapping[str, float]) -> None:
+        values = {name: float(metrics[name]) for name in self.yaw_buckets}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("transition exposure scores must be finite and in [0, 1]")
+        frontier = min(values.values())
+        if frontier < self.mastery_threshold:
+            self.probability = min(self.maximum_probability, self.probability + self.increase_step)
+            self.last_reason = "yaw_frontier_below_mastery"
+        elif frontier >= self.release_threshold:
+            self.probability = max(0.0, self.probability - self.release_step)
+            self.last_reason = "yaw_frontier_consolidated"
+        else:
+            self.last_reason = "yaw_frontier_hold"
+        self.windows += 1
+
+    def repair(self, buckets: Sequence[str]) -> bool:
+        """Increase transition coverage once after a yaw/turn retention failure."""
+        affected = tuple(str(name) for name in buckets if str(name) in self.yaw_buckets)
+        if not affected:
+            return False
+        before = self.probability
+        self.probability = min(self.maximum_probability, self.probability + self.increase_step)
+        self.repairs += 1
+        self.last_reason = "retention_repair:" + ",".join(affected)
+        return self.probability > before
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "probability": self.probability,
+            "windows": self.windows,
+            "repairs": self.repairs,
+            "last_reason": self.last_reason,
+        }
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") != self.version:
+            raise ValueError("unsupported transition exposure version")
+        probability = float(payload.get("probability", -1.0))
+        if not math.isfinite(probability) or not 0.0 <= probability <= self.maximum_probability:
+            raise ValueError("invalid transition exposure probability")
+        windows = payload.get("windows", 0)
+        repairs = payload.get("repairs", 0)
+        if not isinstance(windows, int) or windows < 0 or not isinstance(repairs, int) or repairs < 0:
+            raise ValueError("invalid transition exposure counters")
+        reason = payload.get("last_reason", "initial")
+        if not isinstance(reason, str):
+            raise ValueError("invalid transition exposure reason")
+        self.probability = probability
+        self.windows = windows
+        self.repairs = repairs
+        self.last_reason = reason
+
+    def apply(self, env: object) -> None:
+        term = env.command_manager.get_term("twist")
+        if not hasattr(term.cfg, "transition_probability"):
+            raise ValueError("transition exposure requires AdaptiveVelocityCommandCfg")
+        term.cfg.transition_probability = self.probability
+
 @dataclass(frozen=True)
 class AxisConfig:
     """Stages and hysteresis settings for one difficulty axis."""
