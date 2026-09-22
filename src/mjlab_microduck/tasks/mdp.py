@@ -4807,6 +4807,15 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         probabilities = self.cfg.bucket_probabilities
         weights = torch.tensor((*probabilities, 1.0 - sum(probabilities)), device=self.device)
         buckets = torch.multinomial(weights, len(env_ids), replacement=True)
+        # Keep the sampled bucket alongside the command.  The adaptive runner
+        # consumes this before each physics step so reward mass is attributed to
+        # the command that actually produced it, even when a reset resamples a
+        # command during ``env.step``.
+        if not hasattr(self, "bucket_ids") or self.bucket_ids.shape[0] != self.num_envs:
+            self.bucket_ids = torch.full(
+                (self.num_envs,), -1, dtype=torch.long, device=self.device
+            )
+        self.bucket_ids[env_ids] = buckets
         for bucket in range(6):
             ids = env_ids[buckets == bucket]
             if len(ids) == 0:

@@ -62,6 +62,15 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     term._resample_command(ids)
     term._update_command()
     masks = _masks(term.command)
+    assert term.bucket_ids.shape == (term.num_envs,)
+    assert torch.all((term.bucket_ids >= 0) & (term.bucket_ids < len(BUCKETS) + 1))
+    assert torch.equal(term.bucket_ids == 0, masks["zero"])
+    assert torch.equal(term.bucket_ids == 1, masks["forward"])
+    assert torch.equal(term.bucket_ids == 2, masks["lateral"])
+    assert torch.equal(term.bucket_ids == 3, masks["yaw"])
+    assert torch.equal(term.bucket_ids == 4, masks["turn-left"])
+    assert torch.equal(term.bucket_ids == 5, masks["turn-right"])
+    assert torch.equal(term.bucket_ids == 6, masks["nominal"])
     assert masks["lateral"].float().mean() > initial + 0.12
     assert masks["zero"].float().mean() >= 0.18
     for bucket in BUCKETS:

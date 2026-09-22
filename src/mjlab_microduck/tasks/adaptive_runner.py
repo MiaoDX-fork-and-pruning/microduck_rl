@@ -10,7 +10,7 @@ import json
 import shlex
 import subprocess
 import time
-from typing import Mapping
+from typing import Mapping, Sequence
 
 import numpy as np
 import torch
@@ -22,8 +22,15 @@ from .adaptive_curriculum import (
     CommandExposure,
     apply_stage_to_env,
 )
-from mjlab_microduck.evaluation.capability import resolve_enabled_axes
+from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
 from . import MicroduckOnPolicyRunner
+
+
+# ``AdaptiveVelocityCommand`` samples six explicit capability buckets and a
+# seventh residual continuous-command pool. Keep the latter visible in the
+# evidence contract so its reward mass is not reported as an unexplained
+# invalid sample.
+COMMAND_FEEDBACK_BUCKETS = (*BUCKETS, "nominal")
 
 
 def _manager_env(env):
@@ -38,6 +45,144 @@ def _manager_env(env):
         if current is None:
             raise AttributeError("adaptive environment has no event_manager")
     return current
+
+
+class BucketFeedbackTracker:
+    """Accumulate command-conditioned samples and weighted reward mass.
+
+    ``RewardManager._step_reward`` contains active terms after weights have
+    been applied but before environment ``dt`` scaling. Bucket ids are captured
+    before ``env.step`` so a reset-time command resample cannot attribute a
+    reward to the next episode's command.
+    """
+
+    schema_version = 1
+
+    def __init__(self, term_names: Sequence[str], *, device: torch.device | str, step_dt: float):
+        names = tuple(str(name) for name in term_names)
+        if not names:
+            raise ValueError("bucket feedback requires at least one reward term")
+        if not np.isfinite(step_dt) or step_dt <= 0.0:
+            raise ValueError("bucket feedback step_dt must be finite and positive")
+        self.term_names = names
+        self.device = torch.device(device)
+        self.step_dt = float(step_dt)
+        self.sample_count = torch.zeros(
+            len(COMMAND_FEEDBACK_BUCKETS), dtype=torch.long, device=self.device
+        )
+        self.unclassified_count = torch.zeros((), dtype=torch.long, device=self.device)
+        self.reward_mass = torch.zeros(
+            (len(COMMAND_FEEDBACK_BUCKETS), len(names)),
+            dtype=torch.float32,
+            device=self.device,
+        )
+        self.reward_abs_mass = torch.zeros_like(self.reward_mass)
+
+    def reset(self) -> None:
+        self.sample_count.zero_()
+        self.unclassified_count.zero_()
+        self.reward_mass.zero_()
+        self.reward_abs_mass.zero_()
+
+    def record(self, bucket_ids: torch.Tensor, weighted_step_reward: torch.Tensor) -> None:
+        ids = bucket_ids.detach().to(device=self.device, dtype=torch.long).reshape(-1)
+        values = weighted_step_reward.detach().to(device=self.device).reshape(ids.shape[0], -1)
+        if values.shape[1] != len(self.term_names):
+            raise ValueError("bucket feedback reward term shape mismatch")
+        valid = (ids >= 0) & (ids < len(COMMAND_FEEDBACK_BUCKETS))
+        self.unclassified_count += (~valid).sum()
+        if not torch.any(valid):
+            return
+        valid_ids = ids[valid]
+        valid_values = values[valid].to(dtype=self.reward_mass.dtype) * self.step_dt
+        self.sample_count.index_add_(0, valid_ids, torch.ones_like(valid_ids))
+        self.reward_mass.index_add_(0, valid_ids, valid_values)
+        self.reward_abs_mass.index_add_(0, valid_ids, valid_values.abs())
+
+    def _payload(self) -> dict[str, object]:
+        counts = self.sample_count.detach().cpu().tolist()
+        total = int(sum(counts))
+        fractions = {
+            name: (float(counts[idx]) / total if total else 0.0)
+            for idx, name in enumerate(COMMAND_FEEDBACK_BUCKETS)
+        }
+        return {
+            "schema_version": self.schema_version,
+            "bucket_names": list(COMMAND_FEEDBACK_BUCKETS),
+            "term_names": list(self.term_names),
+            "step_dt": self.step_dt,
+            "sample_count": {
+                name: int(counts[idx])
+                for idx, name in enumerate(COMMAND_FEEDBACK_BUCKETS)
+            },
+            "sample_fraction": fractions,
+            "unclassified_count": int(self.unclassified_count.item()),
+            "weighted_reward_mass": {
+                name: {
+                    term: float(value)
+                    for term, value in zip(
+                        self.term_names,
+                        self.reward_mass[idx].detach().cpu().tolist(),
+                        strict=True,
+                    )
+                }
+                for idx, name in enumerate(COMMAND_FEEDBACK_BUCKETS)
+            },
+            "weighted_reward_abs_mass": {
+                name: {
+                    term: float(value)
+                    for term, value in zip(
+                        self.term_names,
+                        self.reward_abs_mass[idx].detach().cpu().tolist(),
+                        strict=True,
+                    )
+                }
+                for idx, name in enumerate(COMMAND_FEEDBACK_BUCKETS)
+            },
+        }
+
+    def state_dict(self) -> dict[str, object]:
+        return self._payload()
+
+    def snapshot(self, *, reset: bool = True) -> dict[str, object]:
+        payload = self._payload()
+        if reset:
+            self.reset()
+        return payload
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("schema_version") != self.schema_version:
+            raise ValueError("unsupported bucket feedback schema")
+        if tuple(payload.get("bucket_names", ())) != tuple(COMMAND_FEEDBACK_BUCKETS):
+            raise ValueError("bucket feedback bucket mismatch")
+        if tuple(payload.get("term_names", ())) != self.term_names:
+            raise ValueError("bucket feedback reward term mismatch")
+        step_dt = float(payload.get("step_dt", self.step_dt))
+        if not np.isclose(step_dt, self.step_dt):
+            raise ValueError("bucket feedback step_dt mismatch")
+        counts = payload.get("sample_count")
+        signed = payload.get("weighted_reward_mass")
+        absolute = payload.get("weighted_reward_abs_mass")
+        if not isinstance(counts, Mapping) or not isinstance(signed, Mapping) or not isinstance(absolute, Mapping):
+            raise ValueError("bucket feedback payload is incomplete")
+        try:
+            count_values = [int(counts[name]) for name in COMMAND_FEEDBACK_BUCKETS]
+            signed_values = [
+                [float(signed[name][term]) for term in self.term_names]
+                for name in COMMAND_FEEDBACK_BUCKETS
+            ]
+            absolute_values = [
+                [float(absolute[name][term]) for term in self.term_names]
+                for name in COMMAND_FEEDBACK_BUCKETS
+            ]
+        except (KeyError, TypeError, ValueError) as exc:
+            raise ValueError("bucket feedback payload has invalid values") from exc
+        if any(value < 0 for value in count_values) or not np.isfinite(signed_values).all() or not np.isfinite(absolute_values).all():
+            raise ValueError("bucket feedback payload has non-finite values")
+        self.sample_count.copy_(torch.tensor(count_values, dtype=torch.long, device=self.device))
+        self.unclassified_count.fill_(int(payload.get("unclassified_count", 0)))
+        self.reward_mass.copy_(torch.tensor(signed_values, dtype=torch.float32, device=self.device))
+        self.reward_abs_mass.copy_(torch.tensor(absolute_values, dtype=torch.float32, device=self.device))
 
 
 class CommandCapabilityEvaluator:
@@ -96,6 +241,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.last_gate_outcome: str | None = None
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
+        self.bucket_feedback: BucketFeedbackTracker | None = None
         initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
         frontier_order = getattr(env.cfg, "adaptive_frontier_order", ()) or None
         self.command_exposure = (
@@ -135,6 +281,54 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Inject a synchronous evaluator (used by production adapters/tests)."""
         self.evaluator = evaluator
 
+    def _ensure_bucket_feedback(self) -> BucketFeedbackTracker | None:
+        """Create the tracker once the adaptive command term has sampled ids."""
+        existing = getattr(self, "bucket_feedback", None)
+        if existing is not None:
+            return existing
+        try:
+            env = _manager_env(self.env)
+            command_term = env.command_manager.get_term("twist")
+            bucket_ids = getattr(command_term, "bucket_ids", None)
+            reward_manager = env.reward_manager
+            term_names = tuple(reward_manager.active_terms)
+            step_dt = float(getattr(env, "step_dt", 0.02))
+        except (AttributeError, KeyError, ValueError):
+            return None
+        if bucket_ids is None or not term_names:
+            return None
+        self.bucket_feedback = BucketFeedbackTracker(
+            term_names, device=bucket_ids.device, step_dt=step_dt
+        )
+        return self.bucket_feedback
+
+    def _capture_command_bucket_ids(self) -> torch.Tensor | None:
+        try:
+            command_term = _manager_env(self.env).command_manager.get_term("twist")
+            bucket_ids = getattr(command_term, "bucket_ids", None)
+        except (AttributeError, KeyError):
+            return None
+        if bucket_ids is None:
+            return None
+        self._ensure_bucket_feedback()
+        return bucket_ids.detach().clone()
+
+    def _record_bucket_feedback(self, bucket_ids: torch.Tensor | None) -> None:
+        if bucket_ids is None:
+            return
+        tracker = self._ensure_bucket_feedback()
+        if tracker is None:
+            return
+        reward_values = getattr(_manager_env(self.env).reward_manager, "_step_reward", None)
+        if reward_values is not None:
+            tracker.record(bucket_ids, reward_values)
+
+    def _snapshot_bucket_feedback(self, *, reset: bool = True) -> dict[str, object] | None:
+        tracker = self._ensure_bucket_feedback()
+        if tracker is None:
+            return None
+        return tracker.snapshot(reset=reset)
+
     def _rng_state(self) -> dict[str, object]:
         return {
             "python": random.getstate(),
@@ -172,6 +366,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self._validate_report(report, checkpoint_path)
             payload = getattr(report, "payload", report)
             metrics = report.to_gate_metrics()
+            command_feedback = self._snapshot_bucket_feedback(reset=True)
         except Exception as exc:
             self.last_gate_outcome = "evaluation_error"
             self.evaluation_events.append({"kind": "evaluation_error", "error": repr(exc), "iteration": self.current_learning_iteration, "checkpoint": checkpoint_path})
@@ -189,6 +384,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 step=getattr(self, "completed_iterations", self.current_learning_iteration) * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
                 checkpoint=checkpoint_path,
                 seed=self.evaluation_seed,
+                command_feedback=command_feedback,
             )
             threshold = max(axis.upper_threshold for axis in self.capability_gate.axes.values())
             mastered_before = {
@@ -282,6 +478,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             start = time.perf_counter()
             with torch.inference_mode():
                 for _ in range(self.cfg["num_steps_per_env"]):
+                    command_bucket_ids = self._capture_command_bucket_ids()
                     actions = self.alg.act(obs)
                     obs, rewards, dones, extras = self.env.step(actions.to(self.env.device))
                     if self.cfg.get("check_for_nan", True):
@@ -293,6 +490,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                         rewards.to(self.device),
                         dones.to(self.device),
                     )
+                    self._record_bucket_feedback(command_bucket_ids)
                     self.alg.process_env_step(obs, rewards, dones, extras)
                     intrinsic = self.alg.intrinsic_rewards if self.cfg["algorithm"].get("rnd_cfg") else None
                     self.logger.process_env_step(rewards, dones, extras, intrinsic)
@@ -373,6 +571,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         step: int | None = None,
         checkpoint: str | None = None,
         seed: int = 0,
+        command_feedback: Mapping[str, object] | None = None,
     ):
         """Consume one frozen battery window and apply at most one transition."""
         if self.capability_gate is None:
@@ -388,6 +587,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         transition = decision.transition
         self.last_gate_outcome = decision.outcome.value
         event = {"kind": decision.outcome.value, "step": step, "checkpoint": checkpoint, "reason": decision.reason}
+        if command_feedback is not None:
+            event["command_feedback"] = dict(command_feedback)
         if getattr(self, "last_evaluation_provenance", None) is not None:
             event["provenance"] = dict(self.last_evaluation_provenance)
         self.evaluation_events.append(event)
@@ -424,6 +625,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "num_envs": getattr(self.env, "num_envs", None),
             "stage_values": {} if gate is None else {name: gate.stage_value(name) for name in gate.axis_order},
             "command_exposure": None if exposure is None else exposure.state_dict(),
+            "command_feedback": None
+            if getattr(self, "bucket_feedback", None) is None
+            else self.bucket_feedback.state_dict(),
             "last_known_good_checkpoint": self.last_known_good_checkpoint,
             "last_known_good_buckets": list(getattr(self, "last_known_good_buckets", ())),
             "evaluation_events": list(self.evaluation_events),
@@ -470,6 +674,18 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint command exposure mismatch")
             if exposure is not None:
                 exposure.load_state_dict(state["command_exposure"])
+            feedback_state = state.get("command_feedback")
+            if feedback_state is not None:
+                tracker = self._ensure_bucket_feedback()
+                if tracker is None:
+                    raise ValueError("adaptive checkpoint command feedback mismatch")
+                tracker.load_state_dict(feedback_state)
+            else:
+                # Checkpoints written before command-conditioned feedback was
+                # introduced carry no samples. Drop any live tracker before a
+                # resume or rollback so post-checkpoint evidence cannot leak
+                # into the restored state.
+                self.bucket_feedback = None
             completed = int(state.get("completed_iterations", completed))
             if completed < 0 or state.get("env_step", completed * self.cfg["num_steps_per_env"]) != completed * self.cfg["num_steps_per_env"]:
                 raise ValueError("adaptive checkpoint step budget mismatch")
