@@ -4865,6 +4865,9 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         self._transition_target = torch.zeros(
             (self.num_envs, 3), device=self.device
         )
+        self._transition_bootstrap = torch.zeros(
+            (self.num_envs, 3), device=self.device
+        )
         self._transition_target_bucket = torch.full(
             (self.num_envs,), -1, dtype=torch.long, device=self.device
         )
@@ -4897,12 +4900,19 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
                 self._transition_target = torch.zeros(
                     (self.num_envs, 3), device=self.device
                 )
+                self._transition_bootstrap = torch.zeros(
+                    (self.num_envs, 3), device=self.device
+                )
                 self._transition_target_bucket = torch.full(
                     (self.num_envs,), -1, dtype=torch.long, device=self.device
                 )
                 self._transition_start_step = torch.full(
                     (self.num_envs,), -1, dtype=torch.long, device=self.device
                 )
+        elif not hasattr(self, "_transition_bootstrap"):
+            # Keep objects constructed from a pre-slew command state usable in
+            # lightweight tests and evaluator-side command wrappers.
+            self._transition_bootstrap = torch.zeros_like(self._transition_target)
         probability = float(getattr(self.cfg, "transition_probability", 0.0))
         bootstrap_mode = str(getattr(self.cfg, "transition_bootstrap_mode", "forward"))
         if bootstrap_mode not in ("forward", "zero"):
@@ -4944,6 +4954,7 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
             # or turn target. This supplies direct zero→rotation transitions;
             # the original forward bootstrap remains the default recipe.
             bootstrap.zero_()
+        self._transition_bootstrap[selected_ids] = bootstrap
         self.vel_command_b[selected_ids] = bootstrap
         self.vel_command_w[selected_ids] = bootstrap
         self._transition_target[selected_ids] = target
@@ -4961,6 +4972,23 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         super()._update_command()
         if not hasattr(self, "_transition_active") or not self._transition_active.any():
             return
+        active_ids = self._transition_active.nonzero(as_tuple=False).flatten()
+        duration = self._transition_duration[active_ids]
+        progress = torch.where(
+            duration > 0.0,
+            self._transition_elapsed[active_ids] / duration,
+            torch.ones_like(duration),
+        ).clamp_(0.0, 1.0)
+        # Keep the command continuous throughout acquisition. Previously the
+        # bootstrap was written at reset and the target appeared only when the
+        # timer completed, so the policy saw a discontinuous jump exactly at
+        # the transition boundary. The evaluator never enables this path; it
+        # is a training-only acquisition aid.
+        interpolated = self._transition_bootstrap[active_ids] + progress.unsqueeze(-1) * (
+            self._transition_target[active_ids] - self._transition_bootstrap[active_ids]
+        )
+        self.vel_command_b[active_ids] = interpolated
+        self.vel_command_w[active_ids] = interpolated
         complete = self._transition_active & (
             self._transition_elapsed >= self._transition_duration
         )

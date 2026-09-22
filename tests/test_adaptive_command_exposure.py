@@ -36,6 +36,37 @@ def _masks(command):
     }
 
 
+def _transition_term(targets: torch.Tensor) -> mdp.AdaptiveVelocityCommand:
+    """Build the command term around its transition state machine only."""
+    cfg = make_microduck_adaptive_velocity_env_cfg(
+        command_exposure=True,
+        transition_probability=0.4,
+        transition_bootstrap_mode="zero",
+    ).commands["twist"]
+    cfg.heading_command = False
+    cfg.transition_probability = 1.0
+    cfg.transition_duration_s = (1.0, 1.0)
+    cfg.transition_forward_fraction = (0.5, 0.5)
+    n = targets.shape[0]
+    term = object.__new__(mdp.AdaptiveVelocityCommand)
+    term.cfg = cfg
+    term._env = SimpleNamespace(device="cpu", num_envs=n, common_step_counter=0)
+    term.vel_command_b = targets.clone()
+    term.vel_command_w = targets.clone()
+    for name in ("is_standing_env", "is_world_env", "is_heading_env", "is_forward_env"):
+        setattr(term, name, torch.zeros(n, dtype=torch.bool))
+    term.bucket_ids = torch.full((n,), -1, dtype=torch.long)
+    term.time_left = torch.full((n,), 10.0)
+    term._update_metrics = lambda: None
+    return term
+
+
+def _start_zero_transition(term: mdp.AdaptiveVelocityCommand) -> None:
+    ids = torch.arange(term.num_envs)
+    buckets = torch.tensor([3 + (idx % 3) for idx in range(term.num_envs)])
+    term._set_transition_state(ids, buckets)
+
+
 def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_floors():
     term = _command()
     exposure = CommandExposure()
@@ -82,6 +113,57 @@ def test_failed_lateral_gets_more_real_samples_and_retains_nominal_and_anchor_fl
     assert torch.any(term.command[masks["nominal"], 0] < 0)
     assert torch.equal(term.is_standing_env, masks["zero"])
     assert torch.equal(term.vel_command_w, term.vel_command_b)
+
+
+def test_zero_transition_slews_between_bootstrap_and_target_and_finishes_exactly():
+    target = torch.tensor([[0.0, 0.0, 0.8], [0.22, 0.0, -0.8]])
+    term = _transition_term(target)
+    _start_zero_transition(term)
+
+    # A reset-time command update must expose the exact zero bootstrap and must
+    # not consume transition time, even when dt is explicitly zero.
+    term.compute(0.0)
+    torch.testing.assert_close(term.vel_command_b, torch.zeros_like(target))
+    assert torch.all(term._transition_elapsed == 0.0)
+    assert torch.equal(term.bucket_ids, torch.zeros(term.num_envs, dtype=torch.long))
+
+    # The command is continuous at the half-way point, rather than jumping
+    # directly from zero to the sampled yaw/turn target.
+    term._env.common_step_counter = 1
+    term.compute(0.5)
+    torch.testing.assert_close(term.vel_command_b, target * 0.5)
+    assert torch.all(term._transition_active)
+    assert torch.equal(term.bucket_ids, torch.zeros(term.num_envs, dtype=torch.long))
+
+    # Completion writes the original target exactly and transfers attribution
+    # to the target bucket.
+    term.compute(0.5)
+    torch.testing.assert_close(term.vel_command_b, target, rtol=0.0, atol=0.0)
+    torch.testing.assert_close(term.vel_command_w, target, rtol=0.0, atol=0.0)
+    assert not torch.any(term._transition_active)
+    assert torch.equal(term.bucket_ids, torch.tensor([3, 4]))
+
+
+def test_transition_partial_reset_does_not_mutate_other_env_state():
+    target = torch.tensor([[0.0, 0.0, 0.8], [0.22, 0.0, -0.8], [0.18, 0.0, 0.8]])
+    term = _transition_term(target)
+    _start_zero_transition(term)
+    term._transition_elapsed[1] = 0.25
+    saved_target = term._transition_target[1].clone()
+    saved_bootstrap = term._transition_bootstrap[1].clone()
+    saved_bucket = term._transition_target_bucket[1].clone()
+
+    # Resample only env 0 with a new target. Env 1 remains mid-transition and
+    # its timer, target, bootstrap, and attribution stay untouched.
+    term.vel_command_b[0] = torch.tensor([0.0, 0.0, -0.8])
+    term._set_transition_state(torch.tensor([0]), torch.tensor([3]))
+    assert term._transition_active[1]
+    assert term._transition_elapsed[1].item() == pytest.approx(0.25)
+    torch.testing.assert_close(term._transition_target[1], saved_target)
+    torch.testing.assert_close(term._transition_bootstrap[1], saved_bootstrap)
+    assert term._transition_target_bucket[1] == saved_bucket
+    assert term._transition_active[0]
+    assert term._transition_target[0, 2].item() == pytest.approx(-0.8)
 
 
 def test_acquisition_profile_can_start_on_lateral_frontier():
