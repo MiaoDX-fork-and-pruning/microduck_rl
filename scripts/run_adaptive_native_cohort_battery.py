@@ -57,7 +57,12 @@ def resolve_cohort_seeds(
             raise ValueError("cohort_size must be a positive integer")
         seeds = tuple(evaluation_seed + offset for offset in range(cohort_size))
     else:
-        seeds = tuple(int(seed) for seed in cohort_seeds)
+        parsed: list[int] = []
+        for seed in cohort_seeds:
+            if isinstance(seed, bool) or not isinstance(seed, int):
+                raise ValueError("cohort seeds must be integers")
+            parsed.append(seed)
+        seeds = tuple(parsed)
         if not seeds:
             raise ValueError("cohort_seeds must not be empty")
         if cohort_size != 1 and len(seeds) != cohort_size:
@@ -89,9 +94,50 @@ def _member_report_sha(payload: Mapping[str, object]) -> str:
     existing = payload.get("report_sha256")
     if isinstance(existing, str) and existing:
         return existing
-    return hashlib.sha256(
-        json.dumps(payload, sort_keys=True, separators=(",", ":"), ensure_ascii=True).encode()
-    ).hexdigest()
+    return canonical_sha256(payload)
+
+
+def _validate_member_artifacts(
+    payload: Mapping[str, object],
+    *,
+    seed: int,
+    task: str,
+    axis_mode: str,
+    seed_set_id: str,
+    checkpoint: Path,
+    checkpoint_sha: str,
+    source_sha: str,
+) -> CapabilityReport:
+    """Validate one member before it can influence worst-case selection."""
+    report = CapabilityReport.from_dict(payload)
+    metadata = report.payload["metadata"]
+    if (
+        metadata.get("task_id") != task
+        or report.payload.get("axis_mode") != axis_mode
+        or metadata.get("seed_set_id") != seed_set_id
+        or metadata.get("checkpoint") != str(checkpoint)
+        or metadata.get("checkpoint_sha256") != checkpoint_sha
+        or metadata.get("source_sha") != source_sha
+        or metadata.get("evaluation_seed") != seed
+    ):
+        raise ValueError("cohort member provenance mismatch")
+    config_hash = canonical_sha256(report.payload.get("evaluator_config", {}))
+    if metadata.get("evaluator_config_sha256") != config_hash:
+        raise ValueError("cohort member evaluator config hash mismatch")
+    cases = payload.get("cases")
+    if not isinstance(cases, list) or {case.get("bucket") for case in cases if isinstance(case, Mapping)} != set(BUCKETS):
+        raise ValueError("cohort member trace cases are incomplete")
+    for case in cases:
+        if not isinstance(case, Mapping):
+            raise ValueError("invalid cohort member trace case")
+        trace = case.get("trace")
+        trace_hash = case.get("trace_sha256")
+        if not isinstance(trace, str) or not isinstance(trace_hash, str):
+            raise ValueError("cohort member trace provenance is missing")
+        trace_path = Path(trace)
+        if not trace_path.exists() or hashlib.sha256(trace_path.read_bytes()).hexdigest() != trace_hash:
+            raise ValueError("cohort member trace hash mismatch")
+    return report
 
 
 def aggregate_cohort_reports(
@@ -115,26 +161,27 @@ def aggregate_cohort_reports(
     checkpoint_sha = hashlib.sha256(checkpoint.read_bytes()).hexdigest()
 
     validated: list[tuple[int, dict, CapabilityReport]] = []
+    config_hash: str | None = None
     for record in records:
         seed = record.get("seed")
         payload = record.get("payload")
         if isinstance(seed, bool) or not isinstance(seed, int) or not isinstance(payload, Mapping):
             raise ValueError("invalid cohort member")
-        report = CapabilityReport.from_dict(payload)
-        metadata = report.payload["metadata"]
-        if metadata.get("task_id") != task:
-            raise ValueError("cohort member task mismatch")
-        if report.payload.get("axis_mode") != axis_mode:
-            raise ValueError("cohort member axis mismatch")
-        if metadata.get("seed_set_id") != seed_set_id:
-            raise ValueError("cohort member seed-set mismatch")
-        if (
-            metadata.get("checkpoint") != str(checkpoint)
-            or metadata.get("checkpoint_sha256") != checkpoint_sha
-            or metadata.get("source_sha") != source_sha
-            or metadata.get("evaluation_seed") != seed
-        ):
-            raise ValueError("cohort member provenance mismatch")
+        report = _validate_member_artifacts(
+            payload,
+            seed=seed,
+            task=task,
+            axis_mode=axis_mode,
+            seed_set_id=seed_set_id,
+            checkpoint=checkpoint,
+            checkpoint_sha=checkpoint_sha,
+            source_sha=source_sha,
+        )
+        member_config_hash = canonical_sha256(report.payload.get("evaluator_config", {}))
+        if config_hash is None:
+            config_hash = member_config_hash
+        elif member_config_hash != config_hash:
+            raise ValueError("cohort member evaluator config mismatch")
         # Keep the original artifact for trace/case evidence.  CapabilityReport
         # normalizes numeric values for schema comparison, which would turn
         # integer case lengths and seed IDs into floats in the merged native

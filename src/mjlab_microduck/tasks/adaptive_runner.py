@@ -23,7 +23,12 @@ from .adaptive_curriculum import (
     TransitionExposure,
     apply_stage_to_env,
 )
-from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
+from mjlab_microduck.evaluation.capability import (
+    BUCKETS,
+    CapabilityReport,
+    canonical_sha256,
+    resolve_enabled_axes,
+)
 from . import MicroduckOnPolicyRunner
 
 
@@ -46,6 +51,103 @@ def _manager_env(env):
         if current is None:
             raise AttributeError("adaptive environment has no event_manager")
     return current
+
+
+def _validate_cohort_envelope(
+    payload: Mapping[str, object],
+    *,
+    expected_size: int,
+    evaluation_seed: int,
+    task_id: str,
+    axis_mode: str,
+    seed_set_id: str,
+    checkpoint: Path,
+) -> None:
+    """Verify the runner received the configured worst-member cohort artifact."""
+    metadata = payload.get("metadata")
+    cohort = payload.get("cohort_manifest")
+    metadata_cohort = metadata.get("cohort") if isinstance(metadata, Mapping) else None
+    seed_manifest = payload.get("seed_manifest")
+    if not isinstance(metadata_cohort, Mapping) or not isinstance(cohort, Mapping) or not isinstance(seed_manifest, Mapping):
+        raise ValueError("cohort report manifest is missing")
+    if metadata_cohort != cohort or metadata_cohort.get("version") != "native-reset-dr-cohort-v1":
+        raise ValueError("cohort report metadata manifest mismatch")
+    expected_seeds = tuple(evaluation_seed + offset for offset in range(expected_size))
+    if tuple(metadata_cohort.get("seeds", ())) != expected_seeds:
+        raise ValueError("cohort seed manifest does not match configured size")
+    if tuple(seed_manifest.get("cohort_seeds", ())) != expected_seeds:
+        raise ValueError("cohort seed manifest seed list mismatch")
+    members = seed_manifest.get("members")
+    if not isinstance(members, list) or len(members) != expected_size:
+        raise ValueError("cohort member manifest size mismatch")
+    selected = metadata_cohort.get("selected_seed_by_bucket")
+    if not isinstance(selected, Mapping) or set(selected) != set(BUCKETS):
+        raise ValueError("cohort selected seed map is incomplete")
+    member_reports: dict[int, CapabilityReport] = {}
+    config_hash: str | None = None
+    for member in members:
+        if not isinstance(member, Mapping):
+            raise ValueError("invalid cohort member manifest")
+        seed_value = member.get("seed")
+        if isinstance(seed_value, bool) or not isinstance(seed_value, (int, float)) or int(seed_value) != seed_value:
+            raise ValueError("invalid cohort member seed")
+        seed = int(seed_value)
+        if seed not in expected_seeds or seed in member_reports:
+            raise ValueError("invalid or duplicate cohort member seed")
+        path_value = member.get("path")
+        if not isinstance(path_value, str) or not path_value:
+            raise ValueError("cohort member report path is missing")
+        path = Path(path_value)
+        if not path.is_file():
+            raise ValueError("cohort member report is missing")
+        member_payload = json.loads(path.read_text(encoding="utf-8"))
+        member_hash = member_payload.get("report_sha256")
+        if member.get("sha256") != member_hash or member_hash != canonical_sha256({k: v for k, v in member_payload.items() if k != "report_sha256"}):
+            raise ValueError("cohort member report hash mismatch")
+        member_report = CapabilityReport.from_dict(member_payload)
+        member_meta = member_report.payload["metadata"]
+        if (
+            member_meta.get("task_id") != task_id
+            or member_report.payload.get("axis_mode") != axis_mode
+            or member_meta.get("seed_set_id") != seed_set_id
+            or member_meta.get("checkpoint") != str(checkpoint)
+            or member_meta.get("checkpoint_sha256") != metadata.get("checkpoint_sha256")
+            or member_meta.get("source_sha") != metadata.get("source_sha")
+            or member_meta.get("evaluation_seed") != seed
+        ):
+            raise ValueError("cohort member provenance mismatch")
+        member_config_hash = canonical_sha256(member_report.payload.get("evaluator_config", {}))
+        if member_meta.get("evaluator_config_sha256") != member_config_hash:
+            raise ValueError("cohort member evaluator config hash mismatch")
+        if config_hash is None:
+            config_hash = member_config_hash
+        elif member_config_hash != config_hash:
+            raise ValueError("cohort member evaluator config mismatch")
+        cases = member_payload.get("cases")
+        if not isinstance(cases, list) or {case.get("bucket") for case in cases if isinstance(case, Mapping)} != set(BUCKETS):
+            raise ValueError("cohort member trace cases are incomplete")
+        for case in cases:
+            if not isinstance(case, Mapping):
+                raise ValueError("invalid cohort member trace case")
+            trace_value = case.get("trace")
+            trace_hash = case.get("trace_sha256")
+            trace = Path(trace_value) if isinstance(trace_value, str) else None
+            if trace is None or not isinstance(trace_hash, str) or not trace.is_file():
+                raise ValueError("cohort member trace is missing")
+            if hashlib.sha256(trace.read_bytes()).hexdigest() != trace_hash:
+                raise ValueError("cohort member trace hash mismatch")
+        member_reports[seed] = member_report
+    for bucket in BUCKETS:
+        worst = min(
+            ((member_reports[seed].metrics[bucket], seed) for seed in expected_seeds),
+            key=lambda item: (item[0], item[1]),
+        )
+        if int(selected[bucket]) != worst[1]:
+            raise ValueError(f"cohort selected seed for {bucket} is not the worst member")
+        if canonical_sha256(payload["buckets"][bucket]["raw"]) != canonical_sha256(
+            member_reports[worst[1]].payload["buckets"][bucket]["raw"]
+        ):
+            raise ValueError(f"cohort raw evidence for {bucket} is not from selected member")
 
 
 class BucketFeedbackTracker:
@@ -268,6 +370,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         )
         if self.evaluation_cohort_size < 1:
             raise ValueError("adaptive evaluation cohort size must be positive")
+        self.allow_legacy_cohort_migration = bool(
+            getattr(env.cfg, "adaptive_allow_legacy_cohort_migration", False)
+        )
         self.evaluation_events: list[dict[str, object]] = []
         self.last_evaluation_provenance: dict[str, object] | None = None
         self.last_known_good_checkpoint: str | None = None
@@ -559,12 +664,30 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             raise ValueError("capability report checkpoint hash is missing")
         from mjlab_microduck.evaluation.capability import CapabilityReport
 
-        CapabilityReport.from_dict(payload).to_gate_metrics()
         expected_task = getattr(self.env.cfg, "task_id", None)
+        expected_seed = int(self.evaluation_seed)
+        expected_seed_set = getattr(self, "evaluation_seed_set_id", None)
+        if int(getattr(self, "evaluation_cohort_size", 1)) > 1:
+            _validate_cohort_envelope(
+                payload,
+                expected_size=int(self.evaluation_cohort_size),
+                evaluation_seed=expected_seed,
+                task_id=expected_task,
+                axis_mode=mode,
+                seed_set_id=expected_seed_set,
+                checkpoint=expected,
+            )
+            CapabilityReport.from_dict(payload).to_gate_metrics()
+        else:
+            CapabilityReport.from_dict(payload).to_gate_metrics()
         if expected_task and metadata["task_id"] != expected_task:
             raise ValueError("capability report task mismatch")
         if hasattr(self, "evaluation_seed_set_id") and metadata["seed_set_id"] != self.evaluation_seed_set_id:
             raise ValueError("capability report seed set mismatch")
+        if "evaluation_seed" not in metadata and int(getattr(self, "evaluation_cohort_size", 1)) > 1:
+            raise ValueError("capability report evaluation seed is missing")
+        if "evaluation_seed" in metadata and metadata.get("evaluation_seed") != expected_seed:
+            raise ValueError("capability report evaluation seed mismatch")
         for cfg_key, report_key in (
             ("adaptive_source_sha", "source_sha"),
             ("adaptive_evaluator_config_sha256", "evaluator_config_sha256"),
@@ -846,17 +969,47 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if int(state.get("evaluation_schema_version", 2)) != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
                 raise ValueError("adaptive checkpoint evaluator schema mismatch")
             saved_cohort_size = state.get("evaluation_cohort_size")
+            legacy_cohort_migration = (
+                saved_cohort_size is None and self.evaluation_cohort_size > 1
+            )
             # Checkpoints written before cohort gates existed have no field and
             # may be upgraded explicitly by a campaign launch.  Once a cohort
             # size is persisted, changing it would make the gate history
             # incomparable and is rejected.
+            if legacy_cohort_migration and not self.allow_legacy_cohort_migration:
+                raise ValueError(
+                    "legacy adaptive checkpoint requires explicit cohort migration"
+                )
             if (
                 saved_cohort_size is not None
                 and int(saved_cohort_size) != getattr(self, "evaluation_cohort_size", 1)
             ):
                 raise ValueError("adaptive checkpoint evaluation cohort size mismatch")
+            legacy_gate_audit = None
+            legacy_known_good = None
             if gate is not None:
                 gate.load_state_dict(state)
+                if legacy_cohort_migration:
+                    # Keep the learned PPO policy, optimizer, stage difficulty,
+                    # exposure and cumulative step budget. Rebaseline only the
+                    # evidence that was measured under the old single-seed
+                    # gate: old mastery, dwell counters and rollback targets
+                    # must not be allowed to trigger a false cohort rollback.
+                    legacy_gate_audit = {
+                        "best_metrics": deepcopy(gate.best_metrics),
+                        "states": deepcopy(state.get("states", {})),
+                        "trace_length": len(gate.trace),
+                    }
+                    gate.best_metrics = {}
+                    for axis_state in gate.states.values():
+                        axis_state.pass_count = 0
+                        axis_state.fail_count = 0
+                        axis_state.ema_score = None
+                        axis_state.last_transition_step = -1
+                    legacy_known_good = {
+                        "checkpoint": state.get("last_known_good_checkpoint"),
+                        "buckets": list(state.get("last_known_good_buckets", ())),
+                    }
             elif state.get("enabled_axes"):
                 raise ValueError("adaptive state axis mode/allowlist mismatch")
             if bool(state.get("command_exposure")) != (exposure is not None):
@@ -922,10 +1075,22 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.last_known_good_buckets = tuple(str(name) for name in buckets)
             self.evaluation_events = list(state.get("evaluation_events", []))
             self.last_evaluation_provenance = state.get("evaluation_provenance")
+            if legacy_cohort_migration:
+                self.last_known_good_checkpoint = None
+                self.last_known_good_buckets = ()
+                self.last_evaluation_provenance = None
+                self.evaluation_events.append({
+                    "kind": "cohort_rebaseline",
+                    "from_cohort_size": 1,
+                    "to_cohort_size": self.evaluation_cohort_size,
+                    "completed_iterations": completed,
+                    "legacy_gate": legacy_gate_audit,
+                    "legacy_known_good": legacy_known_good,
+                })
             # Continue the same evaluation stream after a training restart.
             if state.get("evaluation_seed") is not None:
                 self.evaluation_seed = int(state["evaluation_seed"])
-            if state.get("evaluation_seed_set_id") is not None:
+            if state.get("evaluation_seed_set_id") is not None and not legacy_cohort_migration:
                 self.evaluation_seed_set_id = str(state["evaluation_seed_set_id"])
         elif gate is not None or exposure is not None or transition_exposure is not None:
             raise ValueError("resume requires adaptive state; use actor-only load for a warm start")

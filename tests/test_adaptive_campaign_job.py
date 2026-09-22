@@ -48,6 +48,17 @@ def test_completion_uses_manifest_path_and_rejects_tampered_artifact(tmp_path):
         campaign.read_training_result(result, **args)
 
 
+def test_gate_cohort_seed_coverage_cannot_overlap_heldout(monkeypatch, tmp_path):
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "feedback", "--seed", "17",
+        "--output", str(tmp_path / "run"), "--iterations", "1",
+        "--gate-seed", "100", "--gate-cohort-size", "3",
+        "--heldout-seed", "106",
+    ])
+    with pytest.raises(SystemExit):
+        campaign.main()
+
+
 @pytest.mark.parametrize("saved_fraction,requested_fraction,expected_fraction", [
     (None, None, 0.0), (0.2, None, 0.2), (None, 0.2, 0.2), (0.2, 0.0, 0.0),
 ])

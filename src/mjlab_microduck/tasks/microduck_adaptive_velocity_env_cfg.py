@@ -149,6 +149,10 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # Native gate cohort size.  The legacy single-seed evaluator remains the
     # default; campaign launchers opt into a fixed multi-seed cohort explicitly.
     adaptive_evaluation_cohort_size: int = 1
+    # A single-seed checkpoint has incomparable mastery/rollback evidence. A
+    # campaign must opt in explicitly when it re-baselines that evidence for a
+    # larger native cohort while preserving the PPO state and cumulative budget.
+    adaptive_allow_legacy_cohort_migration: bool = False
     adaptive_evaluator_schema_version: int = 2
     adaptive_seed_set_id: str = "adaptive-gate-20260916"
     adaptive_evaluation_timeout_s: int = 900
@@ -234,6 +238,9 @@ def make_microduck_adaptive_velocity_env_cfg(
     )
     if cfg.adaptive_evaluation_cohort_size < 1:
         raise ValueError("adaptive evaluation cohort size must be positive")
+    cfg.adaptive_allow_legacy_cohort_migration = (
+        os.environ.get("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", "0") == "1"
+    )
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900

@@ -251,6 +251,17 @@ def test_feedback_sampler_has_single_owner_and_preserves_policy_contract():
     assert cfg.commands["twist"].ranges == base.commands["twist"].ranges
 
 
+def test_legacy_cohort_migration_requires_explicit_launch_flag(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE", "3")
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", raising=False)
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_evaluation_cohort_size == 3
+    assert cfg.adaptive_allow_legacy_cohort_migration is False
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", "1")
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_allow_legacy_cohort_migration is True
+
+
 def test_registered_task_ids_match_checkpoint_provenance():
     from mjlab.tasks.registry import load_env_cfg
     from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES

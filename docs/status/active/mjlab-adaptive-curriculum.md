@@ -68,12 +68,19 @@ and selects the worst score and raw evidence independently for each bucket.
 The campaign launcher now opts into a three-seed gate cohort; held-out CPU and
 native checks remain separate. Cohort metadata records all member reports and
 the selected seed map, and the runner persists the cohort size in checkpoint
-state. Legacy checkpoints may be explicitly upgraded to the cohort evaluator.
+state. Member config/provenance and every member trace are checked before
+aggregation, and the runner rechecks the returned seed map and worst-member
+selection. Legacy checkpoints require an explicit migration flag; migration
+preserves PPO state and cumulative budget while clearing old single-seed
+mastery and rollback evidence.
 
 The actual native proof at `/tmp/microduck-adaptive-cohort-proof/` produced a
 schema-v2 report and passed the native trace validator. Its conservative
 lower-tail score was `.72200` and `passed=false`, correctly exposing the current
-policy's lack of robust mastery. No training remains running.
+policy's lack of robust mastery. A fresh real three-member native run at
+`/tmp/microduck-adaptive-native-cohort-smoke/capability.json` also passed the
+trace validator, with lower-tail `0.0` as expected from the 2-update smoke
+policy. No training remains running.
 
 Next action: use the cohort gate for the next changed training hypothesis and
 then address the causal sensor-DR robustness failure. Do not lower product
@@ -81,8 +88,10 @@ thresholds, reuse a single lucky seed, or repeat the same 500-update slew budget
 
 ## Proof and remaining gates
 
-- Full adaptive/config suite: 203 passed, including cohort report and runner
-  wiring contracts. The focused native/cohort/phase evidence slice is 53 passed.
+- Full adaptive/config suite: 207 passed, including cohort report, explicit
+  migration, and runner wiring contracts. The fresh real native cohort smoke
+  and the existing trace validator both passed; its policy score is negative
+  evidence, not a usability result.
   Ruff retains
   the 17 pre-existing findings in mdp.py. No new findings in the changed slice.
 - Transition-enabled smoke64/5 passed using TensorBoard in `/tmp`; the new

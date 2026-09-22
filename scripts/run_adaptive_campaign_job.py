@@ -69,8 +69,10 @@ def main() -> int:
     parser.add_argument("--gate-seed", type=int, default=20260815)
     parser.add_argument("--heldout-seed", type=int, default=20260915)
     args = parser.parse_args()
-    if set(range(args.gate_seed, args.gate_seed + 6)) & set(range(args.heldout_seed, args.heldout_seed + 6)):
-        parser.error("gate and held-out six-bucket seed sets overlap")
+    gate_consumed_seeds = set(range(args.gate_seed, args.gate_seed + args.gate_cohort_size + 5))
+    heldout_consumed_seeds = set(range(args.heldout_seed, args.heldout_seed + 6))
+    if gate_consumed_seeds & heldout_consumed_seeds:
+        parser.error("gate cohort and held-out six-bucket seed sets overlap")
     if args.iterations < 1 or args.num_envs < 1 or args.gate_interval < 1 or args.gate_cohort_size < 1:
         parser.error("iterations, num-envs, gate-interval and gate-cohort-size must be positive")
     if args.resume and args.branch == "fixed":
@@ -144,6 +146,9 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
         "MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE": str(args.gate_cohort_size),
+        "MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION": (
+            "1" if args.resume and args.gate_cohort_size > 1 else "0"
+        ),
         "MICRODUCK_ADAPTIVE_SEED_SET_ID": f"adaptive-gate-{args.gate_seed}",
         "MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND": (
             f"{shlex.quote(sys.executable)} {shlex.quote(str(source / 'scripts/run_adaptive_native_cohort_battery.py'))} "

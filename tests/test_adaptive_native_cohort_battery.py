@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import copy
+import hashlib
 import importlib.util
+import json
 import os
 from pathlib import Path
 import sys
@@ -82,7 +84,17 @@ def _member(tmp_path: Path, seed: int, *, yaw_error: float = 0.1) -> dict:
         },
     ).payload
     payload["metadata"]["evaluator_config_sha256"] = canonical_sha256(payload["evaluator_config"])
-    payload["cases"] = [{"bucket": bucket, "steps": 300} for bucket in BUCKETS]
+    cases = []
+    for bucket in BUCKETS:
+        trace_path = tmp_path / f"trace-{seed}-{bucket}.bin"
+        trace_path.write_bytes(f"trace-{seed}-{bucket}".encode())
+        cases.append({
+            "bucket": bucket,
+            "steps": 300,
+            "trace": str(trace_path.resolve()),
+            "trace_sha256": hashlib.sha256(trace_path.read_bytes()).hexdigest(),
+        })
+    payload["cases"] = cases
     payload["seed_manifest"] = {
         "version": "native-reset-dr-v3",
         "seed_set_id": "cohort-test",
@@ -97,9 +109,14 @@ def _aggregate(tmp_path: Path, *, yaw_a: float = 0.1, yaw_b: float = 0.8) -> dic
     checkpoint = tmp_path / "model.pt"
     checkpoint.write_bytes(b"cohort-checkpoint")
     members = [
-        {"seed": 10, "path": "member-10.json", "payload": _member(tmp_path, 10, yaw_error=yaw_a)},
-        {"seed": 11, "path": "member-11.json", "payload": _member(tmp_path, 11, yaw_error=yaw_b)},
+        {"seed": 10, "path": str((tmp_path / "member-10.json").resolve()), "payload": _member(tmp_path, 10, yaw_error=yaw_a)},
+        {"seed": 11, "path": str((tmp_path / "member-11.json").resolve()), "payload": _member(tmp_path, 11, yaw_error=yaw_b)},
     ]
+    for member in members:
+        member["payload"]["report_sha256"] = canonical_sha256(member["payload"])
+        Path(member["path"]).write_text(
+            json.dumps(member["payload"]), encoding="utf-8"
+        )
     return cohort.aggregate_cohort_reports(
         members,
         checkpoint=checkpoint,
@@ -145,6 +162,27 @@ def test_cohort_report_cannot_forge_conservative_aggregate(tmp_path):
         cohort.CapabilityReport.from_dict(forged)
 
 
+def test_cohort_report_cannot_forge_selected_member(tmp_path):
+    report = _aggregate(tmp_path)
+    forged = copy.deepcopy(report)
+    forged["metadata"]["cohort"]["selected_seed_by_bucket"]["yaw"] = 10
+    forged["cohort_manifest"]["selected_seed_by_bucket"]["yaw"] = 10
+    forged.pop("report_sha256", None)
+    forged["report_sha256"] = canonical_sha256(forged)
+    from mjlab_microduck.tasks.adaptive_runner import _validate_cohort_envelope
+
+    with pytest.raises(ValueError, match="worst member"):
+        _validate_cohort_envelope(
+            forged,
+            expected_size=2,
+            evaluation_seed=10,
+            task_id="fake-task",
+            axis_mode="composed",
+            seed_set_id="cohort-test",
+            checkpoint=tmp_path / "model.pt",
+        )
+
+
 def test_run_cohort_scrubs_training_transition_overrides(monkeypatch, tmp_path):
     for name in cohort._TRANSITION_ENV_NAMES:
         monkeypatch.setenv(name, "training-only")
@@ -153,7 +191,12 @@ def test_run_cohort_scrubs_training_transition_overrides(monkeypatch, tmp_path):
     def fake_run_native(checkpoint, output, **kwargs):
         assert all(name not in os.environ for name in cohort._TRANSITION_ENV_NAMES)
         calls.append(kwargs["seed"])
-        return _member(tmp_path, kwargs["seed"])
+        payload = _member(tmp_path, kwargs["seed"])
+        output.mkdir(parents=True, exist_ok=True)
+        (output / "native_capability.json").write_text(
+            json.dumps(payload), encoding="utf-8"
+        )
+        return payload
 
     monkeypatch.setattr(cohort, "run_native", fake_run_native)
     output = tmp_path / "cohort.json"

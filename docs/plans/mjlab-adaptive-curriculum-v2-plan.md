@@ -80,12 +80,29 @@ independent single-seed check. A native 3-seed proof was validated at
 `/tmp/microduck-adaptive-cohort-proof/capability-rebuilt.json` with lower-tail
 `.72200` and `passed=false`, correctly rejecting the current policy.
 
-Implementation proof: 203 adaptive/config tests, transition-enabled smoke64/5,
+The cohort repair is now closed at both boundaries: aggregation checks every
+member's provenance, evaluator config and trace hash, while the runner checks
+the persisted member manifest and recomputes the worst-member selection before
+feeding the gate. A legacy single-seed checkpoint can enter a larger cohort
+only through an explicit migration flag; the migration retains PPO state and
+step budget, clears incomparable mastery/rollback evidence, and records the
+old evidence in the audit stream. Gate/held-out overlap checks include the
+expanded cohort seed coverage.
+
+Implementation proof: 207 adaptive/config tests, transition-enabled smoke64/5,
 fresh cohort-size smoke64/5, and native 64-env command execution. All 26 sampled transitions completed under
 the real environment clock within 52–96 steps, reaching exact targets with
 matching actor command inputs. No timers were forced to completion. The source
 manifest, runtime proof and post-training report paths live in the experiment
 directory. Native ONNX parity for the candidate is part of the paired probe.
+
+A fresh real three-member native cohort was run at
+`/tmp/microduck-adaptive-native-cohort-smoke/capability.json` and passed the
+existing trace validator; its lower-tail score was `0.0` from the intentionally
+short 2-update smoke policy, so it validates the evaluator path rather than
+policy usability. A separate 64-env runner smoke used a synthetic valid
+evaluator to exercise two gate windows, checkpoint save, and resume; it also is
+control-flow evidence only.
 
 The 20% final-CoM rehearsal setting remains rejected for default use; its
 implementation is opt-in and checkpointed (`da51889`). Routine resumes inherit

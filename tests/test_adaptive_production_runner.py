@@ -959,3 +959,44 @@ def test_transition_launch_override_is_applied_after_full_checkpoint_resume(
         "completed_iterations": 0,
     }
     assert source_term.cfg.transition_probability == pytest.approx(0.10)
+
+
+def test_legacy_single_seed_checkpoint_requires_explicit_cohort_migration(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.completed_iterations = 17
+    source.current_learning_iteration = 16
+    source.record_capability_metrics(
+        {name: 0.9 for name in BUCKETS}, step=17 * 24, checkpoint="old.pt", seed=7
+    )
+    checkpoint = tmp_path / "legacy-single-seed.pt"
+    source.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_curriculum"].pop("evaluation_cohort_size")
+    torch.save(payload, checkpoint)
+
+    destination = _runner()
+    destination.evaluation_cohort_size = 3
+    destination.allow_legacy_cohort_migration = False
+    with pytest.raises(ValueError, match="explicit cohort migration"):
+        destination.load(str(checkpoint))
+
+    destination = _runner()
+    destination.evaluation_cohort_size = 3
+    destination.allow_legacy_cohort_migration = True
+    destination.load(str(checkpoint))
+    assert destination.completed_iterations == 17
+    assert torch.equal(destination.alg.state["weight"], source.alg.state["weight"])
+    assert destination.capability_gate.best_metrics == {}
+    assert all(
+        state.pass_count == 0
+        and state.fail_count == 0
+        and state.ema_score is None
+        and state.last_transition_step == -1
+        for state in destination.capability_gate.states.values()
+    )
+    assert destination.last_known_good_checkpoint is None
+    assert destination.evaluation_events[-1]["kind"] == "cohort_rebaseline"
+    assert destination.evaluation_events[-1]["legacy_known_good"]["checkpoint"] is None
