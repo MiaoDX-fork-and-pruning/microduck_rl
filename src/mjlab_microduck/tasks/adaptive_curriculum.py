@@ -27,7 +27,8 @@ class CommandExposure:
 
     ``zero`` is deliberately an anchor rather than a frontier: the recovery
     and idle behavior must remain present while the controller acquires the
-    directional buckets in ``frontier_order``.
+    directional buckets in ``frontier_order``. Configured consolidation dwell
+    yields early when another direction has a substantially lower capability.
     """
 
     version = 2
@@ -40,6 +41,9 @@ class CommandExposure:
     # measurable progress, but it is not mastered: handing focus away there
     # strands near-pass capabilities below the product acceptance boundary.
     focus_mastery = 0.80
+    # Interrupt consolidation only for a large capability gap. This controls
+    # sampling urgency, independently of the unchanged mastery/pass threshold.
+    focus_preemption_gap = 0.25
     frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
     def __init__(
@@ -98,6 +102,12 @@ class CommandExposure:
         # rotation, giving the newly selected bucket only one window.
         if self.stall_windows and current in self.frontier_order and values[current] < self.focus_mastery:
             focus = current
+            weakest = min(self.frontier_order, key=lambda name: values[name])
+            # Partial skills can collapse before they ever qualify for the
+            # gate's mastered-bucket retention repair. Do not keep decreasing
+            # their exposure while waiting for an unrelated focus to stall.
+            if values[current] - values[weakest] > self.focus_preemption_gap:
+                focus = weakest
         else:
             focus = self.frontier_order[-1]
             for name in self.frontier_order:

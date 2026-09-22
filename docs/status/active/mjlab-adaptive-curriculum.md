@@ -6,25 +6,33 @@ Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
 The user authorized sustained necessary changes, training and checks through
 `intuitive-flow`; completion remains a reproducible procedure producing usable
 walking policies. Latest continuation retains that objective. Previous goal
-turn classification: progress (stage-gate repair, real smoke and bounded run).
+turn classification: progress (completed campaign, corrected CPU measurement,
+and a reproduced teacher-allocation failure). Latest user asked for status;
+the sustained execution objective remains active.
 
 ## Current evidence
 
-The 6,000-update seed-17 checkpoint is at
-`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` (4,096 training environments).
-It is not accepted. Scores are normalized capability scores, not success rates.
+The 6,000→6,500 seed-17 campaign has finished (`execution-status.json` is
+`evaluated`); no training process remains. It is not accepted. Validated compact
+evidence and exact checkpoint/report paths:
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/experiment-summary.json`.
+Scores are normalized capability scores, not success rates; the pass boundary
+remains .80 in every bucket.
 
-| Evaluation of that same checkpoint | Lower-tail score | Result |
-| --- | ---: | --- |
-| Three-member native gate, final CoM | .267 | fail |
-| Same native cohort, checkpointed ±3 mm CoM | .701514 | fail |
-| Independent native held-out, final CoM | .653 | fail |
-| Corrected CPU/XML rehearsal | .635991 | fail |
+| Bucket | Native stage before | Native stage after | Native final held-out | Corrected CPU |
+| --- | ---: | ---: | ---: | ---: |
+| zero | .953 | .977 | .953 | .976 |
+| forward | .702 | .737 | .880 | .918 |
+| lateral | .773 | .784 | .814 | .867 |
+| yaw | .733 | .248 | .347 | .000 |
+| turn-left | .818 | .836 | .711 | .862 |
+| turn-right | .792 | .815 | .807 | .816 |
 
-The native stage probe keeps the final reference step and gives the same result
-as the earlier initial-distribution probe. Its scores are zero `.953`, forward
-`.702`, lateral `.773`, yaw `.733`, left `.818`, right `.792`. Artifact:
-`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/before-training/capability.json`.
+Both CoM axes remain at ±3 mm. The retained known-good set contains zero and
+the two turns; the CPU rehearsal passes 5/6 but pure yaw fails. On native seed
+20260816, yaw changed from turning to near-idle without a fall. Successful
+turning earned more reward than idling; another reward change is not justified
+by that observation alone.
 
 **The former CPU score of zero is superseded.** `931e3c9` fixes a measurement
 bug: `mjOBJ_BODY` uses rotated principal-inertia axes at the CoM; commands and
@@ -38,28 +46,31 @@ actuator A/B tracking scores also used the wrong frame and must not drive tuning
 
 ## Current experiment
 
-Blocker fingerprint: `native_stage0_acquisition_retention`.
+Blocker fingerprint: `teacher_ignores_severe_unmastered_deficit`.
 The feedback-distribution mismatch is repaired in `beea4f8`: acquisition gates
 use checkpointed CoM stages, while independent product checks retain final CoM
 and the original .80 threshold. Distribution changes explicitly rebaseline
 mastery, EMA and rollback evidence. Final policy acceptance is separate.
 
-A bounded 6,000→6,500 campaign runs under PID `2665136` at
-`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`. Its contract records
-commands, checkpoint hash, seeds, 500-update budget and stop condition. Source
-is read-only `/tmp/microduck-adaptive-stage-source-beea4f8/`; 679 tracked file
-hashes were verified against the adjacent `.manifest.json`.
+The teacher still focuses on lateral (.784), although yaw scores .248. Measured
+last-window sample fractions are lateral .250 versus yaw .081. Replaying this
+score vector from the saved teacher increases lateral probability to .265 and
+reduces yaw to .087: the ordinary four-window dwell ignores a severe deficit in
+a bucket that has not yet reached mastery and cannot trigger retention repair.
 
-The 6,250 gate is valid but fails (minimum zero): zero `.956`, forward `.730`,
-lateral `.796`, yaw `.000`, left `.747`, right `.726`. On native seed 20260816,
-yaw collapsed from a working turn to near-idle without a fall; the other two
-members still turned. This is measured acquisition/retention instability.
-The 6,500 window and final held-out results remain pending. Do not repeat the
-same segment without a decision-changing hypothesis.
+Next bounded test: interrupt configured frontier dwell when another directional
+bucket trails the current focus by more than .25 normalized score. Keep the
+.80 mastery boundary, .25 sampling update rate and all anchors. After regression
+and save/resume tests plus smoke64/5, replay 6,000→6,500 from the same starting
+checkpoint, settings and seeds as the completed control. Compare the first gate
+before feedback diverges, actual subsequent exposure and retained six-bucket
+scores. Stop after 500 updates; do not repeat an unchanged unsuccessful budget.
+The canonical plan owns the full experiment contract.
 
-The frozen campaign uses the old CPU frame. After completion, rerun its exported
-ONNX with the corrected evaluator and attach that result separately. The seeded
-CPU proof used an existing uncommitted reset-seed patch in
+The frozen control's old-frame CPU report is superseded by
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/cpu-transfer-link-frame/capability.json`.
+Its checkpoint and source hashes were verified. The seeded CPU proof used an
+existing uncommitted reset-seed patch in
 `run_specialist_action_battery.py`; only the owned frame changes were committed.
 A tracked-only snapshot omits this seed patch. Before portable product runs,
 explicitly verify consumed reset seeds and record the actual source overlay.
@@ -74,11 +85,17 @@ Do not silently describe such a run as the plain committed source tree.
   requires the absent untracked `artifacts/specialist_artifact_manifest.json`
   fixture and was explicitly deselected after reproducing that failure.
   Focused Ruff (`E4,E7,E9,F`) and diff checks pass. Full Ruff is not claimed clean.
+- Teacher repair: the two severe-deficit regressions fail on old logic; all
+  269 relevant tests now pass (the same missing-fixture test is deselected).
+  Real command resampling increases yaw while keeping anchors, and resumed
+  feedback matches uninterrupted decisions. Focused Ruff/diff checks pass;
+  GPU smoke and behavioral comparison are next.
 - Sensor reset is checkpointed and restored; actor 61D/action 14D, normalized
   ONNX, command isolation and native cohort provenance are verified.
-- Next: inspect the live process and `execution-status.json`, then both gate
-  windows and the retained final actor. Correct the final CPU report. Compare
-  with the before-training report before choosing another training intervention.
+- Next proof: regression of the actual .784 lateral / .248 yaw vector, bounded
+  real command resampling, identical decisions after resume, then smoke64/5
+  and the matched 500-update teacher experiment. A sampling repair alone does
+  not prove policy recovery.
 - A potential retention gap to assess: migration discards old evidence but the
   external before-training stage report is not yet an in-run rollback baseline.
   Do not infer mastery from old final-distribution reports.

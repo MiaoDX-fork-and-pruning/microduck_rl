@@ -265,6 +265,85 @@ def test_configured_frontier_dwell_moves_to_lowest_unmastered_bucket():
     assert exposure.focus_bucket == "yaw"
 
 
+def test_large_capability_gap_preempts_dwell_and_survives_resume_with_real_sampling():
+    # Retained seed-17 state after 6500 updates: yaw collapsed below mastery
+    # while lateral kept the focus slice. No mastered-yaw rollback can fire.
+    exposure = CommandExposure(
+        initial_focus="lateral",
+        frontier_order=("lateral", "forward", "yaw", "turn-left", "turn-right"),
+        stall_windows=4,
+    )
+    payload = exposure.state_dict()
+    payload.update(
+        probabilities={
+            "zero": 0.20, "forward": 0.08, "lateral": 0.2593683976351299,
+            "yaw": 0.08900390442022896, "turn-left": 0.09162769794464111,
+            "turn-right": 0.08,
+        },
+        windows=34, focus_best_score=0.7959980678393459, focus_stall_count=1,
+        retention_repairs=5, last_repair_buckets=["yaw", "turn-left"],
+    )
+    exposure.load_state_dict(payload)
+    scores = {
+        "zero": 0.9773, "forward": 0.7374, "lateral": 0.7844,
+        "yaw": 0.2485, "turn-left": 0.8356, "turn-right": 0.8147,
+    }
+    initial = _command()
+    initial.cfg.bucket_probabilities = tuple(exposure.probabilities[b] for b in BUCKETS)
+    torch.manual_seed(17)
+    initial._resample_command(torch.arange(initial.num_envs))
+    before = exposure.probabilities.copy()
+    exposure.update(scores)
+    assert exposure.focus_bucket == "yaw"
+    assert exposure.focus_stall_count == 0
+    assert exposure.probabilities["yaw"] > before["yaw"]
+    assert exposure.probabilities["lateral"] < before["lateral"]
+    assert max(abs(exposure.probabilities[b] - before[b]) for b in BUCKETS) <= 0.05
+    assert exposure.probabilities["zero"] == pytest.approx(0.20)
+    assert min(exposure.probabilities.values()) >= 0.08
+    assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
+    # This is acquisition feedback, not invented mastery or a retention repair.
+    assert exposure.retention_repairs == 5
+
+    restored = CommandExposure(frontier_order=exposure.frontier_order, stall_windows=4)
+    restored.load_state_dict(exposure.state_dict())
+    assert restored.state_dict() == exposure.state_dict()
+    sampled = _command()
+    restored.apply(SimpleNamespace(command_manager=SimpleNamespace(get_term=lambda _: sampled)))
+    torch.manual_seed(17)
+    sampled._resample_command(torch.arange(sampled.num_envs))
+    initial_yaw = (initial.bucket_ids == BUCKETS.index("yaw")).float().mean()
+    updated_yaw = (sampled.bucket_ids == BUCKETS.index("yaw")).float().mean()
+    assert updated_yaw > initial_yaw + 0.03
+    assert (sampled.bucket_ids == len(BUCKETS)).float().mean() == pytest.approx(0.20, abs=0.015)
+    # Partial recovery must not immediately hand focus back to the first
+    # unmastered bucket; continuing and restarting follow the same decisions.
+    scores["yaw"] = 0.60
+    exposure.update(scores)
+    restored.update(scores)
+    assert restored.state_dict() == exposure.state_dict()
+    assert restored.focus_bucket == "yaw"
+
+
+@pytest.mark.parametrize("weak_score", [0.54, 0.60, 0.78])
+def test_small_capability_gap_does_not_interrupt_frontier_consolidation(weak_score):
+    exposure = CommandExposure(initial_focus="lateral", stall_windows=4)
+    scores = {name: 0.9 for name in BUCKETS}
+    scores.update(lateral=0.7844, yaw=weak_score)
+    exposure.update(scores)
+    exposure.update(scores)
+    assert exposure.focus_bucket == "lateral"
+    assert exposure.focus_stall_count == 1
+
+
+def test_large_gap_selects_weakest_bucket_with_deterministic_ties():
+    exposure = CommandExposure(initial_focus="lateral", stall_windows=4)
+    scores = {name: 0.9 for name in BUCKETS}
+    scores.update(lateral=0.79, yaw=0.20, **{"turn-left": 0.10, "turn-right": 0.10})
+    exposure.update(scores)
+    assert exposure.focus_bucket == "turn-left"
+
+
 def test_checkpoint_requires_and_restores_focus_bucket():
     exposure = CommandExposure()
     exposure.update({name: (0.9 if name != "yaw" else 0.1) for name in BUCKETS})

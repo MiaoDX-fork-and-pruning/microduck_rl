@@ -1,10 +1,10 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
-unproven. The 6,000-update sensor-reset policy still fails native and CPU product
-checks. Stage-aware acquisition gates are implemented and verified by real
-smoke; a bounded 6,000→6,500 campaign is running. Formal seeds 17/23/47 remain
-gated.
+unproven. The completed 6,000→6,500 stage-gate campaign passes 5/6 corrected CPU
+buckets but fails pure yaw and native product checks. The next bounded repair
+targets teacher dwell that ignores a severe deficit below mastery. Formal
+seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
 
@@ -13,6 +13,60 @@ Related:
 - [`status/active/mjlab-adaptive-curriculum.md`](../status/active/mjlab-adaptive-curriculum.md)
 
 ## Active execution contract
+
+### Respond to severe acquisition deficits (2026-09-23)
+
+Context budget: medium, to inspect the focused teacher update and regression
+tests. Current blocker: `teacher_ignores_severe_unmastered_deficit`.
+The completed control is summarized at
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/experiment-summary.json`.
+Its native stage yaw score fell .733→.248, while lateral stayed .773→.784;
+actual last-window sample fractions were .081 yaw versus .250 lateral. Final
+held-out yaw is .347 and corrected CPU yaw is zero; no policy is accepted.
+
+Root cause: configured anti-stall dwell keeps the current unmastered focus
+until mastery or four stalled windows, regardless of other bucket scores.
+Retention repair only protects previously mastered buckets. Replaying the
+saved state and scores makes lateral exposure increase and yaw decrease.
+
+Hypothesis: when another directional bucket trails the current focus by more
+than .25 normalized capability, selecting that weakest bucket before ordinary
+dwell expires gives the collapsed skill timely practice and improves retained
+capability. This is a sampling urgency margin, not a mastery/pass threshold.
+The existing quarter-step sampling update, zero/nominal anchors, per-direction
+floors, gate thresholds, and rollback semantics remain intact. Ordinary small
+gaps retain consolidation dwell; ties follow the saved frontier order.
+
+Proof command: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest
+pytest -q tests/test_adaptive_command_exposure.py`, then the relevant adaptive
+suite and a real 64-env/5-update campaign including the three-member stage gate,
+held-out native evaluation, normalized export and corrected CPU battery.
+The actual failed score vector must fail on the old logic and pass after the
+fix, including real sampling and equivalent saved/resumed decisions.
+
+Product experiment: replay 6,000→6,500 from the control's exact checkpoint,
+4096 environments, seed 17, 250-update cadence, three-member stage gate,
+distribution migration, sensor-reset fraction 1 and inherited transition
+settings. Record immutable source hashes and any consumed CPU seed overlay.
+Compare the first gate before the allocation change, subsequent real sample
+fractions, retained native stage and independent final native/CPU scores.
+Do not count this paired replay as a new independent training seed.
+
+Expected decision delta: improved retained yaw without losing the control's
+known-good zero/turn buckets supports the teacher repair; increased samples
+without recovery rejects allocation alone as a sufficient explanation.
+Success requires that behavioral improvement; implementation tests alone do
+not satisfy it. Failure stops this budget after 500 updates and returns to
+measured rollout diagnosis. No-touch scope: canonical Velocity, reward design,
+61D/14D ABI, BAM, filtering, metric thresholds, IsaacLab and unrelated files.
+Before-training rollback-baseline registration remains a separately assessed
+gap; it is not mixed into this teacher experiment.
+
+Implementation proof: the severe-gap and deterministic tie cases fail on the
+old controller. The relevant suite now reports 269 passed, 1 deselected (the
+existing absent specialist-manifest fixture), including actual seeded command
+resampling and equivalent save/resume decisions. Focused Ruff and diff checks
+pass. GPU smoke and the matched behavioral experiment remain required.
 
 ### Stage-aware gate repair (2026-09-23)
 
@@ -43,11 +97,12 @@ Validation: 250 adaptive/config/capability tests pass, as do focused Ruff
 (`E4,E7,E9,F`) and diff checks. The real 64-env/5-update smoke at
 `/tmp/microduck-adaptive-stage-gate-smoke-beea4f8/runtime-proof.json` validates
 three-member stage gating, final-distribution held-out separation, sensor reset,
-and ONNX/CPU execution. The bounded 6,000→6,500 campaign is running at
+and ONNX/CPU execution. The bounded 6,000→6,500 campaign completed at
 `/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`, preceded by a fixed-checkpoint
 three-member stage evaluation. Both use the read-only `beea4f8` source snapshot
-with 679 recorded/verified file hashes. Retained learning is still unproven;
-implementation and smoke proof do not establish policy acceptance.
+with 679 recorded/verified file hashes. Native stage minimum declined to .248
+and final held-out minimum is .347 (yaw); both stages remain ±3 mm.
+Implementation and smoke proof do not establish policy acceptance.
 
 ### CPU velocity-frame correction (2026-09-23)
 
@@ -70,9 +125,11 @@ implementation hashes; the checkpoint wrapper rejects old/undeclared frames.
 Validation: 264 relevant tests passed. One existing specialist-manifest test
 cannot run because its untracked `artifacts/specialist_artifact_manifest.json`
 fixture is absent; it was explicitly deselected after confirming that failure.
-Focused Ruff and diff checks pass. The running `beea4f8` campaign remains frozen
-and will emit an old-frame CPU report, which must be replaced by a corrected
-post-run replay. Native gates and training are unaffected by this correction.
+Focused Ruff and diff checks pass. The completed frozen `beea4f8` campaign's
+old-frame CPU report is superseded by `cpu-transfer-link-frame/capability.json`
+under that campaign root, with verified checkpoint/source hashes. Corrected
+scores at 6,500 are zero .976, forward .918, lateral .867, yaw .000, left .862,
+right .816. Native gates and training are unaffected by the frame correction.
 
 The seeded CPU replay used the existing uncommitted reset-seed patch in
 `run_specialist_action_battery.py`; its exact source hashes and copied source
