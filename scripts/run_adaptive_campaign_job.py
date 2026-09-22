@@ -27,9 +27,13 @@ def read_training_result(path: Path, *, task_id: str, completed_iterations: int,
                          start_iterations: int, num_envs: int) -> tuple[Path, dict]:
     """Read an explicit completion manifest; never guess the last file label."""
     result = json.loads(path.read_text())
-    if (result.get("version") != 1 or result.get("status") != "completed"
+    actual = result.get("completed_iterations")
+    early_stop = type(actual) is int and start_iterations <= actual < completed_iterations
+    if (result.get("version") != 1
+            or result.get("status") != ("stopped" if early_stop else "completed")
             or result.get("task_id") != task_id
-            or result.get("completed_iterations") != completed_iterations
+            or (actual != completed_iterations and not early_stop)
+            or result.get("requested_completed_iterations", completed_iterations) != completed_iterations
             or result.get("start_completed_iterations") != start_iterations
             or result.get("num_envs") != num_envs):
         raise ValueError("training result task or budget mismatch")
@@ -40,10 +44,18 @@ def read_training_result(path: Path, *, task_id: str, completed_iterations: int,
 
     saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
     state = (saved.get("infos") or {}).get("adaptive_curriculum")
-    if (saved["iter"] != completed_iterations - 1 or not state
+    if (saved["iter"] != actual - 1 or not state
             or state != result["adaptive_state"]
-            or state["completed_iterations"] != completed_iterations):
+            or state["completed_iterations"] != actual):
         raise ValueError("training result does not match checkpoint state")
+    if early_stop:
+        from mjlab_microduck.tasks.adaptive_curriculum import EntropyConsolidation
+
+        controller = EntropyConsolidation()
+        controller.load_state_dict(state.get("entropy_consolidation") or {})
+        if (result.get("stop_reason") != "entropy_consolidation_terminal"
+                or not controller.terminal or controller.deadline != actual):
+            raise ValueError("training stopped without a completed consolidation window")
     return checkpoint, state
 
 
@@ -56,6 +68,16 @@ def main() -> int:
     parser.add_argument("--resume", type=Path, help="Exact checkpoint path; supported by adaptive/static experiment runners")
     parser.add_argument("--num-envs", type=int, default=4096)
     parser.add_argument("--gate-interval", type=int, default=250)
+    parser.add_argument("--entropy-consolidation", action="store_true",
+                        help="Try one low-entropy window when native capabilities qualify; stop and evaluate afterward")
+    parser.add_argument(
+        "--final-range-finetune", action="store_true",
+        help="Resume an adaptive checkpoint, freeze owned CoM axes at final ranges, and run a fixed post-acquisition window",
+    )
+    parser.add_argument(
+        "--final-range-axes", default=None,
+        help="Comma-separated owned axes for final-range isolation (default: all owned axes)",
+    )
     parser.add_argument(
         "--gate-cohort-size", type=int, default=3,
         help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
@@ -81,14 +103,24 @@ def main() -> int:
         parser.error("iterations, num-envs, gate-interval and gate-cohort-size must be positive")
     if args.resume and args.branch == "fixed":
         parser.error("the canonical fixed runner has no audited resume budget; use an adaptive/static branch")
+    if args.final_range_finetune and not args.resume:
+        parser.error("final-range fine-tuning requires --resume with an exact checkpoint path")
+    if args.final_range_finetune and args.branch == "fixed":
+        parser.error("final-range fine-tuning requires an adaptive branch")
+    if args.final_range_finetune and args.entropy_consolidation:
+        parser.error("final-range fine-tuning cannot enable entropy consolidation")
     task_id, axis_mode = TASKS[args.branch]
+    if args.final_range_finetune and axis_mode == "all_static":
+        parser.error("final-range fine-tuning requires an adaptive CoM axis")
     saved_gate_distribution = "final" if axis_mode == "all_static" else "stage"
     transition_override_requested = args.transition_probability is not None
     start_iterations = 0
     saved_final_com_fraction = 0.0
     saved_sensor_reset_fraction = 0.0
+    saved_action_rate_relief_scope = "all"
     saved_transition_probability = 0.0
     saved_transition_mode = "forward"
+    saved_final_range_axes = None
     transition_mode_override_requested = args.transition_mode is not None
     if args.resume:
         import torch
@@ -98,11 +130,18 @@ def main() -> int:
         state = (resume_state.get("infos") or {}).get("adaptive_curriculum")
         if not state or state.get("task_id") != task_id:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
+        if state.get("final_range_finetune", False) and not args.final_range_finetune:
+            parser.error("final-range fine-tuning checkpoint requires --final-range-finetune")
+        saved_final_range_axes = tuple(state.get("final_range_axes", ())) or None
         start_iterations = int(state["completed_iterations"])
+        args.entropy_consolidation = args.entropy_consolidation or state.get("entropy_consolidation") is not None
         saved_gate_distribution = state.get("evaluation_distribution", "final")
         saved_fraction = state.get("final_com_fraction", 0.0)
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
         saved_sensor_fraction = state.get("sensor_reset_fraction", 0.0)
+        saved_relief = state.get("action_rate_relief")
+        if isinstance(saved_relief, dict):
+            saved_action_rate_relief_scope = saved_relief.get("scope", "all")
         saved_sensor_reset_fraction = 0.0 if saved_sensor_fraction is None else float(saved_sensor_fraction)
         if not 0.0 <= saved_sensor_reset_fraction <= 1.0:
             parser.error("checkpoint sensor reset fraction must be in [0, 1]")
@@ -115,8 +154,38 @@ def main() -> int:
             parser.error("resume must retain the checkpoint's gate seed")
         if args.iterations <= start_iterations:
             parser.error("iterations must exceed the checkpoint's completed update count")
+    if args.final_range_finetune:
+        # This is a separate fixed-range window, never an extension of the
+        # source checkpoint's automatic consolidation attempt.
+        args.entropy_consolidation = False
     if args.gate_distribution is None:
         args.gate_distribution = saved_gate_distribution
+    if args.final_range_finetune:
+        if args.final_com_fraction not in (None, 0.0):
+            parser.error("final-range fine-tuning cannot retain a final-CoM rehearsal fraction")
+        args.final_com_fraction = 0.0
+        args.gate_distribution = "final"
+        args.rebaseline_gate = True
+        enabled_final_axes = {
+            "com": ("com_range",),
+            "head_com": ("head_com_range",),
+            "composed": ("com_range", "head_com_range"),
+        }.get(axis_mode, ())
+        if args.final_range_axes is None:
+            args.final_range_axes = saved_final_range_axes or enabled_final_axes
+        else:
+            args.final_range_axes = tuple(
+                name.strip() for name in args.final_range_axes.split(",") if name.strip()
+            )
+        if not args.final_range_axes or any(
+            name not in enabled_final_axes for name in args.final_range_axes
+        ) or len(set(args.final_range_axes)) != len(args.final_range_axes):
+            parser.error("final-range axes must be a nonempty owned subset without duplicates")
+        args.final_range_axes = tuple(
+            name for name in enabled_final_axes if name in args.final_range_axes
+        )
+    elif args.final_range_axes is not None:
+        parser.error("--final-range-axes requires --final-range-finetune")
     if args.gate_distribution not in ("final", "stage"):
         parser.error("checkpoint evaluation distribution must be final or stage")
     if args.resume and args.gate_distribution != saved_gate_distribution and not args.rebaseline_gate:
@@ -141,6 +210,8 @@ def main() -> int:
         parser.error("transition acquisition requires a command-exposure branch")
     if args.final_com_fraction and axis_mode == "all_static":
         parser.error("final CoM rehearsal requires an adaptive CoM axis")
+    if args.entropy_consolidation and axis_mode == "all_static":
+        parser.error("entropy consolidation requires the native adaptive gate")
     source_sha = os.environ["MICRODUCK_SOURCE_SHA"]
     source = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
@@ -157,6 +228,9 @@ def main() -> int:
     environment.pop("MICRODUCK_ADAPTIVE_RESULT_FILE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
+    environment.setdefault("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", saved_action_rate_relief_scope)
+    if environment["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"] not in ("all", "pure_yaw"):
+        parser.error("action-rate relief scope must be all or pure_yaw")
     if args.resume:
         # The checkpoint owns this training-distribution setting. Recreate it
         # before the environment is constructed, even when the shell that
@@ -167,7 +241,9 @@ def main() -> int:
         )
     environment.update({
         "PYTHONUNBUFFERED": "1",
-        "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
+        "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(
+            args.gate_interval if adaptive and not args.final_range_finetune else 0
+        ),
         "MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION": str(args.final_com_fraction),
         "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY": str(args.transition_probability),
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
@@ -175,6 +251,11 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE": str(args.gate_cohort_size),
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION": args.gate_distribution,
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION": "1" if args.rebaseline_gate else "0",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE": "1" if args.final_range_finetune else "0",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE": axis_mode if args.final_range_finetune else "",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES": (
+            ",".join(args.final_range_axes) if args.final_range_finetune else ""
+        ),
         "MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION": (
             "1" if args.resume and args.gate_cohort_size > 1 else "0"
         ),
@@ -204,6 +285,7 @@ def main() -> int:
         "task_id": task_id,
         "axis_mode": axis_mode,
         "source_sha": source_sha,
+        "action_rate_relief_scope": environment["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"],
         "sensor_reset_fraction": environment.get(
             "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
             str(saved_sensor_reset_fraction),
@@ -216,12 +298,14 @@ def main() -> int:
         env["MICRODUCK_ADAPTIVE_RESULT_FILE"] = str(output / f"{phase}-result.json")
         if phase == "smoke":
             env["MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL"] = "0"
-        elif args.resume:
+        if args.resume and (phase == "training" or args.final_range_finetune):
             env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] = str(args.resume)
         command = [train, task_id, "--env.scene.num-envs", str(envs),
                    "--agent.max-iterations", str(iterations), "--agent.seed", str(args.seed),
                    "--agent.logger", "tensorboard", "--agent.experiment-name", f"matched_{args.branch}",
                    "--agent.run-name", f"matched-{args.branch}-s{args.seed}"]
+        if args.entropy_consolidation:
+            command.extend(["--env.adaptive-entropy-consolidation", "True"])
         print(f"Starting {phase}: {command}", flush=True)
         with (output / f"{phase}.log").open("w") as log:
             subprocess.run(command, env=env, cwd=(training if phase == "training" else output / "smoke"), check=True, stdout=log, stderr=subprocess.STDOUT)
@@ -242,6 +326,10 @@ def main() -> int:
             raise ValueError("training result lost the configured final CoM rehearsal fraction")
         if adaptive_state.get("evaluation_distribution", "final") != args.gate_distribution:
             raise ValueError("training result lost the configured gate distribution")
+        if bool(adaptive_state.get("final_range_finetune", False)) != args.final_range_finetune:
+            raise ValueError("training result lost the configured training mode")
+        if args.final_range_finetune and tuple(adaptive_state.get("final_range_axes", ())) != tuple(args.final_range_axes):
+            raise ValueError("training result lost the configured final-range axes")
         transition_state = adaptive_state.get("transition_exposure")
         if args.transition_probability > 0.0:
             if not isinstance(transition_state, dict):
@@ -249,9 +337,10 @@ def main() -> int:
             final_transition_probability = float(transition_state.get("probability", -1.0))
             if not 0.0 <= final_transition_probability <= 0.40:
                 raise ValueError("training result contains invalid transition probability")
-        if adaptive and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
+        if adaptive and not args.final_range_finetune and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
                                 for event in adaptive_state["evaluation_events"]):
             raise ValueError("adaptive run produced no valid evaluation windows")
+    completed_iterations = args.iterations if adaptive_state is None else adaptive_state["completed_iterations"]
     # Training may use launch-only transition overrides, but native and CPU
     # evaluators explicitly disable transition acquisition and must not inherit
     # those training-only settings. Passing the override through makes the
@@ -268,8 +357,12 @@ def main() -> int:
         # native and CPU reports must use the product DR distribution.
         "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
         "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+        "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE",
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"
@@ -294,8 +387,9 @@ def main() -> int:
         **config,
         "status": "evaluated", "checkpoint": str(checkpoint),
         "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
-        "segment_training_transitions": (args.iterations - start_iterations) * 24 * args.num_envs,
-        "total_training_transitions": args.iterations * 24 * args.num_envs,
+        "completed_iterations": completed_iterations,
+        "segment_training_transitions": (completed_iterations - start_iterations) * 24 * args.num_envs,
+        "total_training_transitions": completed_iterations * 24 * args.num_envs,
         "adaptive_state": adaptive_state,
         "heldout_report": str(report_path),
         "heldout_report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),

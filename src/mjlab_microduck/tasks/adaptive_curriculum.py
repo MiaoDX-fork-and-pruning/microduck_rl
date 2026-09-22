@@ -15,6 +15,132 @@ from enum import StrEnum
 from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
 
 
+class EntropyConsolidation:
+    """One measured consolidation attempt, followed by a campaign checkpoint.
+
+    The .60 acquisition boundary and .80 mastery boundary match the existing
+    native gate. Neither is a new acceptance threshold. A full evaluation
+    window at zero entropy is retained only if the gate preserves acquired
+    skills and the weakest bucket improves by .05 (or all buckets master).
+    Every attempt terminates, including failed evaluation, so a large requested
+    budget cannot silently extend an ineffective consolidation treatment.
+    """
+
+    version = 2
+
+    def __init__(self) -> None:
+        self.phase = "waiting"
+        self.baseline_metrics: dict[str, float] = {}
+        self.baseline_checkpoint: str | None = None
+        self.original_entropy_coef: float | None = None
+        self.start_iterations: int | None = None
+        self.window_updates: int | None = None
+        self.focus_bucket: str | None = None
+        self.result_metrics: dict[str, float] | None = None
+        self.reason: str | None = None
+
+    @staticmethod
+    def _metrics(metrics: Mapping[str, float]) -> dict[str, float]:
+        values = {name: float(metrics[name]) for name in BUCKETS}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("invalid consolidation capability scores")
+        return values
+
+    @property
+    def terminal(self) -> bool:
+        return self.phase in ("retained", "rejected")
+
+    @property
+    def deadline(self) -> int | None:
+        if self.start_iterations is None or self.window_updates is None:
+            return None
+        return self.start_iterations + self.window_updates
+
+    def ready(self, metrics: Mapping[str, float], entropy_coef: float) -> bool:
+        values = self._metrics(metrics)
+        return (
+            self.phase == "waiting" and entropy_coef > 0.0
+            and values["zero"] >= 0.80 and 0.60 <= min(values.values()) < 0.80
+        )
+
+    def begin(self, metrics: Mapping[str, float], *, entropy_coef: float,
+              checkpoint: str, completed_iterations: int, window_updates: int,
+              focus_bucket: str | None = None) -> None:
+        if not self.ready(metrics, entropy_coef):
+            raise ValueError("consolidation requires acquired but unmastered capabilities")
+        if (not math.isfinite(entropy_coef) or not checkpoint
+                or type(completed_iterations) is not int or completed_iterations < 0
+                or type(window_updates) is not int or window_updates < 1):
+            raise ValueError("invalid consolidation start contract")
+        if focus_bucket is not None and focus_bucket not in BUCKETS[1:]:
+            raise ValueError("consolidation focus must be directional")
+        self.phase = "active"
+        self.baseline_metrics = self._metrics(metrics)
+        self.baseline_checkpoint = checkpoint
+        self.original_entropy_coef = float(entropy_coef)
+        self.start_iterations = completed_iterations
+        self.window_updates = window_updates
+        self.focus_bucket = focus_bucket
+
+    def finish(self, metrics: Mapping[str, float] | None, *, gate_retained: bool,
+               completed_iterations: int) -> None:
+        if self.phase != "active" or completed_iterations < self.deadline:
+            raise ValueError("consolidation window has not completed")
+        values = None if metrics is None else self._metrics(metrics)
+        self.result_metrics = values
+        improved = values is not None and (
+            min(values.values()) >= 0.80
+            or min(values.values()) >= min(self.baseline_metrics.values()) + 0.05
+        )
+        self.phase = "retained" if gate_retained and improved else "rejected"
+        self.reason = (
+            "evaluation_failed" if values is None
+            else "preservation_failed" if not gate_retained
+            else "weakest_capability_improved" if improved
+            else "insufficient_capability_gain"
+        )
+
+    def state_dict(self) -> dict[str, object]:
+        return {"version": self.version, **vars(self), "baseline_metrics": dict(self.baseline_metrics),
+                "result_metrics": None if self.result_metrics is None else dict(self.result_metrics)}
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") == 1:
+            payload = {**payload, "version": self.version, "focus_bucket": None}
+        if payload.get("version") != self.version or set(payload) != set(self.state_dict()):
+            raise ValueError("invalid consolidation state schema")
+        phase = payload["phase"]
+        if phase not in ("waiting", "active", "retained", "rejected"):
+            raise ValueError("invalid consolidation phase")
+        restored = EntropyConsolidation()
+        if phase == "waiting":
+            if dict(payload) != restored.state_dict():
+                raise ValueError("waiting consolidation contains an old attempt")
+        else:
+            for key in ("start_iterations", "window_updates"):
+                if type(payload[key]) is not int:
+                    raise ValueError("invalid consolidation update budget")
+            coefficient = payload["original_entropy_coef"]
+            if isinstance(coefficient, bool) or not isinstance(coefficient, (int, float)):
+                raise ValueError("invalid consolidation entropy value")
+            checkpoint = payload["baseline_checkpoint"]
+            if not isinstance(checkpoint, str):
+                raise ValueError("invalid consolidation baseline path")
+            restored.begin(payload["baseline_metrics"], entropy_coef=coefficient,
+                           checkpoint=checkpoint, completed_iterations=payload["start_iterations"],
+                           window_updates=payload["window_updates"], focus_bucket=payload["focus_bucket"])
+            if phase == "active":
+                if payload["reason"] is not None or payload["result_metrics"] is not None:
+                    raise ValueError("active consolidation contains a terminal verdict")
+            else:
+                restored.finish(payload["result_metrics"],
+                                gate_retained=payload["reason"] not in ("preservation_failed", "evaluation_failed"),
+                                completed_iterations=restored.deadline)
+                if restored.phase != phase or restored.reason != payload["reason"]:
+                    raise ValueError("consolidation verdict does not match its evidence")
+        self.__dict__.update(restored.__dict__)
+
+
 class CommandExposure:
     """Keep learned commands alive while concentrating on one frontier.
 
@@ -27,7 +153,8 @@ class CommandExposure:
 
     ``zero`` is deliberately an anchor rather than a frontier: the recovery
     and idle behavior must remain present while the controller acquires the
-    directional buckets in ``frontier_order``.
+    directional buckets in ``frontier_order``. Configured consolidation dwell
+    yields early when another direction has a substantially lower capability.
     """
 
     version = 2
@@ -40,6 +167,9 @@ class CommandExposure:
     # measurable progress, but it is not mastered: handing focus away there
     # strands near-pass capabilities below the product acceptance boundary.
     focus_mastery = 0.80
+    # Interrupt consolidation only for a large capability gap. This controls
+    # sampling urgency, independently of the unchanged mastery/pass threshold.
+    focus_preemption_gap = 0.25
     frontier_order = ("forward", "lateral", "yaw", "turn-left", "turn-right")
 
     def __init__(
@@ -98,6 +228,12 @@ class CommandExposure:
         # rotation, giving the newly selected bucket only one window.
         if self.stall_windows and current in self.frontier_order and values[current] < self.focus_mastery:
             focus = current
+            weakest = min(self.frontier_order, key=lambda name: values[name])
+            # Partial skills can collapse before they ever qualify for the
+            # gate's mastered-bucket retention repair. Do not keep decreasing
+            # their exposure while waiting for an unrelated focus to stall.
+            if values[current] - values[weakest] > self.focus_preemption_gap:
+                focus = weakest
         else:
             focus = self.frontier_order[-1]
             for name in self.frontier_order:
@@ -204,6 +340,22 @@ class CommandExposure:
         self.retention_repairs += 1
         self.last_repair_buckets = ordered
         return ordered
+
+    def consolidation_focus(self, bucket: str, metrics: Mapping[str, float]) -> str:
+        """Move one bounded focus slice to a selected consolidation frontier."""
+        if bucket not in self.frontier_order:
+            raise ValueError("consolidation focus must be directional")
+        value = float(metrics[bucket])
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError("consolidation focus score must be finite and in [0, 1]")
+        target = self._target(bucket)
+        for name in BUCKETS:
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
+        self.focus_bucket = bucket
+        self.focus_best_score = value
+        self.focus_stall_count = 0
+        self.windows += 1
+        return bucket
 
     def state_dict(self) -> dict[str, object]:
         return {
@@ -363,6 +515,189 @@ class TransitionExposure:
         if not hasattr(term.cfg, "transition_probability"):
             raise ValueError("transition exposure requires AdaptiveVelocityCommandCfg")
         term.cfg.transition_probability = self.probability
+
+
+class AdaptiveActionRateRelief:
+    """Temporarily release action smoothing when yaw acquisition stalls.
+
+    The canonical Velocity curriculum reaches ``action_rate_l2=-1.0`` long
+    before the adaptive gate can prove all directional capabilities.  That
+    regularizer is useful for a settled gait, but it can tax the first large
+    corrective action needed to acquire pure yaw from rest.  This controller
+    gives the yaw frontier a bounded, checkpointed relief window and restores
+    the canonical curriculum afterward.  It is driven only by frozen gate
+    metrics; it never changes evaluator commands or acceptance thresholds.
+    The optional pure-yaw scope leaves the other commands at canonical
+    smoothing strength and only uses pure-yaw capability to open or close it.
+    """
+
+    version = 2
+    yaw_buckets = ("yaw", "turn-left", "turn-right")
+
+    def __init__(
+        self,
+        *,
+        relief_weight: float = -0.2,
+        trigger_threshold: float = 0.55,
+        release_threshold: float = 0.80,
+        active_windows: int = 4,
+        cooldown_windows: int = 1,
+        scope: str = "all",
+    ) -> None:
+        values = (relief_weight, trigger_threshold, release_threshold)
+        if any(not math.isfinite(float(value)) for value in values):
+            raise ValueError("action-rate relief parameters must be finite")
+        if relief_weight > 0.0:
+            raise ValueError("action-rate relief weight must be nonpositive")
+        if not 0.0 <= trigger_threshold < release_threshold <= 1.0:
+            raise ValueError("action-rate relief thresholds must be ordered in [0, 1]")
+        if type(active_windows) is not int or active_windows < 1:
+            raise ValueError("action-rate relief active windows must be positive")
+        if type(cooldown_windows) is not int or cooldown_windows < 0:
+            raise ValueError("action-rate relief cooldown windows must be nonnegative")
+        if scope not in ("all", "pure_yaw"):
+            raise ValueError("action-rate relief scope must be all or pure_yaw")
+        self.scope = scope
+        self.yaw_buckets = ("yaw",) if scope == "pure_yaw" else type(self).yaw_buckets
+        self.relief_weight = float(relief_weight)
+        self.trigger_threshold = float(trigger_threshold)
+        self.release_threshold = float(release_threshold)
+        self.active_windows = active_windows
+        self.cooldown_windows = cooldown_windows
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear live state before loading a checkpoint without this controller."""
+        self.active = False
+        self.remaining_windows = 0
+        self.cooldown_remaining = 0
+        self.triggers = 0
+        self.last_frontier: float | None = None
+        self.last_reason = "initial"
+
+    def _frontier(self, metrics: Mapping[str, float]) -> float:
+        values = []
+        for name in self.yaw_buckets:
+            value = float(metrics[name])
+            if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+                raise ValueError("action-rate relief metrics must be finite and in [0, 1]")
+            values.append(value)
+        frontier = min(values)
+        self.last_frontier = frontier
+        return frontier
+
+    def bootstrap(self, metrics: Mapping[str, float]) -> None:
+        """Restore a useful relief window when resuming a legacy checkpoint."""
+        self.reset()
+        frontier = self._frontier(metrics)
+        if frontier < self.trigger_threshold:
+            self.active = True
+            self.remaining_windows = self.active_windows
+            self.cooldown_remaining = 0
+            self.triggers += 1
+            self.last_reason = "legacy_checkpoint_deficit"
+
+    def update(self, metrics: Mapping[str, float], *, accepted: bool = True) -> None:
+        """Consume one capability window and update the bounded relief state."""
+        frontier = self._frontier(metrics)
+        if self.active:
+            if accepted and frontier >= self.release_threshold:
+                self.active = False
+                self.remaining_windows = 0
+                self.last_reason = "yaw_frontier_released"
+            else:
+                self.remaining_windows -= 1
+                if self.remaining_windows <= 0:
+                    self.active = False
+                    self.cooldown_remaining = self.cooldown_windows
+                    self.last_reason = "bounded_relief_expired"
+                else:
+                    self.last_reason = "yaw_frontier_relief_hold"
+            return
+        if self.cooldown_remaining:
+            self.cooldown_remaining -= 1
+            self.last_reason = "relief_cooldown"
+            return
+        if frontier < self.trigger_threshold:
+            self.active = True
+            self.remaining_windows = self.active_windows
+            self.triggers += 1
+            self.last_reason = "yaw_frontier_deficit"
+        else:
+            self.last_reason = "yaw_frontier_above_trigger"
+
+    def state_dict(self) -> dict[str, object]:
+        return {
+            "version": self.version,
+            "relief_weight": self.relief_weight,
+            "scope": self.scope,
+            "trigger_threshold": self.trigger_threshold,
+            "release_threshold": self.release_threshold,
+            "active_windows": self.active_windows,
+            "cooldown_windows": self.cooldown_windows,
+            "active": self.active,
+            "remaining_windows": self.remaining_windows,
+            "cooldown_remaining": self.cooldown_remaining,
+            "triggers": self.triggers,
+            "last_frontier": self.last_frontier,
+            "last_reason": self.last_reason,
+        }
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") not in (1, self.version):
+            raise ValueError("unsupported action-rate relief version")
+        saved_scope = "all" if payload["version"] == 1 else payload.get("scope")
+        if saved_scope != self.scope:
+            raise ValueError("action-rate relief scope mismatch")
+        for name, expected in (
+            ("relief_weight", self.relief_weight),
+            ("trigger_threshold", self.trigger_threshold),
+            ("release_threshold", self.release_threshold),
+        ):
+            if not math.isclose(float(payload.get(name)), expected, abs_tol=1e-12):
+                raise ValueError(f"action-rate relief {name} mismatch")
+        for name, expected in (
+            ("active_windows", self.active_windows),
+            ("cooldown_windows", self.cooldown_windows),
+        ):
+            if int(payload.get(name, -1)) != expected:
+                raise ValueError(f"action-rate relief {name} mismatch")
+        active = payload.get("active")
+        remaining = payload.get("remaining_windows")
+        cooldown = payload.get("cooldown_remaining")
+        triggers = payload.get("triggers")
+        if (
+            not isinstance(active, bool)
+            or type(remaining) is not int
+            or not 0 <= remaining <= self.active_windows
+            or active != (remaining > 0)
+        ):
+            raise ValueError("invalid action-rate relief active state")
+        if (
+            type(cooldown) is not int
+            or not 0 <= cooldown <= self.cooldown_windows
+            or (active and cooldown > 0)
+            or type(triggers) is not int
+            or triggers < 0
+        ):
+            raise ValueError("invalid action-rate relief counters")
+        frontier = payload.get("last_frontier")
+        if frontier is not None and (not math.isfinite(float(frontier)) or not 0.0 <= float(frontier) <= 1.0):
+            raise ValueError("invalid action-rate relief frontier")
+        reason = payload.get("last_reason", "initial")
+        if not isinstance(reason, str):
+            raise ValueError("invalid action-rate relief reason")
+        self.active = active
+        self.remaining_windows = remaining
+        self.cooldown_remaining = cooldown
+        self.triggers = triggers
+        self.last_frontier = None if frontier is None else float(frontier)
+        self.last_reason = reason
+
+    def apply(self, env: object) -> None:
+        """Expose the live override to the canonical reward curriculum."""
+        setattr(env, "_adaptive_action_rate_weight", self.relief_weight if self.active else None)
+        setattr(env, "_adaptive_action_rate_scope", self.scope)
 
 @dataclass(frozen=True)
 class AxisConfig:
@@ -577,6 +912,30 @@ class CapabilityGate:
             state.fail_count = 0
             state.ema_score = None
             state.last_transition_step = step
+
+    def freeze_at_final(
+        self, *, step: int, axis_names: Sequence[str] | None = None
+    ) -> None:
+        """Freeze selected owned axes at canonical final stages.
+
+        Final-range fine-tuning is a separate, explicit post-acquisition mode.
+        The gate remains serializable for audit, but its live stage counters are
+        reset so no further capability window can move an axis during the
+        fixed-range segment.
+        """
+        if type(step) is not int or step < 0:
+            raise ValueError("final fine-tuning step must be a nonnegative integer")
+        selected = self.axis_order if axis_names is None else tuple(axis_names)
+        if not selected or any(name not in self.axes for name in selected):
+            raise ValueError("final fine-tuning axes must be a nonempty owned subset")
+        for name, axis in self.axes.items():
+            state = self.states[name]
+            if name in selected:
+                state.current_stage = len(axis.stages) - 1
+            state.last_transition_step = step
+            state.pass_count = 0
+            state.fail_count = 0
+            state.ema_score = None
 
     def stage_value(self, axis_name: str) -> object:
         """Return the live stage value an MJLab adapter should apply."""

@@ -29,6 +29,31 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
     assert adaptive.commands["twist"].rel_standing_envs == 0.02
 
 
+def test_resume_inherits_action_rate_relief_contract(monkeypatch, tmp_path) -> None:
+    import torch
+
+    from mjlab_microduck.tasks.adaptive_curriculum import AdaptiveActionRateRelief
+
+    relief = AdaptiveActionRateRelief(
+        relief_weight=-0.4, trigger_threshold=0.5, release_threshold=0.85,
+        active_windows=3, cooldown_windows=2,
+    )
+    checkpoint = tmp_path / "smoothing.pt"
+    torch.save({"infos": {"adaptive_curriculum": {"action_rate_relief": relief.state_dict()}}}, checkpoint)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive", command_exposure=True)
+    restored = AdaptiveActionRateRelief(
+        relief_weight=cfg.adaptive_action_rate_relief_weight,
+        trigger_threshold=cfg.adaptive_action_rate_relief_trigger,
+        release_threshold=cfg.adaptive_action_rate_relief_release,
+        active_windows=cfg.adaptive_action_rate_relief_windows,
+        cooldown_windows=cfg.adaptive_action_rate_relief_cooldown_windows,
+        scope=cfg.adaptive_action_rate_relief_scope,
+    )
+    restored.load_state_dict(relief.state_dict())
+    assert restored.state_dict() == relief.state_dict()
+
+
 def test_adaptive_runner_has_distinct_experiment_name() -> None:
     assert AdaptiveMicroduckRlCfg.experiment_name == "velocity_adaptive"
     assert AdaptiveMicroduckRlCfg.run_name == "velocity_adaptive"
@@ -47,6 +72,61 @@ def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
     assert set(com.curriculum) == set(canonical.curriculum) - {"com_range"}
     assert set(head.curriculum) == set(canonical.curriculum) - {"head_com_range"}
     assert set(composed.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
+
+
+def test_final_range_finetune_parses_as_fixed_final_distribution(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "250")
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+
+    assert cfg.adaptive_final_range_finetune is True
+    assert cfg.adaptive_evaluation_interval == 0
+    assert cfg.adaptive_evaluation_distribution == "final"
+    assert cfg.adaptive_final_com_fraction == 0.0
+    assert cfg.adaptive_entropy_consolidation is False
+
+
+def test_final_range_finetune_rejects_rehearsal_fraction(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.2")
+    with pytest.raises(ValueError, match="final-range fine-tuning"):
+        make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+
+
+def test_final_range_environment_does_not_break_static_task_registration(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    assert cfg.adaptive_final_range_finetune is False
+
+
+@pytest.mark.parametrize(
+    ("raw_axes", "expected"),
+    [("com_range", ("com_range",)), ("head_com_range", ("head_com_range",)),
+     ("head_com_range,com_range", ("com_range", "head_com_range"))],
+)
+def test_final_range_axis_isolation_parses_owned_subset(monkeypatch, raw_axes, expected) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES", raw_axes)
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert cfg.adaptive_final_range_axes == expected
+
+
+@pytest.mark.parametrize("target,axes", [
+    ("composed", "com_range"), ("composed", "head_com_range"),
+    ("com", "com_range"), ("head_com", "head_com_range"),
+])
+def test_final_range_launch_can_construct_all_registered_recipes(monkeypatch, target, axes):
+    from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE", target)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES", axes)
+    for mode, diagnostic, feedback, _ in ADAPTIVE_RECIPES:
+        cfg = make_microduck_adaptive_velocity_env_cfg(
+            axis_mode=mode, diagnostic_mode=diagnostic, command_exposure=feedback,
+        )
+        assert cfg.adaptive_final_range_finetune == (mode == target)
+        assert cfg.adaptive_final_range_axes == ((axes,) if mode == target else ())
 
 
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
@@ -176,12 +256,52 @@ def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
     assert cfg.rewards["linear_velocity_error_l1"].params["yaw_deadband"] == 0.05
     assert cfg.adaptive_frontier_stall_windows == 4
     assert cfg.adaptive_frontier_stall_improvement == 0.05
+    assert cfg.adaptive_action_rate_relief is True
+    assert cfg.adaptive_action_rate_relief_weight == -0.2
+    assert cfg.adaptive_action_rate_relief_windows == 4
     assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"} | {"tracking_std"}
     assert {name: cfg.curriculum[name] for name in base.curriculum if name != "standing_envs"} == {
         name: base.curriculum[name] for name in base.curriculum if name != "standing_envs"
     }
     assert cfg.observations == make_microduck_adaptive_velocity_env_cfg().observations
     assert cfg.actions == make_microduck_adaptive_velocity_env_cfg().actions
+
+
+def test_action_rate_relief_is_opt_in_to_lateral_drive_recipe() -> None:
+    base = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert base.adaptive_action_rate_relief is False
+    assert make_microduck_adaptive_velocity_env_cfg(
+        axis_mode="composed", diagnostic_mode="acquisition_feedback"
+    ).adaptive_action_rate_relief is False
+
+
+@pytest.mark.parametrize("saved_scope", [None, "pure_yaw"])
+def test_resume_restores_action_rate_relief_scope_before_env_creation(monkeypatch, tmp_path, saved_scope):
+    import torch
+    from mjlab_microduck.tasks import mdp
+
+    relief = {"version": 1} if saved_scope is None else {"version": 2, "scope": saved_scope}
+    checkpoint = tmp_path / "relief.pt"
+    torch.save({"infos": {"adaptive_curriculum": {"action_rate_relief": relief}}}, checkpoint)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", raising=False)
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
+    assert cfg.adaptive_action_rate_relief_scope == (saved_scope or "all")
+    assert (cfg.rewards["action_rate_l2"].func is mdp.adaptive_action_rate_l2) == (saved_scope == "pure_yaw")
+
+
+def test_pure_yaw_relief_experiment_is_explicit_and_validated(monkeypatch):
+    from mjlab_microduck.tasks import mdp
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", "pure_yaw")
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
+    assert cfg.adaptive_action_rate_relief_scope == "pure_yaw"
+    assert cfg.rewards["action_rate_l2"].func is mdp.adaptive_action_rate_l2
+    base = make_microduck_adaptive_velocity_env_cfg()
+    assert base.rewards["action_rate_l2"].func is not mdp.adaptive_action_rate_l2
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", "invalid")
+    with pytest.raises(ValueError, match="relief scope"):
+        make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive")
 
 
 def test_frontier_stall_window_override_is_explicit_and_bounded(monkeypatch) -> None:

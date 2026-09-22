@@ -38,6 +38,7 @@ _TRAINING_ONLY_ENV_NAMES = (
     "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT",
     "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
     "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+    "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE",
 )
 # Keep the old name as a compatibility alias for existing contract tests and
 # callers that only know about transition overrides.

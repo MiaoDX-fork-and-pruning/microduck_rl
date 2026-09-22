@@ -16,7 +16,8 @@ spec.loader.exec_module(campaign)
 
 
 def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None,
-                  fraction=None, sensor_reset_fraction=None, transition=False, distribution="final"):
+                  fraction=None, sensor_reset_fraction=None, transition=False, distribution="final",
+                  final_axes=None):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
              "evaluation_events": events or [{"kind": "hold"}],
@@ -28,6 +29,9 @@ def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events
     if transition:
         state["transition_exposure"] = {"probability": 0.2}
         state["transition_bootstrap_mode"] = "zero"
+    if final_axes is not None:
+        state.update(final_range_finetune=True, final_range_axes=list(final_axes),
+                     training_mode="final_range_finetune")
     torch.save({"iter": completed - 1, "infos": {"adaptive_curriculum": state}}, checkpoint)
     result = {"version": 1, "status": "completed", "task_id": task,
               "completed_iterations": completed, "start_completed_iterations": start,
@@ -49,6 +53,73 @@ def test_completion_uses_manifest_path_and_rejects_tampered_artifact(tmp_path):
     checkpoint.write_bytes(b"replaced")
     with pytest.raises(ValueError, match="hash mismatch"):
         campaign.read_training_result(result, **args)
+
+
+def _write_consolidation_stop(path, checkpoint, task="task"):
+    from mjlab_microduck.evaluation.capability import BUCKETS
+    from mjlab_microduck.tasks.adaptive_curriculum import EntropyConsolidation
+
+    result = _write_result(path, checkpoint, task=task)
+    controller = EntropyConsolidation()
+    controller.begin({**dict.fromkeys(BUCKETS, 0.7), "zero": 0.9},
+                     entropy_coef=0.01, checkpoint="baseline.pt",
+                     completed_iterations=5, window_updates=2, focus_bucket="yaw")
+    controller.finish(dict.fromkeys(BUCKETS, 0.9), gate_retained=True, completed_iterations=7)
+    result["adaptive_state"]["entropy_consolidation"] = controller.state_dict()
+    torch.save({"iter": 6, "infos": {"adaptive_curriculum": result["adaptive_state"]}}, checkpoint)
+    result.update(status="stopped", requested_completed_iterations=10,
+                  stop_reason="entropy_consolidation_terminal",
+                  checkpoint_sha256=hashlib.sha256(checkpoint.read_bytes()).hexdigest())
+    path.write_text(json.dumps(result))
+    return result
+
+
+def test_early_completion_requires_a_verified_terminal_attempt(tmp_path):
+    checkpoint = tmp_path / "retained.pt"
+    path = tmp_path / "result.json"
+    result = _write_consolidation_stop(path, checkpoint)
+    args = {"task_id": "task", "completed_iterations": 10, "start_iterations": 5, "num_envs": 64}
+    found, state = campaign.read_training_result(path, **args)
+    assert found == checkpoint and state["completed_iterations"] == 7
+    result["stop_reason"] = "interrupted"
+    path.write_text(json.dumps(result))
+    with pytest.raises(ValueError, match="without a completed consolidation"):
+        campaign.read_training_result(path, **args)
+
+
+def test_early_stopped_campaign_evaluates_retained_actor_and_counts_actual_budget(monkeypatch, tmp_path):
+    task, _ = campaign.TASKS["lateral-drive"]
+    checkpoint = tmp_path / "start.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, start=0, completed=5, task=task)
+    output = tmp_path / "campaign"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "test-source")
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "lateral-drive", "--seed", "17", "--num-envs", "64",
+        "--iterations", "10", "--resume", str(checkpoint), "--output", str(output),
+        "--entropy-consolidation", "--gate-interval", "2",
+    ])
+    evaluated = []
+
+    def run(command, **kwargs):
+        if Path(command[0]).name == "train":
+            assert command[command.index("--env.adaptive-entropy-consolidation") + 1] == "True"
+            if Path(kwargs["cwd"]).name == "training":
+                _write_consolidation_stop(Path(kwargs["env"]["MICRODUCK_ADAPTIVE_RESULT_FILE"]),
+                                          output / "retained.pt", task)
+        else:
+            evaluated.append(command[command.index("--checkpoint") + 1])
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    result = json.loads((output / "campaign-result.json").read_text())
+    assert result["iterations"] == 10 and result["completed_iterations"] == 7
+    assert result["segment_training_transitions"] == 2 * 24 * 64
+    assert result["total_training_transitions"] == 7 * 24 * 64
+    assert evaluated == [str(output / "retained.pt")] * 2
 
 
 def test_gate_cohort_seed_coverage_cannot_overlap_heldout(monkeypatch, tmp_path):
@@ -148,6 +219,59 @@ def test_campaign_cannot_silently_reuse_final_gate_evidence_for_stage_gate(monke
     assert not (tmp_path / "run").exists()
 
 
+@pytest.mark.parametrize("requested_axes,expected_axes", [
+    (None, ["com_range", "head_com_range"]),
+    ("com_range", ["com_range"]),
+    ("head_com_range", ["head_com_range"]),
+    ("head_com_range,com_range", ["com_range", "head_com_range"]),
+])
+def test_final_range_campaign_smokes_exact_resume_and_disables_rehearsal(
+    monkeypatch, tmp_path, requested_axes, expected_axes,
+):
+    task, _ = campaign.TASKS["feedback"]
+    checkpoint = tmp_path / "source.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, task=task, start=0,
+                  completed=5, fraction=0.2, distribution="stage")
+    output = tmp_path / "finetune"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "source")
+    argv = ["campaign", "--branch", "feedback", "--seed", "23",
+            "--resume", str(checkpoint), "--output", str(output),
+            "--num-envs", "64", "--iterations", "7", "--final-range-finetune"]
+    if requested_axes is not None:
+        argv += ["--final-range-axes", requested_axes]
+    monkeypatch.setattr(sys, "argv", argv)
+    phases = []
+
+    def run(command, **kwargs):
+        env = kwargs["env"]
+        if Path(command[0]).name == "train":
+            phase = Path(kwargs["cwd"]).name
+            phases.append(phase)
+            assert env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] == str(checkpoint)
+            assert env["MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION"] == "0.0"
+            assert env["MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL"] == "0"
+            assert env["MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE"] == "composed"
+            assert env["MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES"].split(",") == expected_axes
+            assert command[command.index("--agent.max-iterations") + 1] == ("5" if phase == "smoke" else "2")
+            if phase == "training":
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), output / "final.pt",
+                              task=task, fraction=0.0, final_axes=expected_axes,
+                              events=[{"kind": "final_range_finetune_source"}])
+        else:
+            assert not any(k.startswith("MICRODUCK_ADAPTIVE_FINAL_RANGE") for k in env)
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    assert phases == ["smoke", "training"]
+    result = json.loads((output / "campaign-result.json").read_text())
+    assert result["segment_training_transitions"] == 2 * 24 * 64
+    assert result["final_range_axes"] == expected_axes
+
+
 def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(
     monkeypatch, tmp_path
 ):
@@ -196,3 +320,39 @@ def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(
     assert campaign.main() == 0
     config = json.loads((output / "campaign-config.json").read_text())
     assert config["sensor_reset_fraction"] == "1.0"
+
+
+def test_resumed_job_preserves_pure_yaw_scope_in_smoke_and_training_only(monkeypatch, tmp_path):
+    task, _ = campaign.TASKS["lateral-drive"]
+    checkpoint = tmp_path / "pure-yaw.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, task=task, completed=5)
+    saved = torch.load(checkpoint, weights_only=False)
+    saved["infos"]["adaptive_curriculum"]["action_rate_relief"] = {"version": 2, "scope": "pure_yaw"}
+    torch.save(saved, checkpoint)
+    output = tmp_path / "continuation"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "reviewed-source")
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE", raising=False)
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "lateral-drive", "--seed", "17",
+        "--output", str(output), "--iterations", "7", "--num-envs", "64",
+        "--gate-interval", "1", "--resume", str(checkpoint),
+    ])
+
+    def run(command, **kwargs):
+        env = kwargs["env"]
+        if Path(command[0]).name == "train":
+            assert env["MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE"] == "pure_yaw"
+            if Path(kwargs["cwd"]).name == "training":
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]),
+                              output / "training/model_6.pt", task=task)
+        else:
+            assert "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE" not in env
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    config = json.loads((output / "campaign-config.json").read_text())
+    assert config["action_rate_relief_scope"] == "pure_yaw"

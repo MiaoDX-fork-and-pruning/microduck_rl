@@ -1,164 +1,121 @@
 # MJLab Adaptive Curriculum v2
 
-Status: **ACTIVE** — no usable policy established. Updated: 2026-09-23.
-Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
+Status: **ACTIVE** — adaptive control plane is executable, but no usable adaptive policy is accepted. Updated: 2026-09-24.
+Control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
-Latest intent: continue authorized changes, training and checks via intuitive-flow.
-Execution is local in the main session; other worktree changes are not owned.
+Latest intent: continue sustained implementation, training and checks after API
+interruption via `intuitive-flow`. The stale host `blocked` label is not an
+external blocker. Project-status writer unassigned; leave shared status alone.
 
-## Current evidence and decision
+## Status review (2026-09-24)
 
-The current diagnostic isolates a curriculum/evaluator mismatch. The final
-6,000-update checkpoint evaluated on the same three native gate seeds scores
-`.267` on `final` CoM and `.701514` on `initial` CoM (±3 mm). Initial bucket
-scores are zero `.953`, forward `.702`, lateral `.773`, yaw `.733`, left `.818`,
-right `.792`; the artifact is
-`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/diagnostic-initial-com/capability.json`.
-Neither distribution passes `.80`. The campaign currently omits `--distribution`
-and therefore uses the evaluator's `final` default even while training remains
-at stage 0. This is a confirmed feedback-distribution mismatch, not proof that
-changing the gate alone will produce a usable policy.
+The original objective remains open: use adaptive curriculum to produce a
+policy that passes the product gate. The adaptive control plane is ready for
+bounded follow-up experiments: capability evaluation, checkpoint preservation,
+rollback, resume, consolidation, final-range fine-tuning, axis isolation, and
+normalizer-baked ONNX export have all been implemented and exercised.
 
-Current bounded repair contract (medium context: evaluator and resume semantics
-must agree): evaluate acquisition against checkpointed CoM stages while retaining
-the final reference step and the independent final-distribution held-out/product
-gate. Persist distribution and stage provenance; reject mismatches; require an
-explicit migration to discard incomparable old gate evidence. Rebaseline mastery,
-EMA and rollback evidence when a stage changes. Success is validated stage
-consumption, fail-closed report/resume behavior and a real 64-env/5-update smoke,
-followed by a bounded training segment. Product success still requires all
-original gates below. Canonical Velocity, rewards, ABI and unrelated worktree
-changes are outside this repair.
+The behavioral acceptance gates are still outstanding. No candidate has been
+promoted, all training and evaluation sessions are finished, and no process is
+running. This is an experiment-ready state for a new falsifiable hypothesis,
+not a deployment-ready policy state. The next experiment must address the
+measured directional-tracking/upright trade-off and must not repeat a rejected
+exposure-only or unchanged final-range window.
 
-The sensor-reset experiment is complete at
-`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` (source `07d31a5`,
-5,000→6,000 updates, seed 17, 4,096 environments, three-member native gate
-cohort). Resampling the IMU/encoder realization on every episode reset is
-implemented and isolated from evaluators, but it did not establish a retained
-six-capability policy. The four in-run gates were valid and all held at CoM
-stage 0; the last three gate lower-tail scores were `.382`, `.000`, `.000`,
-and the final gate was `.267` (final buckets: zero `.937`, forward `.683`,
-lateral `.789`, yaw `.758`, turn-left `.538`, turn-right `.267`). The adaptive
-state ended with `last_known_good_buckets=["zero"]`, so the controller did not
-claim a usable policy or advance difficulty.
+## Current decision
 
-The final held-out native report improved to lower-tail `.653` (zero `.918`,
-forward `.871`, lateral `.790`, yaw `.653`, turn-left `.747`, turn-right
-`.798`), but still failed the product gate. CPU/XML transfer for that same
-checkpoint remained lower-tail `0.000` (zero `.956`, forward `.000`, lateral
-`.000`, yaw `.833`, turn-left `.000`, turn-right `.491`). This separates two
-remaining questions: native reset/DR robustness is incomplete, and the CPU
-rehearsal mismatch still has not been causally isolated. The sensor-reset
-mechanism is therefore evidence against repeating the same augmentation alone,
-not evidence that adaptive training is ready for formal multi-seed acceptance.
+Blocker: `native_mastery_and_product_rehearsal_contract`.
+Acquisition, consolidation, retention, complete trainer rollback and explicit
+final-range resume work. Six-bucket native mastery, CPU usability and automatic
+replication across training seeds 17/23/47 remain unproven. Scores are normalized
+capability, not success probabilities; every bucket must reach .80.
 
-A bounded deployment-side actuator probe is recorded in
-`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/cpu-actuator-ab.jsonl`.
-On the same XML scene and ONNX, adding a 1.75 A current limit produced the
-same six traces as the unlimited position-actuator run. Adding a 1–2 step
-action delay changed turn tracking (for example, turn-left `.345`→`.105`),
-but forward/lateral still scored below the tracking gate and the aggregate
-remained `0.0`. This rules out the current-limit switch as a standalone
-explanation and makes delay a sensitivity factor, while leaving the full
-BAM-vs-XML dynamics/observation split unresolved.
+Latest comparison uses the retained seed23 turn-exposure **control** at 1250
+updates. Its original fresh final cohort (20261001–03) failed. Those seeds are
+now reused paired diagnostics; subsequent product acceptance needs new seeds.
 
-The resume contract is now closed for this augmentation: checkpoint metadata
-stores `sensor_reset_fraction`, full loads reject a mismatched live event, the
-campaign launcher propagates the saved value before environment construction,
-and direct `train` resumes read it from `MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT`.
-The adaptive/config suite passes (`222`), focused lint and diff checks pass, and
-a real 64-env/5-update smoke followed by a one-update resume with the sensor
-variable unset restored `sensor_reset_fraction=1.0`. This fixes reproducibility;
-it does not improve the failed policy capability scores above.
+| Final native cohort | Zero | Forward | Lateral | Yaw | Left | Right | Minimum |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Source control | .9478 | .7103 | .7929 | .7746 | .7929 | .7257 | .7103 |
+| Both CoM axes final | .9621 | .8085 | .7939 | .7104 | .8250 | .6960 | .6960 |
+| Trunk CoM only final | .9449 | .7117 | .7790 | .7348 | .7796 | .6781 | .6781 |
+| Head CoM only final | .9608 | .7905 | .7799 | .7296 | .7929 | .7081 | .7081 |
 
-Runner evaluation, bounded command exposure, checkpoint/resume and retention
-rollback operate. Both CoM axes remain at ±3 mm. Formal training seeds 17/23/47
-remain gated on a retained six-capability policy; no video/hardware usability or
-adaptive superiority is established.
+All three treatments are rejected. Simultaneous final ranges lose .0642
+in yaw (beyond .05 tolerance); trunk-only loses the lower tail without the
+required weak-bucket gain. Head-only improves forward by .0802 but its minimum
+.708083 is below the source .710326. Keep the source reference and do not extend
+any of these windows unchanged. Each arm runs smoke64/5 and exactly 250 new
+updates at 4096 environments (24,576,000 transitions), with unchanged entropy, exposure,
+calibration reset fraction, rewards and non-owned curricula.
 
-`e86a1f4` isolates training transition overrides from evaluators. The validated
-zero-bootstrap campaign is `/tmp/microduck-adaptive-zero-transition-s17-5000-e86/`.
-Its same-policy variance battery has yaw scores
-`[.809, .000, .776, .000, .000, .595, .555, .842, .000, .000]` for base seeds
-20260815–20260824: five zero scores and only two passes at 0.80. Earlier status
-prose claiming six failures was imprecise. These are diagnostic reset/DR seeds,
-not independent training seeds. Scalar friction correlation was about 0.13 and
-does not isolate a causal DR field.
+## Completed slice and next action
 
-The matched 5000→5500 reward comparison is in
-`/tmp/microduck-adaptive-yaw-planar-s17-5500/clean-control/` and
-`clean-treatment-v2/`. Control native held-out scores were
-zero .931 / forward .842 / lateral .795 / yaw .442 / left .754 / right .754.
-The treatment did not produce a retained usable policy and its held-out yaw
-score was zero. Its retained-policy score must not be confused with a direct
-measurement of the pre-rollback candidate. `ac21204` reverted the `1f17e81`
-yaw-planar reward treatment; canonical reward behavior is restored.
+All training and evaluation sessions have finished; none remain running.
+The bounded axis-isolation contract has reached its rejection stop condition.
+No candidate is promoted. Reference remains the update-1250 source below.
 
-`b942d44` replaces the training transition's bootstrap hold/jump with a linear
-bootstrap→target command ramp. It attributes the ramp to the bootstrap bucket until
-completion and preserves reset `dt=0` and partial-reset isolation. Evaluators still
-use direct frozen commands. The bounded experiment is
-`/tmp/microduck-adaptive-slew-s17-5500/experiment-contract.json`.
+The audit changes the failure classification: full-final and trunk-only are
+limited by sustained right-turn undertracking (1–5 s means −.712/−.662 for
+−.8 commands). Head-only's weakest right turn tracks at −.797 over 1–5 s,
+but its 95th-percentile tilt is .1783 rad (10.22°): upright component .7081,
+tracking component .8302. All limiting traces survive six seconds. This is a
+tracking/upright trade-off; another exposure-only or unchanged DR continuation
+is unsupported. Next work must use the measured component trade-off to define
+a new bounded hypothesis before changing rewards or allocating more training.
+No external dependency blocks that work; full autonomous usability remains open.
 
-| Slew experiment (5000→5500, seed 17, 4096 envs) | Minimum score | Outcome |
-| --- | ---: | --- |
-| Pre-rollback candidate at 5250, native gate | .71733 | forward retention failure |
-| Pre-rollback candidate at 5500, native gate | .72894 | forward/left retention failure |
-| Retained policy, native held-out | .00000 | original 5000-update actor restored |
-| Retained policy, CPU/XML transfer | .00000 | transfer fails |
+Contract: `/tmp/microduck-final-axis-isolation-s23-v1/experiment-contract.json`.
+Audit command: `uv run --no-sync python /tmp/microduck-final-axis-isolation-s23-v1/audit.py`.
+Result: same directory `verification.json`, `complete=true`, all arms rejected.
+It verifies fixed budgets/penalty signs, checkpoint contracts, paired reset
+fields/initial observations, report/trace hashes, scores recomputed from traces
+and all exported actions. Proof covers 72 native traces, 18 CPU traces and
+21,600 ONNX action comparisons; native max error 9.54e-7, CPU max error 0.
+Full video review has not been performed for these failed candidates. Their
+ONNX exports/CPU rehearsals are diagnostic artifacts, not accepted policies.
 
-Actor state including normalizer is tensor-identical to the starting checkpoint.
-No retained learning gain is established. The campaign source is read-only
-`/tmp/microduck-adaptive-slew-source-b942d44/`; 676 tracked file hashes are recorded.
-`campaign-result.json` means evidence completed, not policy accepted.
+Completed artifacts:
 
-## Current slice and next decision
+- Both final: `/tmp/microduck-final-range-finetune-s23-v2/`.
+- Trunk only: `/tmp/microduck-final-axis-isolation-s23-v2-com/paired-cohort/capability.json`.
+- Head only: `/tmp/microduck-final-axis-isolation-s23-v2-head/paired-cohort/capability.json`.
+- Source cohort: `/tmp/microduck-turn-exposure-control-fresh-final-s23-v1/capability.json`.
 
-Blocker fingerprint: `native_stage0_capability_below_threshold`.
-The feedback-distribution mismatch is repaired in `beea4f8`. Runtime proof is
-`/tmp/microduck-adaptive-stage-gate-smoke-beea4f8/runtime-proof.json`: a real
-64-env/5-update run consumed a valid three-member stage report at ±3 mm;
-held-out native stayed at final ±15/±10 mm, sensor reset stayed at 1.0, and
-normalized ONNX/CPU evaluation completed. No NaN terminations were logged.
-250 adaptive/config/capability tests, focused Ruff (`E4,E7,E9,F`) and diff checks
-pass. Default full Ruff also exposes existing style findings; it is not claimed
-clean.
+## Exact inputs and source limits
 
-A bounded 6,000→6,500 campaign is running under PID `2665136` at
-`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`. Its `experiment-contract.json`
-owns commands, starting checkpoint hash, seed/budget and stop condition. The
-launcher first evaluates the 6,000-update policy at checkpointed stages with
-the final reference step, then smokes before training 500 more updates with
-`--gate-distribution stage --rebaseline-gate`. Source is read-only
-`/tmp/microduck-adaptive-stage-source-beea4f8/`; all 679 tracked file hashes were
-verified against its adjacent `.manifest.json`. This campaign uses the local
-validated venv, not a fresh dependency sync.
+Source checkpoint is owned by
+`/tmp/microduck-turn-exposure-ab-s23-v1/control/campaign-result.json`.
+Checkpoint SHA: `0552c8fb458cf81a32586a04838606b912f3f92bc5d17d69801ecc01f2a3daf7`.
+Head-only frozen source: `/tmp/microduck-final-axis-source-762a1b0-v1`.
+262 files; manifest SHA:
+`c345ec7af0dcd3f4ba227d7e9a53072833919fcfcd05ac432163cb9f235305b1`.
+Prepend this snapshot's `src` and `scripts` to `PYTHONPATH` for replay. Full-final
+and trunk-only ran from the worktree; their source strings are labels, not content hashes. The snapshot was taken after trunk-only
+training and before head-only. Do not claim pre-launch immutability for earlier
+arms. Frozen native evaluator implementation and consumed reset state agree.
 
-Next: inspect `execution-status.json`, `campaign-result.json` and both new gate
-windows. Compare retained candidate with the before-training stage report;
-inspect final-distribution held-out and CPU reports independently. Do not
-repeat the segment without a decision-changing hypothesis. A stage pass only
-controls acquisition: final native held-out, CPU/XML rehearsal, videos,
-independent seeds 17/23/47 and matched fixed baseline remain required.
+Commits: `fbfbc21` final-range contract, `762a1b0` axis isolation, `d2c865e`
+registration isolation and resume-axis checks. 332 adaptive tests, focused Ruff,
+smoke and live training pass. Worktree follow-up fixes did not alter the frozen
+head-only training. Evaluation and product gates have not been relaxed.
 
-Repo `logs/rsl_rl` is not writable and W&B has no local key, so local runs use
-TensorBoard under `/tmp`. Neither blocks local training.
+## Prior evidence and boundaries
 
-## Boundaries and verification inventory
+Directional exposure transfer, symmetry, hip-yaw limit, action-scale scans,
+sensor-refresh, BAM-scale and unchanged continuations were rejected; see the
+canonical plan. Do not repeat them unchanged. Fully paired native/CPU BAM replay
+identified foot/plane contact generation as the main paired simulator gap.
+Live CPU contact replacement reduces all six score differences to ≤.02217;
+it does not validate original XML-PD product rehearsal or native mastery.
+Evidence: `/tmp/microduck-contact-closedloop-s23-v2/verification.json`.
 
-Preserve canonical Velocity, 61D/14D ABI, BAM M6, unfiltered actions, reward signs,
-0.5 s signed-EMA metrics, product thresholds and exact-zero/nominal anchors.
-Leave IsaacLab, uv.lock, generated files and other processes untouched.
-Advisor, stronger teachers, generalist, IsaacLab migration and hardware deployment
-remain parked. The rejected 20% final-CoM rehearsal remains opt-in, not a default.
+Keep canonical Velocity, BAM M6, product DR, unfiltered 61D/14D, reward signs,
+.80 gates and nominal/zero anchors. Preserve unrelated IsaacLab/generated/uv.lock
+edits and the existing CPU seed overlay in `scripts/run_specialist_action_battery.py`.
+Use unique `/tmp` outputs and `uv run --no-sync`. Do not restart historical agents.
 
-Tests: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest pytest -q
- tests/test_adaptive_*.py tests/test_mjlab_adaptive_velocity_config.py`.
-Campaign: `scripts/run_adaptive_campaign_job.py --branch lateral-drive --seed 17
---output <fresh-dir> --iterations <cumulative-updates> --resume <exact-checkpoint>
---num-envs 4096 --gate-interval 250 --gate-cohort-size 3`. Fresh runs use stage
-gates; resumes inherit their saved distribution. To migrate a legacy final
-gate, add `--gate-distribution stage --rebaseline-gate`. Use a read-only source
-snapshot and source manifest. Rehearsal/transition settings inherit the
-checkpoint unless explicitly overridden; frozen evaluators disable acquisition
-aids.
+Remaining product gates: all-six final native mastery, new held-out cohort,
+full rollout/video review, baked-normalizer ONNX/CPU rehearsal, autonomous
+training seeds 17/23/47 and matched-budget fixed/axis comparisons. Advisor,
+stronger teachers, generalist and hardware deployment remain parked.

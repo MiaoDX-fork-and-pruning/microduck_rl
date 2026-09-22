@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import random
 import shlex
 import sys
@@ -23,6 +24,7 @@ from mjlab.envs.mdp import dr
 
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report, canonical_sha256
 from mjlab_microduck.tasks.adaptive_curriculum import (
+    AdaptiveActionRateRelief,
     AxisConfig,
     CapabilityGate,
     TransitionExposure,
@@ -32,6 +34,7 @@ from mjlab_microduck.tasks.adaptive_runner import (
     AdaptiveMicroduckOnPolicyRunner,
     CommandCapabilityEvaluator,
 )
+from mjlab_microduck.tasks.adaptive_curriculum import EntropyConsolidation
 from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
     make_microduck_adaptive_velocity_env_cfg,
 )
@@ -144,6 +147,280 @@ def _runner(*, mode: str = "composed", gate=None) -> AdaptiveMicroduckOnPolicyRu
     runner.last_gate_outcome = None
     runner.capability_gate = gate or _gate(mode=mode)
     return runner
+
+
+def _consolidation_metrics():
+    return dict(zip(BUCKETS, (0.95, 0.735, 0.796, 0.669, 0.830, 0.812), strict=True))
+
+
+def _consolidation_report(runner, metrics):
+    # Existing report-contract tests exercise hashes/provenance. This fixture
+    # isolates the trainer's response to an already validated frozen report.
+    runner._validate_report = lambda *args: None
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kwargs: SimpleNamespace(
+        payload={"metadata": {}, "schema_version": 2},
+        to_gate_metrics=lambda: metrics, sha256=lambda: "verified-test-report",
+    ))
+
+
+@pytest.mark.parametrize("outcome", ["retain", "no_gain", "preservation", "evaluation_error"])
+def test_consolidation_boundary_retains_or_rolls_back_and_stops(monkeypatch, tmp_path, outcome):
+    from mjlab_microduck.tasks.adaptive_curriculum import CommandExposure
+
+    _fake_parent_io(monkeypatch)
+    runner = _runner(gate=_gate(pass_windows=100))
+    term = _attach_exposure(runner)
+    runner.command_exposure = CommandExposure(initial_focus="lateral")
+    runner.command_exposure.apply(runner.env)
+    # An ordinary gate boundary first advances the existing teacher; the
+    # consolidation backup owns that pre-treatment state. Bootstrap does not
+    # run this normal boundary update and has separate coverage below.
+    baseline_teacher = copy.deepcopy(runner.command_exposure)
+    baseline_teacher.update(_consolidation_metrics())
+    original_teacher = baseline_teacher.state_dict()
+    original_probabilities = tuple(baseline_teacher.probabilities[name] for name in BUCKETS)
+    runner.alg.entropy_coef = 0.01
+    runner.entropy_consolidation = EntropyConsolidation()
+    runner.evaluation_interval = 250
+    runner.completed_iterations = 6500
+    runner.current_learning_iteration = 6499
+    checkpoint = tmp_path / "model_6499.eval.pt"
+    runner.save(str(checkpoint))
+    _consolidation_report(runner, _consolidation_metrics())
+    runner._evaluate_window(str(checkpoint))
+    assert runner.entropy_consolidation.phase == "active"
+    assert runner.alg.entropy_coef == 0.0
+    assert runner.entropy_consolidation.deadline == 6750
+    assert runner.entropy_consolidation.focus_bucket == "yaw"
+    assert runner.command_exposure.focus_bucket == "yaw"
+    expected_probabilities = tuple(runner.command_exposure.probabilities[name] for name in BUCKETS)
+    assert term.cfg.bucket_probabilities == expected_probabilities
+    assert term.cfg.bucket_probabilities[BUCKETS.index("yaw")] > original_probabilities[BUCKETS.index("yaw")]
+    baseline = Path(runner.entropy_consolidation.baseline_checkpoint)
+    baseline_metadata = torch.load(baseline, weights_only=False)["infos"]["adaptive_curriculum"]
+    assert baseline_metadata["entropy_coef"] == 0.01
+    assert baseline_metadata["command_exposure"] == original_teacher
+
+    # Restart midway: neither the original budget nor backup may be replaced.
+    runner.completed_iterations = 6600
+    active = tmp_path / "active.pt"
+    runner.save(str(active))
+    expected_controller = runner.entropy_consolidation.state_dict()
+    runner.load(str(active))
+    assert runner.entropy_consolidation.state_dict() == expected_controller
+    assert term.cfg.bucket_probabilities == expected_probabilities
+
+    runner.completed_iterations = 6750
+    runner.current_learning_iteration = 6749
+    runner.alg.state["weight"] = torch.tensor([2.0])
+    candidate = tmp_path / "model_6749.eval.pt"
+    runner.save(str(candidate))
+    metrics = (dict.fromkeys(BUCKETS, 0.96) if outcome == "retain"
+               else {**_consolidation_metrics(), "forward": 0.4, "zero": 0.5} if outcome == "preservation"
+               else _consolidation_metrics())
+    _consolidation_report(runner, metrics)
+    if outcome == "evaluation_error":
+        runner.evaluator.evaluate = lambda **kwargs: (_ for _ in ()).throw(ValueError("bad report"))
+    runner._evaluate_window(str(candidate))
+    assert runner.entropy_consolidation.terminal
+    assert runner.completed_iterations == 6750
+    if outcome == "retain":
+        assert runner.entropy_consolidation.phase == "retained"
+        assert runner.alg.entropy_coef == 0.0
+        assert runner.alg.state["weight"].item() == 2.0
+    else:
+        assert runner.entropy_consolidation.phase == "rejected"
+        assert runner.alg.entropy_coef == 0.01
+        assert runner.alg.state["weight"].item() == 1.0
+        assert runner.last_known_good_checkpoint == str(baseline)
+        assert runner.command_exposure.state_dict() == original_teacher
+        assert term.cfg.bucket_probabilities == original_probabilities
+    with pytest.raises(ValueError, match="do not extend"):
+        runner.learn(1)
+
+
+@pytest.mark.parametrize("yaw,started", [(0.4, False), (0.669, True)])
+@pytest.mark.parametrize("relative_log_dir", [False, True])
+def test_legacy_consolidation_bootstrap_uses_current_report_without_double_teacher_update(
+    monkeypatch, tmp_path, yaw, started, relative_log_dir
+):
+    _fake_parent_io(monkeypatch)
+    runner = _runner(gate=_gate(pass_windows=100))
+    runner.capability_gate.best_metrics = _consolidation_metrics()
+    runner.alg.entropy_coef = 0.01
+    runner.entropy_consolidation = EntropyConsolidation()
+    runner._consolidation_needs_baseline = True
+    runner.evaluation_interval = 250
+    runner.completed_iterations = 6500
+    runner.current_learning_iteration = 6499
+    monkeypatch.chdir(tmp_path)
+    runner.logger = SimpleNamespace(log_dir="logs" if relative_log_dir else str(tmp_path))
+    _consolidation_report(runner, {**_consolidation_metrics(), "yaw": yaw})
+    checked_paths = []
+
+    def validate(report, checkpoint_path):
+        assert Path(checkpoint_path).is_absolute()
+        assert Path(checkpoint_path).is_file()
+        checked_paths.append(checkpoint_path)
+
+    runner._validate_report = validate
+    before = runner.capability_gate.state_dict()
+    runner._bootstrap_entropy_consolidation()
+    assert (runner.entropy_consolidation.phase == "active") == started
+    assert runner.capability_gate.state_dict() == before
+    assert not runner._consolidation_needs_baseline
+    assert not any(e["kind"] == "hold" for e in runner.evaluation_events)
+    assert len(checked_paths) == 1
+    if started:
+        assert Path(runner.entropy_consolidation.baseline_checkpoint).is_absolute()
+
+
+def test_learn_initializes_logger_before_bootstrap_can_save():
+    runner = _runner()
+    runner.device = "cpu"
+    runner.is_distributed = False
+    runner.env.get_observations = lambda: torch.zeros(1)
+    runner.alg.train_mode = lambda: None
+    runner.logger = SimpleNamespace()
+    runner.logger.init_logging_writer = lambda: setattr(runner.logger, "writer", True)
+
+    def bootstrap():
+        assert runner.logger.writer is True
+        raise RuntimeError("bootstrap reached after logger initialization")
+
+    runner._bootstrap_entropy_consolidation = bootstrap
+    with pytest.raises(RuntimeError, match="bootstrap reached"):
+        runner.learn(1)
+
+
+@pytest.mark.parametrize("resume_pending_evaluation", [False, True])
+def test_consolidation_stops_learn_at_its_window_not_the_requested_budget(
+    monkeypatch, tmp_path, resume_pending_evaluation
+):
+    from tensordict import TensorDict
+
+    _fake_parent_io(monkeypatch)
+    runner = _runner(gate=_gate(pass_windows=100))
+    runner.alg.entropy_coef = 0.01
+    runner.entropy_consolidation = EntropyConsolidation()
+    runner.completed_iterations = 5
+    runner.current_learning_iteration = 4
+    runner.evaluation_interval = 2
+    runner.cfg.update(num_steps_per_env=1, algorithm={}, save_interval=10)
+    runner.is_distributed = False
+    runner.device = runner.env.device = "cpu"
+    runner.env.num_envs = 2
+    runner.env.get_observations = lambda: TensorDict({"actor": torch.zeros(2, 1)}, batch_size=[2])
+    runner.env.step = lambda _: (runner.env.get_observations(), torch.zeros(2), torch.zeros(2), {})
+    runner.alg.train_mode = lambda: None
+    runner.alg.act = lambda _: torch.zeros(2, 1)
+    runner.alg.process_env_step = lambda *a: None
+    runner.alg.compute_returns = lambda _: None
+    runner.alg.update = dict
+    runner.alg.learning_rate = 0.001
+    runner.alg.get_policy = lambda: SimpleNamespace(output_std=1.0)
+    iterations = []
+    runner.logger = SimpleNamespace(
+        writer=True, log_dir=str(tmp_path), init_logging_writer=lambda: None,
+        stop_logging_writer=lambda: None, process_env_step=lambda *a: None,
+        log=lambda **kw: iterations.append(kw["it"]),
+    )
+    runner._begin_entropy_consolidation(_consolidation_metrics(), str(tmp_path / "start.pt"))
+    _consolidation_report(runner, dict.fromkeys(BUCKETS, 0.96))
+    if resume_pending_evaluation:
+        runner.completed_iterations = 7
+        runner.current_learning_iteration = 6
+    # Global boundary is 6, but the full window from 5 ends at 7. No extra
+    # updates are permitted after that deadline, even with ten requested.
+    runner.learn(10)
+    assert iterations == ([] if resume_pending_evaluation else [5, 6])
+    result = json.loads((tmp_path / "training-result.json").read_text())
+    assert result["status"] == "stopped"
+    assert result["requested_completed_iterations"] == (17 if resume_pending_evaluation else 15)
+    assert result["completed_iterations"] == 7
+    assert result["segment_iterations"] == (0 if resume_pending_evaluation else 2)
+    assert result["stop_reason"] == "entropy_consolidation_terminal"
+
+
+@pytest.mark.parametrize("legacy_scores", [{}, dict.fromkeys(BUCKETS, 0.9)])
+def test_legacy_resume_clears_previous_live_relief(monkeypatch, tmp_path, legacy_scores):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.capability_gate.best_metrics = legacy_scores
+    checkpoint = tmp_path / "legacy.pt"
+    source.save(str(checkpoint))
+    resumed = _runner()
+    resumed.action_rate_relief = AdaptiveActionRateRelief()
+    resumed.action_rate_relief.bootstrap(dict.fromkeys(BUCKETS, 0.0))
+    resumed.action_rate_relief.apply(resumed.env)
+    resumed.load(str(checkpoint))
+    assert not resumed.action_rate_relief.active
+    assert resumed.action_rate_relief.remaining_windows == 0
+    assert resumed.action_rate_relief.triggers == 0
+    assert resumed.env._adaptive_action_rate_weight is None
+
+
+@pytest.mark.parametrize("scope", ["all", "pure_yaw"])
+def test_relief_round_trip_and_expiry_survive_policy_rollback(monkeypatch, tmp_path, scope):
+    _fake_parent_io(monkeypatch)
+    runner = _runner(gate=_gate(pass_windows=100))
+    runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2, scope=scope)
+    known_metrics = {**dict.fromkeys(BUCKETS, 0.9), "yaw": 0.2}
+    runner.record_capability_metrics(known_metrics)
+    assert runner.env._adaptive_action_rate_weight == -0.2
+    runner.completed_iterations = 10
+    known = tmp_path / "known.pt"
+    runner.last_known_good_checkpoint = str(known)
+    runner.save(str(known))
+    expected_policy = copy.deepcopy(runner.alg.state)
+    # The rejected actor acquires yaw but loses forward. Its successful yaw
+    # result must not release relief for the restored actor's missing yaw.
+    failed = {**dict.fromkeys(BUCKETS, 0.9), "forward": 0.1}
+    for completed in (20, 30):
+        runner.completed_iterations = completed
+        runner.alg.state["weight"] = torch.tensor([float(completed)])
+        runner.record_capability_metrics(failed)
+        assert runner.last_gate_outcome == "preservation_failure"
+        assert runner.completed_iterations == completed
+        torch.testing.assert_close(runner.alg.state, expected_policy)
+        if completed == 20:
+            assert runner.action_rate_relief.active
+            assert runner.action_rate_relief.remaining_windows == 1
+            repair = tmp_path / "repair.pt"
+            runner.save(str(repair))
+            state = runner.action_rate_relief.state_dict()
+            runner = _runner(gate=_gate(pass_windows=100))
+            runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2, scope=scope)
+            runner.load(str(repair))
+            assert runner.action_rate_relief.state_dict() == state
+            assert runner.env._adaptive_action_rate_weight == -0.2
+            assert runner.env._adaptive_action_rate_scope == scope
+    assert not runner.action_rate_relief.active
+    assert runner.action_rate_relief.remaining_windows == 0
+    assert runner.env._adaptive_action_rate_weight is None
+
+
+def test_full_resume_cannot_silently_drop_inactive_relief_controller(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    runner.action_rate_relief = AdaptiveActionRateRelief()
+    checkpoint = tmp_path / "enabled-inactive.pt"
+    runner.save(str(checkpoint))
+    destination = _runner()
+    with pytest.raises(ValueError, match="action-rate relief mismatch"):
+        destination.load(str(checkpoint))
+
+
+def test_full_resume_rejects_changed_action_rate_relief_scope(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.action_rate_relief = AdaptiveActionRateRelief(scope="pure_yaw")
+    checkpoint = tmp_path / "pure-yaw.pt"
+    source.save(str(checkpoint))
+    destination = _runner()
+    destination.action_rate_relief = AdaptiveActionRateRelief()
+    with pytest.raises(ValueError, match="scope mismatch"):
+        destination.load(str(checkpoint))
 
 
 def _raw(*, low: bool = False):
@@ -642,6 +919,91 @@ def test_actor_only_load_does_not_restore_trainer_rng_gate_or_live_ranges(monkey
     assert evaluator.env.event_manager.cfgs == before_ranges
     assert torch.equal(evaluator._rng_state()["torch"], before_rng["torch"])
     assert evaluator._rng_state()["python"] == before_rng["python"]
+
+
+def test_final_range_finetune_loads_terminal_consolidation_as_new_window(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.entropy_consolidation = EntropyConsolidation()
+    source.alg.entropy_coef = 0.0
+    source.entropy_consolidation.begin(
+        _consolidation_metrics(), entropy_coef=0.01, checkpoint="baseline.pt",
+        completed_iterations=5, window_updates=2, focus_bucket="yaw",
+    )
+    source.entropy_consolidation.finish(
+        _consolidation_metrics(), gate_retained=True, completed_iterations=7,
+    )
+    source.completed_iterations = 7
+    source.current_learning_iteration = 6
+    checkpoint = tmp_path / "terminal-consolidation.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.evaluation_interval = 0
+    destination.final_com_fraction = 0.0
+    destination.entropy_consolidation = None
+    destination.load(str(checkpoint))
+
+    assert destination.entropy_consolidation is None
+    assert destination.completed_iterations == 7
+    assert destination.evaluation_distribution == "final"
+    assert destination.capability_gate.stage_value("com_range") == 0.005
+    assert destination.capability_gate.stage_value("head_com_range") == 0.005
+    assert destination.evaluation_events[-1]["kind"] == "final_range_finetune_source"
+
+
+def test_final_range_finetune_can_isolate_one_axis(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.completed_iterations = 7
+    source.current_learning_iteration = 6
+    checkpoint = tmp_path / "axis-source.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.final_range_axes = ("com_range",)
+    destination.evaluation_interval = 0
+    destination.final_com_fraction = 0.0
+    destination.entropy_consolidation = None
+    destination.load(str(checkpoint))
+
+    assert destination.capability_gate.stage_value("com_range") == 0.005
+    assert destination.capability_gate.stage_value("head_com_range") == 0.003
+
+
+@pytest.mark.parametrize("legacy", [False, True])
+def test_final_range_resume_cannot_silently_change_axes(monkeypatch, tmp_path, legacy):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.final_range_finetune = True
+    source.final_range_axes = ("com_range", "head_com_range")
+    checkpoint = tmp_path / "both-final.pt"
+    source.save(str(checkpoint))
+    if legacy:
+        payload = torch.load(checkpoint, weights_only=False)
+        payload["infos"]["adaptive_curriculum"].pop("final_range_axes")
+        torch.save(payload, checkpoint)
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.final_range_axes = ("com_range",)
+    with pytest.raises(ValueError, match="final-range axes mismatch"):
+        destination.load(str(checkpoint))
+
+
+def test_ordinary_adaptive_resume_rejects_final_range_checkpoint(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.final_range_finetune = True
+    source.completed_iterations = 2
+    source.current_learning_iteration = 1
+    checkpoint = tmp_path / "final-range.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    with pytest.raises(ValueError, match="final-range fine-tuning checkpoint"):
+        destination.load(str(checkpoint))
 
 
 def _attach_exposure(runner):

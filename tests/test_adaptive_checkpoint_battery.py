@@ -37,6 +37,7 @@ def _battery_payload(onnx: Path, seed: int, *, source_sha: str = "src") -> dict:
     report = build_capability_report(
         _raw_metrics(),
         axis_mode="composed",
+        evaluator_config={"velocity_frame": "body_link_origin"},
         metadata={
             "task_id": "Mjlab-Velocity-Flat-Adaptive-MicroDuck",
             "source_sha": source_sha,
@@ -172,6 +173,13 @@ def test_missing_trace_is_rejected(monkeypatch, tmp_path):
             evaluation_seed=17,
             output=tmp_path / "eval" / "capability.json",
         )
+
+
+@pytest.mark.parametrize("frame", [None, "inertial_com", "world"])
+def test_wrong_or_undeclared_velocity_frame_is_rejected(tmp_path, frame):
+    payload = {"evaluator_config": {} if frame is None else {"velocity_frame": frame}}
+    with pytest.raises(ValueError, match="velocity frame"):
+        battery._validate_battery_traces(tmp_path, payload)
 
 
 def test_seed_set_and_evaluation_seed_are_required_and_consistent(monkeypatch, tmp_path):

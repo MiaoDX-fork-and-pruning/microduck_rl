@@ -165,3 +165,84 @@ def test_load_treats_legacy_null_com_rehearsal_as_disabled(tmp_path, fake_parent
     torch.save(payload, checkpoint)
     runner.load(str(checkpoint))
     assert runner.final_com_fraction == 0.0
+
+
+def test_full_resume_and_rollback_restore_live_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.0
+    # The live algorithm owns the value, even if a schedule changed it since launch.
+    runner.cfg["algorithm"] = {"entropy_coef": 0.01}
+    checkpoint = tmp_path / "consolidated.pt"
+    runner.save(str(checkpoint))
+
+    resumed = _runner()
+    resumed.alg.entropy_coef = 0.01
+    resumed.load(str(checkpoint))
+    assert resumed.alg.entropy_coef == 0.0
+    assert resumed.cfg["algorithm"]["entropy_coef"] == 0.0
+    assert resumed.adaptive_checkpoint_info()["adaptive_curriculum"]["entropy_coef"] == 0.0
+
+    resumed.last_known_good_checkpoint = str(checkpoint)
+    resumed.alg.entropy_coef = 0.02
+    resumed.rollback(str(checkpoint))
+    assert resumed.alg.entropy_coef == 0.0
+
+
+def test_actor_only_load_does_not_change_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.0
+    checkpoint = tmp_path / "inference.pt"
+    runner.save(str(checkpoint))
+    runner.alg.entropy_coef = 0.03
+    runner.env.cfg.adaptive_entropy_coef_override = 0.02
+    runner.load(str(checkpoint), load_cfg={"actor": True})
+    assert runner.alg.entropy_coef == 0.03
+
+
+def test_legacy_checkpoint_keeps_configured_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "legacy-entropy.pt"
+    runner.save(str(checkpoint))
+    runner.alg.entropy_coef = 0.02
+    runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.02
+
+
+def test_explicit_entropy_override_is_recorded_and_persisted(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.01
+    checkpoint = tmp_path / "exploration.pt"
+    runner.save(str(checkpoint))
+    runner.env.cfg.adaptive_entropy_coef_override = 0.0
+    runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.0
+    assert runner.evaluation_events[-1] == {
+        "kind": "entropy_override",
+        "previous_entropy_coef": 0.01,
+        "entropy_coef": 0.0,
+        "completed_iterations": 1,
+    }
+    consolidated = tmp_path / "consolidation.pt"
+    runner.save(str(consolidated))
+    resumed = _runner()
+    resumed.alg.entropy_coef = 0.01
+    resumed.load(str(consolidated))
+    assert resumed.alg.entropy_coef == 0.0
+
+
+@pytest.mark.parametrize("bad_entropy", [float("nan"), float("inf"), -0.01, True, None])
+def test_invalid_saved_entropy_is_rejected_before_curriculum_changes(
+    tmp_path, fake_parent_io, bad_entropy
+):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.01
+    checkpoint = tmp_path / "invalid-entropy.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_curriculum"]["entropy_coef"] = bad_entropy
+    torch.save(payload, checkpoint)
+    before = runner.capability_gate.state_dict()
+    with pytest.raises(ValueError, match="entropy coefficient"):
+        runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.01
+    assert runner.capability_gate.state_dict() == before

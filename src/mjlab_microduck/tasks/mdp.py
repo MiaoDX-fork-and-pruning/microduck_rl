@@ -395,6 +395,31 @@ def joint_accelerations_l2(
     return torch.sum(torch.square(joint_acc), dim=1)
 
 
+def adaptive_action_rate_l2(
+    env: ManagerBasedRlEnv, command_name: str = "twist"
+) -> torch.Tensor:
+    """Keep canonical smoothing except for an active pure-yaw relief window.
+
+    This is a nonnegative cost with a negative reward weight. The manager keeps
+    its canonical weight; scaling only pure-yaw costs avoids relaxing recovery
+    and gait regularization for the other command buckets. Actions are unchanged.
+    """
+    cost = torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=1)
+    override = getattr(env, "_adaptive_action_rate_weight", None)
+    scope = getattr(env, "_adaptive_action_rate_scope", "all")
+    if override is None or scope != "pure_yaw":
+        return cost
+    weight = env.reward_manager.get_term_cfg("action_rate_l2").weight
+    if weight >= 0.0:
+        return cost
+    command = env.command_manager.get_command(command_name)
+    pure_yaw = (torch.linalg.vector_norm(command[:, :2], dim=1) <= 1e-6) & (
+        command[:, 2].abs() > 1e-6
+    )
+    scale = max(weight, float(override)) / weight
+    return torch.where(pure_yaw, cost * scale, cost)
+
+
 def leg_action_rate_l2(
     env: ManagerBasedRlEnv, asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG
 ) -> torch.Tensor:
@@ -3634,6 +3659,20 @@ def reward_weight(
     for stage in weight_stages:
         if env.common_step_counter > stage["step"]:
             term_cfg.weight = stage["weight"]
+    # The adaptive runner may install a bounded, checkpointed relief window
+    # for action-rate smoothing while a directional frontier is still being
+    # acquired.  Leave all other reward curricula untouched, and let the
+    # canonical stages resume automatically once the runner clears the
+    # override.
+    adaptive_override = getattr(env, "_adaptive_action_rate_weight", None)
+    if (
+        reward_name == "action_rate_l2"
+        and adaptive_override is not None
+        and getattr(env, "_adaptive_action_rate_scope", "all") == "all"
+    ):
+        # Relief can only soften the current schedule, including early stages
+        # whose canonical penalty is already smaller than the relief ceiling.
+        term_cfg.weight = max(term_cfg.weight, float(adaptive_override))
     return torch.tensor([term_cfg.weight])
 
 

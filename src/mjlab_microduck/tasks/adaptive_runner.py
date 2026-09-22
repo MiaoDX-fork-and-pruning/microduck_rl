@@ -18,8 +18,10 @@ from pathlib import Path
 
 from .adaptive_curriculum import (
     ADAPTIVE_AXIS_CONFIGS,
+    AdaptiveActionRateRelief,
     CapabilityGate,
     CommandExposure,
+    EntropyConsolidation,
     TransitionExposure,
     apply_stage_to_env,
     evaluation_com_widths,
@@ -38,6 +40,15 @@ from . import MicroduckOnPolicyRunner
 # evidence contract so its reward mass is not reported as an unexplained
 # invalid sample.
 COMMAND_FEEDBACK_BUCKETS = (*BUCKETS, "nominal")
+
+
+def _entropy_coefficient(value: object) -> float:
+    if (
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        or not np.isfinite(value) or value < 0.0
+    ):
+        raise ValueError("adaptive entropy coefficient must be a finite nonnegative number")
+    return float(value)
 
 
 def _manager_env(env):
@@ -267,7 +278,15 @@ class BucketFeedbackTracker:
             raise ValueError("unsupported bucket feedback schema")
         if tuple(payload.get("bucket_names", ())) != tuple(COMMAND_FEEDBACK_BUCKETS):
             raise ValueError("bucket feedback bucket mismatch")
-        if tuple(payload.get("term_names", ())) != self.term_names:
+        saved_terms = tuple(str(name) for name in payload.get("term_names", ()))
+        if not saved_terms or len(set(saved_terms)) != len(saved_terms):
+            raise ValueError("bucket feedback reward term mismatch")
+        # Adaptive-only diagnostics may add a reward term while resuming a
+        # checkpoint created by the base recipe.  Preserve the accumulated
+        # mass for terms that still exist and initialize the new term at zero.
+        # Removing a persisted term is unsafe because its evidence cannot be
+        # represented by the destination tracker, so reject that direction.
+        if any(name not in self.term_names for name in saved_terms):
             raise ValueError("bucket feedback reward term mismatch")
         step_dt = float(payload.get("step_dt", self.step_dt))
         if not np.isclose(step_dt, self.step_dt):
@@ -279,16 +298,23 @@ class BucketFeedbackTracker:
             raise ValueError("bucket feedback payload is incomplete")
         try:
             count_values = [int(counts[name]) for name in COMMAND_FEEDBACK_BUCKETS]
-            signed_values = [
-                [float(signed[name][term]) for term in self.term_names]
-                for name in COMMAND_FEEDBACK_BUCKETS
-            ]
-            absolute_values = [
-                [float(absolute[name][term]) for term in self.term_names]
-                for name in COMMAND_FEEDBACK_BUCKETS
-            ]
+            signed_values = []
+            absolute_values = []
+            for name in COMMAND_FEEDBACK_BUCKETS:
+                signed_row = [0.0] * len(self.term_names)
+                absolute_row = [0.0] * len(self.term_names)
+                for saved_index, term in enumerate(saved_terms):
+                    current_index = self.term_names.index(term)
+                    signed_row[current_index] = float(signed[name][term])
+                    absolute_row[current_index] = float(absolute[name][term])
+                signed_values.append(signed_row)
+                absolute_values.append(absolute_row)
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("bucket feedback payload has invalid values") from exc
+        if set(saved_terms) != set(self.term_names) and (
+            sum(count_values) > 0 or int(payload.get("unclassified_count", 0)) > 0
+        ):
+            raise ValueError("empty feedback window required when reward terms change")
         if any(value < 0 for value in count_values) or not np.isfinite(signed_values).all() or not np.isfinite(absolute_values).all():
             raise ValueError("bucket feedback payload has non-finite values")
         self.sample_count.copy_(torch.tensor(count_values, dtype=torch.long, device=self.device))
@@ -341,6 +367,7 @@ class CommandCapabilityEvaluator:
             "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT",
             "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
             "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+            "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
         ):
             evaluator_env.pop(name, None)
         with (output.parent / "evaluator.log").open("w") as log:
@@ -368,6 +395,22 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         axis_names = resolve_enabled_axes(mode)
         axis_configs = tuple(axis for axis in ADAPTIVE_AXIS_CONFIGS if axis.name in axis_names)
         self.evaluation_interval = int(getattr(env.cfg, "adaptive_evaluation_interval", 0))
+        self.final_range_finetune = bool(
+            getattr(env.cfg, "adaptive_final_range_finetune", False)
+        )
+        self.final_range_axes = tuple(
+            getattr(env.cfg, "adaptive_final_range_axes", ())
+        ) if self.final_range_finetune else ()
+        if self.final_range_finetune and (
+            not self.final_range_axes
+            or any(name not in axis_names for name in self.final_range_axes)
+            or len(set(self.final_range_axes)) != len(self.final_range_axes)
+        ):
+            raise ValueError("final-range axes must be a nonempty owned subset")
+        if self.final_range_finetune and self.evaluation_interval != 0:
+            raise ValueError("final-range fine-tuning requires evaluation_interval=0")
+        if self.final_range_finetune and getattr(env.cfg, "adaptive_entropy_consolidation", False):
+            raise ValueError("final-range fine-tuning cannot enable entropy consolidation")
         self.evaluator = None
         self.evaluation_seed = int(getattr(env.cfg, "adaptive_evaluation_seed", 0))
         self.evaluation_seed_set_id = str(
@@ -390,6 +433,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
         self.bucket_feedback: BucketFeedbackTracker | None = None
+        self.entropy_consolidation = (
+            EntropyConsolidation()
+            if getattr(env.cfg, "adaptive_entropy_consolidation", False) else None
+        )
+        self._consolidation_needs_baseline = False
+        if self.entropy_consolidation is not None and getattr(env.cfg, "adaptive_entropy_coef_override", None) is not None:
+            raise ValueError("automatic consolidation cannot be combined with an entropy override")
+        if self.entropy_consolidation is not None and not axis_configs:
+            raise ValueError("automatic consolidation requires the native adaptive gate")
         self.final_com_fraction = 0.0
         initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
         frontier_order = getattr(env.cfg, "adaptive_frontier_order", ()) or None
@@ -412,10 +464,24 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             if getattr(env.cfg, "adaptive_transition_acquisition", False)
             else None
         )
+        self.action_rate_relief = (
+            AdaptiveActionRateRelief(
+                relief_weight=float(getattr(env.cfg, "adaptive_action_rate_relief_weight", -0.2)),
+                trigger_threshold=float(getattr(env.cfg, "adaptive_action_rate_relief_trigger", 0.55)),
+                release_threshold=float(getattr(env.cfg, "adaptive_action_rate_relief_release", 0.80)),
+                active_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_windows", 4)),
+                cooldown_windows=int(getattr(env.cfg, "adaptive_action_rate_relief_cooldown_windows", 1)),
+                scope=getattr(env.cfg, "adaptive_action_rate_relief_scope", "all"),
+            )
+            if getattr(env.cfg, "adaptive_action_rate_relief", False)
+            else None
+        )
         if self.command_exposure is not None:
             self.command_exposure.apply(_manager_env(env))
         if self.transition_exposure is not None:
             self.transition_exposure.apply(_manager_env(env))
+        if self.action_rate_relief is not None:
+            self.action_rate_relief.apply(_manager_env(env))
         evaluator_command = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND") or os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR")
         if evaluator_command and self.evaluation_interval > 0:
             self.evaluator = CommandCapabilityEvaluator(
@@ -436,6 +502,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         # Evaluators/exporters have no training log_dir and never resume here.
         resume = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
         requested_fraction = getattr(env.cfg, "adaptive_final_com_fraction", None)
+        if self.final_range_finetune and (not resume or log_dir is None):
+            raise ValueError("final-range fine-tuning requires an explicit resume checkpoint")
+        if self.final_range_finetune and requested_fraction not in (None, 0.0):
+            raise ValueError("final-range fine-tuning cannot enable final-CoM rehearsal")
         if resume and log_dir is not None:
             self.load(resume, map_location=device)
         if requested_fraction is not None:
@@ -468,6 +538,29 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 })
                 self._needs_reset = True
 
+        if getattr(env.cfg, "adaptive_entropy_coef_override", None) is not None:
+            self._apply_entropy_override()
+
+    def _set_entropy_coefficient(self, value: object) -> None:
+        coefficient = _entropy_coefficient(value)
+        self.alg.entropy_coef = coefficient
+        self.cfg.setdefault("algorithm", {})["entropy_coef"] = coefficient
+
+    def _apply_entropy_override(self) -> None:
+        """Apply a deliberate launch treatment after restoring checkpoint state."""
+        requested = getattr(self.env.cfg, "adaptive_entropy_coef_override", None)
+        if requested is None:
+            return
+        previous = self.alg.entropy_coef
+        self._set_entropy_coefficient(requested)
+        if previous != self.alg.entropy_coef:
+            self.evaluation_events.append({
+                "kind": "entropy_override",
+                "previous_entropy_coef": previous,
+                "entropy_coef": self.alg.entropy_coef,
+                "completed_iterations": self.completed_iterations,
+            })
+
     def _set_final_com_fraction(self, fraction: float) -> None:
         """Install rehearsal on live, adaptive-owned axes using stock DR fields."""
         from mjlab.envs.mdp import dr
@@ -499,6 +592,28 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 term.params.pop("final_fraction", None)
                 term.params.pop("final_ranges", None)
         self.final_com_fraction = float(fraction)
+
+    def _activate_final_range_finetune(self) -> None:
+        """Install canonical final ranges after an explicit full resume."""
+        if not getattr(self, "final_range_finetune", False):
+            return
+        if self.capability_gate is None:
+            raise ValueError("final-range fine-tuning requires an adaptive gate")
+        step = int(self.completed_iterations) * int(self.cfg["num_steps_per_env"])
+        final_axes = tuple(
+            getattr(self, "final_range_axes", self.capability_gate.axis_order)
+        )
+        self.capability_gate.freeze_at_final(step=step, axis_names=final_axes)
+        manager_env = _manager_env(self.env)
+        for axis_name in self.capability_gate.axis_order:
+            apply_stage_to_env(
+                manager_env,
+                axis_name,
+                self.capability_gate.stage_value(axis_name),
+            )
+        if self.final_com_fraction:
+            self._set_final_com_fraction(0.0)
+        self.evaluation_distribution = "final"
 
     def _set_transition_probability(self, probability: float) -> None:
         """Apply a launch override while retaining controller accounting."""
@@ -585,31 +700,93 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 [item.detach().cpu() for item in state["torch_cuda"]]
             )
 
+    def _frozen_capability_report(self, checkpoint_path: str):
+        checkpoint_path = str(Path(checkpoint_path).resolve())
+        report = self.evaluator.evaluate(
+            checkpoint_path=Path(checkpoint_path), task_id=self.env.cfg.task_id,
+            axis_mode=self.capability_gate.axis_mode,
+            curriculum_state={
+                **self.capability_gate.state_dict(),
+                "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
+            },
+            iteration=self.current_learning_iteration,
+            seed_set_id=getattr(self, "evaluation_seed_set_id", str(self.evaluation_seed)),
+            evaluation_seed=self.evaluation_seed,
+        )
+        self._validate_report(report, checkpoint_path)
+        return report
+
+    def _begin_entropy_consolidation(self, metrics, checkpoint_path: str) -> None:
+        controller = getattr(self, "entropy_consolidation", None)
+        if controller is None or not controller.ready(metrics, self.alg.entropy_coef):
+            return
+        baseline = str(Path(checkpoint_path).with_suffix(".consolidation.pt").resolve())
+        # Protect the full trainer before changing entropy; the evaluated file
+        # remains immutable and command/curriculum state is not advanced twice.
+        self.save(baseline)
+        focus_bucket = None
+        exposure = getattr(self, "command_exposure", None)
+        if exposure is not None:
+            focus_bucket = min(
+                exposure.frontier_order,
+                key=lambda name: (float(metrics[name]), exposure.frontier_order.index(name)),
+            )
+            exposure.consolidation_focus(focus_bucket, metrics)
+            exposure.apply(_manager_env(self.env))
+        controller.begin(metrics, entropy_coef=self.alg.entropy_coef, checkpoint=baseline,
+                         completed_iterations=self.completed_iterations,
+                         window_updates=self.evaluation_interval, focus_bucket=focus_bucket)
+        self._set_entropy_coefficient(0.0)
+        self.evaluation_events.append({
+            "kind": "entropy_consolidation_started", "state": controller.state_dict(),
+            "evaluation_checkpoint": checkpoint_path, "focus_bucket": focus_bucket,
+        })
+
+    def _finish_entropy_consolidation(self, controller, metrics, *, gate_retained: bool) -> None:
+        if controller is None or controller.phase != "active" or self.completed_iterations < controller.deadline:
+            return
+        controller.finish(metrics, gate_retained=gate_retained,
+                          completed_iterations=self.completed_iterations)
+        if controller.phase == "rejected":
+            self.last_known_good_checkpoint = controller.baseline_checkpoint
+            self.rollback(controller.baseline_checkpoint)
+            self._set_entropy_coefficient(controller.original_entropy_coef)
+        self.entropy_consolidation = controller
+        self._consolidation_needs_baseline = False
+        self.evaluation_events.append({
+            "kind": "entropy_consolidation_stopped", "state": controller.state_dict(),
+            "completed_iterations": self.completed_iterations,
+        })
+
+    def _bootstrap_entropy_consolidation(self) -> None:
+        if not getattr(self, "_consolidation_needs_baseline", False):
+            return
+        if self.evaluator is None or self.evaluation_interval <= 0:
+            raise ValueError("resumed automatic consolidation requires a native evaluator")
+        checkpoint = str((Path(self.logger.log_dir) / f"model_{self.current_learning_iteration}.consolidation-bootstrap.pt").resolve())
+        self.save(checkpoint)
+        report = self._frozen_capability_report(checkpoint)
+        metrics = report.to_gate_metrics()
+        # Historical best_metrics may combine different actors. Re-evaluate the
+        # actual retained snapshot without consuming another teacher/gate window.
+        if not self.capability_gate.preservation_failures(metrics):
+            self._begin_entropy_consolidation(metrics, checkpoint)
+        self._consolidation_needs_baseline = False
+
     def _evaluate_window(self, checkpoint_path: str) -> None:
         if self.evaluation_interval <= 0 or self.evaluator is None or self.capability_gate is None:
             return
         checkpoint_path = str(Path(checkpoint_path).resolve())
+        consolidation = getattr(self, "entropy_consolidation", None)
         try:
-            seed_set_id = getattr(self, "evaluation_seed_set_id", str(self.evaluation_seed))
-            report = self.evaluator.evaluate(
-                checkpoint_path=Path(checkpoint_path),
-                task_id=self.env.cfg.task_id,
-                axis_mode=self.capability_gate.axis_mode,
-                curriculum_state={
-                    **self.capability_gate.state_dict(),
-                    "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
-                },
-                iteration=self.current_learning_iteration,
-                seed_set_id=seed_set_id,
-                evaluation_seed=self.evaluation_seed,
-            )
-            self._validate_report(report, checkpoint_path)
+            report = self._frozen_capability_report(checkpoint_path)
             payload = getattr(report, "payload", report)
             metrics = report.to_gate_metrics()
             command_feedback = self._snapshot_bucket_feedback(reset=True)
         except Exception as exc:
             self.last_gate_outcome = "evaluation_error"
             self.evaluation_events.append({"kind": "evaluation_error", "error": repr(exc), "iteration": self.current_learning_iteration, "checkpoint": checkpoint_path})
+            self._finish_entropy_consolidation(consolidation, None, gate_retained=False)
         else:
             self.last_evaluation_provenance = {
                 **payload["metadata"],
@@ -662,6 +839,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             elif (mastered_before | mastered_now) and preserved and self.last_gate_outcome != "preservation_failure":
                 self.last_known_good_checkpoint = str(Path(checkpoint_path).with_suffix(".adaptive.pt"))
                 self.last_known_good_buckets = tuple(sorted(mastered_before | mastered_now))
+            # Policy rollback must not rewind the live consolidation budget.
+            self.entropy_consolidation = consolidation
+            retained = preserved and self.last_gate_outcome != "preservation_failure"
+            if consolidation is not None and consolidation.phase == "active":
+                self._set_entropy_coefficient(0.0)
+                self._finish_entropy_consolidation(consolidation, metrics, gate_retained=retained)
+            elif retained and not stage_changed:
+                self._begin_entropy_consolidation(metrics, checkpoint_path)
         # A hold also changes pass counters/EMA. Persist every boundary without
         # changing the hash of the checkpoint consumed by the evaluator. Direct
         # unit callers may provide a virtual checkpoint; the real learn loop has
@@ -747,6 +932,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Count completed PPO updates identically with and without evaluation."""
         if num_learning_iterations < 1:
             raise ValueError("num_learning_iterations must be positive")
+        consolidation = getattr(self, "entropy_consolidation", None)
+        if consolidation is not None and consolidation.terminal:
+            raise ValueError("consolidation attempt is terminal; do not extend it unchanged")
         if getattr(self, "_needs_reset", False):
             self.env.reset()
             self._needs_reset = False
@@ -764,9 +952,20 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         obs = self.env.get_observations().to(self.device)
         self.alg.train_mode()
         self.logger.init_logging_writer()
+        self._bootstrap_entropy_consolidation()
         start_it = self.completed_iterations
         total_it = start_it + num_learning_iterations
+        consolidation = getattr(self, "entropy_consolidation", None)
+        if consolidation is not None and consolidation.phase == "active" and start_it == consolidation.deadline:
+            # A crash can leave a pre-evaluation candidate at the deadline.
+            # Re-evaluate it before collecting anything; spent updates stay spent.
+            checkpoint = os.path.join(self.logger.log_dir, f"model_{self.current_learning_iteration}.eval.pt")
+            self.save(checkpoint)
+            self._evaluate_window(checkpoint)
         for it in range(start_it, total_it):
+            consolidation = getattr(self, "entropy_consolidation", None)
+            if consolidation is not None and consolidation.terminal:
+                break
             start = time.perf_counter()
             with torch.inference_mode():
                 for _ in range(self.cfg["num_steps_per_env"]):
@@ -806,7 +1005,14 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             )
             if self.logger.writer is not None and it % self.cfg["save_interval"] == 0:
                 self.save(os.path.join(self.logger.log_dir, f"model_{it}.pt"))
-            if self.capability_gate is not None and self.evaluation_interval > 0 and self.completed_iterations % self.evaluation_interval == 0:
+            consolidation = getattr(self, "entropy_consolidation", None)
+            consolidation_due = (
+                consolidation is not None and consolidation.phase == "active"
+                and self.completed_iterations >= consolidation.deadline
+            )
+            if self.capability_gate is not None and self.evaluation_interval > 0 and (
+                self.completed_iterations % self.evaluation_interval == 0 or consolidation_due
+            ):
                 checkpoint = os.path.join(self.logger.log_dir, f"model_{it}.eval.pt")
                 self.save(checkpoint)
                 self._evaluate_window(checkpoint)
@@ -824,10 +1030,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                     obs = obs.to(self.device)
                     self.alg.train_mode()
                     self.save(str(Path(checkpoint).with_suffix(".adaptive.pt")))
+                consolidation = getattr(self, "entropy_consolidation", None)
+                if consolidation is not None and consolidation.terminal:
+                    break
         if self.logger.writer is not None:
             checkpoint = Path(self.logger.log_dir) / f"model_{self.current_learning_iteration}.pt"
             self.save(str(checkpoint))
-            self._write_training_result(checkpoint, start_it)
+            self._write_training_result(checkpoint, start_it, requested_iterations=total_it)
             self.logger.stop_logging_writer()
 
     def _reset_after_rollback(self):
@@ -835,11 +1044,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         with torch.inference_mode():
             return self.env.reset()
 
-    def _write_training_result(self, checkpoint: Path, start_iteration: int) -> None:
+    def _write_training_result(self, checkpoint: Path, start_iteration: int, *, requested_iterations: int | None = None) -> None:
         """Publish completion only after the final checkpoint is durably written."""
         checkpoint = checkpoint.resolve()
+        requested = self.completed_iterations if requested_iterations is None else requested_iterations
+        consolidation = getattr(self, "entropy_consolidation", None)
+        stop_reason = "entropy_consolidation_terminal" if consolidation is not None and consolidation.terminal else None
         result = {
-            "version": 1, "status": "completed", "task_id": self.env.cfg.task_id,
+            "version": 1, "status": "stopped" if self.completed_iterations < requested else "completed", "task_id": self.env.cfg.task_id,
+            "requested_completed_iterations": requested, "stop_reason": stop_reason,
             "checkpoint": str(checkpoint),
             "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
             "resume_checkpoint": getattr(self, "resume_checkpoint", None),
@@ -899,6 +1112,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             transition_state = (
                 None if transition_exposure is None else transition_exposure.state_dict()
             )
+            action_rate_relief = getattr(self, "action_rate_relief", None)
+            action_rate_relief_state = (
+                None if action_rate_relief is None else action_rate_relief.state_dict()
+            )
             final_com_fraction = getattr(self, "final_com_fraction", 0.0)
             if self.last_known_good_checkpoint:
                 self.rollback(self.last_known_good_checkpoint)
@@ -928,6 +1145,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 if transition_exposure.repair(repair_buckets):
                     transition_exposure.apply(_manager_env(self.env))
                 event["transition_exposure"] = transition_exposure.state_dict()
+            action_rate_relief = getattr(self, "action_rate_relief", None)
+            if action_rate_relief is not None and action_rate_relief_state is not None:
+                action_rate_relief.load_state_dict(action_rate_relief_state)
+                # Successful buckets from a rejected candidate do not prove
+                # that the restored actor has acquired them. Account for the
+                # consumed window without releasing relief on that evidence.
+                action_rate_relief.update(metrics, accepted=False)
+                action_rate_relief.apply(_manager_env(self.env))
+                event["action_rate_relief"] = action_rate_relief.state_dict()
             return None
         exposure = getattr(self, "command_exposure", None)
         if exposure is not None:
@@ -939,6 +1165,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             transition_exposure.update(metrics)
             transition_exposure.apply(_manager_env(self.env))
             event["transition_exposure"] = transition_exposure.state_dict()
+        action_rate_relief = getattr(self, "action_rate_relief", None)
+        if action_rate_relief is not None:
+            action_rate_relief.update(metrics)
+            action_rate_relief.apply(_manager_env(self.env))
+            event["action_rate_relief"] = action_rate_relief.state_dict()
         if transition is not None:
             apply_stage_to_env(
                 _manager_env(self.env),
@@ -972,6 +1203,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "transition_exposure": None
             if getattr(self, "transition_exposure", None) is None
             else self.transition_exposure.state_dict(),
+            "action_rate_relief": None
+            if getattr(self, "action_rate_relief", None) is None
+            else self.action_rate_relief.state_dict(),
+            "entropy_consolidation": None
+            if getattr(self, "entropy_consolidation", None) is None
+            else self.entropy_consolidation.state_dict(),
             "transition_bootstrap_mode": getattr(
                 self.env.cfg, "adaptive_transition_bootstrap_mode", "forward"
             ),
@@ -980,6 +1217,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             # silently fall back to the ordinary fixed realization.
             "sensor_reset_fraction": sensor_reset_fraction,
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
+            "final_range_finetune": bool(getattr(self, "final_range_finetune", False)),
+            "final_range_axes": list(getattr(self, "final_range_axes", ())),
+            "training_mode": (
+                "final_range_finetune"
+                if getattr(self, "final_range_finetune", False)
+                else "adaptive"
+            ),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
             else self.bucket_feedback.state_dict(),
@@ -996,6 +1240,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
             "env_step": completed * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
         })
+        # RSL-RL saves model/optimizer tensors but not this PPO loss coefficient.
+        # Save the live value so a restarted consolidation run stays identical.
+        if hasattr(getattr(self, "alg", None), "entropy_coef"):
+            state["entropy_coef"] = _entropy_coefficient(self.alg.entropy_coef)
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
 
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
@@ -1016,9 +1264,60 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         gate = deepcopy(self.capability_gate)
         exposure = deepcopy(getattr(self, "command_exposure", None))
         transition_exposure = deepcopy(getattr(self, "transition_exposure", None))
+        action_rate_relief = deepcopy(getattr(self, "action_rate_relief", None))
+        consolidation = deepcopy(getattr(self, "entropy_consolidation", None))
+        consolidation_needs_baseline = False
+        final_range_finetune = getattr(self, "final_range_finetune", False)
         completed = self.current_learning_iteration + 1
         distribution = getattr(self, "evaluation_distribution", "final")
+        entropy_coef = None
+        override = getattr(self.env.cfg, "adaptive_entropy_coef_override", None)
+        if override is not None:
+            _entropy_coefficient(override)
         if state:
+            saved_final_range_finetune = bool(state.get("final_range_finetune", False))
+            if saved_final_range_finetune and not final_range_finetune:
+                raise ValueError(
+                    "final-range fine-tuning checkpoint requires explicit fine-tuning mode"
+                )
+            saved_mode = state.get(
+                "training_mode",
+                "final_range_finetune" if saved_final_range_finetune else "adaptive",
+            )
+            expected_mode = (
+                "final_range_finetune" if saved_final_range_finetune else "adaptive"
+            )
+            if saved_mode != expected_mode:
+                raise ValueError("adaptive checkpoint training mode is invalid")
+            if saved_final_range_finetune:
+                # Earlier final-range checkpoints expanded every owned axis.
+                # A missing field must not allow a later isolated resume to
+                # silently change that treatment contract.
+                saved_final_axes = tuple(state.get("final_range_axes", state.get("enabled_axes", ())))
+                if tuple(self.final_range_axes) != saved_final_axes:
+                    raise ValueError("adaptive checkpoint final-range axes mismatch")
+            if "entropy_coef" in state:
+                entropy_coef = _entropy_coefficient(state["entropy_coef"])
+            saved_consolidation = state.get("entropy_consolidation")
+            if saved_consolidation is not None:
+                if final_range_finetune:
+                    # This is a new fixed-range window, not an extension of a
+                    # terminal consolidation attempt. Drop its live controller
+                    # while retaining the source path in resume metadata.
+                    consolidation = None
+                elif consolidation is None:
+                    raise ValueError("adaptive checkpoint entropy consolidation mismatch")
+                else:
+                    consolidation.load_state_dict(saved_consolidation)
+                    if consolidation.phase == "active" and (
+                        entropy_coef != 0.0 or self.evaluation_interval != consolidation.window_updates
+                    ):
+                        raise ValueError("active consolidation entropy or window mismatch")
+            elif consolidation is not None and not final_range_finetune:
+                consolidation = EntropyConsolidation()
+                consolidation_needs_baseline = True
+            elif final_range_finetune:
+                consolidation = None
             if state.get("version", 1) != 1:
                 raise ValueError("unsupported adaptive checkpoint version")
             if state.get("task_id") and state["task_id"] != getattr(self.env.cfg, "task_id", None):
@@ -1144,6 +1443,20 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                     "repairs": 0,
                     "last_reason": "legacy_checkpoint_bootstrap",
                 })
+            saved_action_rate_relief = state.get("action_rate_relief")
+            if saved_action_rate_relief is not None:
+                if action_rate_relief is None:
+                    raise ValueError("adaptive checkpoint action-rate relief mismatch")
+                else:
+                    action_rate_relief.load_state_dict(saved_action_rate_relief)
+            elif action_rate_relief is not None:
+                # Legacy adaptive checkpoints predate this controller. Seed a
+                # bounded window from their measured yaw deficit so a resume
+                # can repair the missing behavior immediately rather than
+                # waiting for the next evaluation interval.
+                action_rate_relief.reset()
+                if gate is not None and set(action_rate_relief.yaw_buckets) <= set(gate.best_metrics):
+                    action_rate_relief.bootstrap(gate.best_metrics)
             feedback_state = state.get("command_feedback")
             if feedback_state is not None:
                 tracker = self._ensure_bucket_feedback()
@@ -1159,6 +1472,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             completed = int(state.get("completed_iterations", completed))
             if completed < 0 or state.get("env_step", completed * self.cfg["num_steps_per_env"]) != completed * self.cfg["num_steps_per_env"]:
                 raise ValueError("adaptive checkpoint step budget mismatch")
+            if consolidation is not None and consolidation.phase != "waiting":
+                if not consolidation.start_iterations <= completed <= consolidation.deadline:
+                    raise ValueError("consolidation update budget mismatch")
+                if consolidation.terminal and completed != consolidation.deadline:
+                    raise ValueError("terminal consolidation window is incomplete")
             self.last_known_good_checkpoint = state.get("last_known_good_checkpoint")
             buckets = state.get("last_known_good_buckets", ())
             allowed_buckets = set(self.capability_gate.critical_buckets) if self.capability_gate is not None else set()
@@ -1166,6 +1484,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint known-good bucket mismatch")
             self.last_known_good_buckets = tuple(str(name) for name in buckets)
             self.evaluation_events = list(state.get("evaluation_events", []))
+            if final_range_finetune and not saved_final_range_finetune:
+                self.evaluation_events.append({
+                    "kind": "final_range_finetune_source",
+                    "source_checkpoint": str(Path(path).resolve()),
+                    "source_consolidation_phase": (saved_consolidation or {}).get("phase"),
+                    "source_consolidation_deadline": (saved_consolidation or {}).get("deadline"),
+                    "source_stage_values": state.get("stage_values"),
+                    "completed_iterations": completed,
+                })
             self.last_evaluation_provenance = state.get("evaluation_provenance")
             if legacy_cohort_migration or distribution_migration:
                 self.last_known_good_checkpoint = None
@@ -1186,12 +1513,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 self.evaluation_seed = int(state["evaluation_seed"])
             if state.get("evaluation_seed_set_id") is not None and not legacy_cohort_migration:
                 self.evaluation_seed_set_id = str(state["evaluation_seed_set_id"])
-        elif gate is not None or exposure is not None or transition_exposure is not None:
+        elif gate is not None or exposure is not None or transition_exposure is not None or action_rate_relief is not None:
             raise ValueError("resume requires adaptive state; use actor-only load for a warm start")
         self.capability_gate = gate
         self.evaluation_distribution = distribution
         self.command_exposure = exposure
         self.transition_exposure = transition_exposure
+        self.action_rate_relief = action_rate_relief
+        self.entropy_consolidation = consolidation
+        self._consolidation_needs_baseline = consolidation_needs_baseline
         self.completed_iterations = completed
         manager_env = _manager_env(self.env)
         manager_env.common_step_counter = completed * self.cfg["num_steps_per_env"]
@@ -1202,12 +1532,21 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             exposure.apply(manager_env)
         if transition_exposure is not None:
             transition_exposure.apply(manager_env)
+        if action_rate_relief is not None:
+            action_rate_relief.apply(manager_env)
         saved_fraction = (state or {}).get("final_com_fraction", 0.0)
         self._set_final_com_fraction(0.0 if saved_fraction is None else float(saved_fraction))
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
         self.resume_checkpoint = str(Path(path).resolve())
         self._needs_reset = True
+        if entropy_coef is not None:
+            self._set_entropy_coefficient(entropy_coef)
+        # Legacy checkpoints have no entropy field: keep the launch coefficient.
+        # An explicit treatment overrides full loads (including rollback), while
+        # ordinary resumes/rollbacks restore the saved trainer coefficient.
+        self._apply_entropy_override()
+        self._activate_final_range_finetune()
         return infos
 
     def rollback(self, checkpoint_path: str):

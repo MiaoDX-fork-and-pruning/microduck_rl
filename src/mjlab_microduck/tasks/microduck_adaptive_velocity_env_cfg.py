@@ -88,15 +88,8 @@ STRICTIFICATION_PROFILE_STAGES = (
 )
 
 
-def _resume_sensor_reset_fraction() -> float | None:
-    """Read the persisted sensor coverage before constructing a resume env.
-
-    The adaptive runner restores its state after the environment exists, so a
-    reset event must be registered during config construction. The launcher
-    normally propagates this value as an environment variable; this fallback
-    also makes direct ``train`` resumes reproduce the checkpoint distribution.
-    """
-
+def _resume_adaptive_state() -> dict | None:
+    """Read settings needed to construct the environment before runner load."""
     checkpoint_name = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
     if not checkpoint_name:
         return None
@@ -107,7 +100,13 @@ def _resume_sensor_reset_fraction() -> float | None:
 
     payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
     state = (payload.get("infos") or {}).get("adaptive_curriculum")
-    if not isinstance(state, dict) or "sensor_reset_fraction" not in state:
+    return state if isinstance(state, dict) else None
+
+
+def _resume_sensor_reset_fraction() -> float | None:
+    """Recreate checkpointed reset coverage before the environment exists."""
+    state = _resume_adaptive_state()
+    if state is None or "sensor_reset_fraction" not in state:
         return None
     try:
         fraction = float(state["sensor_reset_fraction"])
@@ -166,6 +165,30 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # overrides deterministic while ordinary resumes remain exact.
     adaptive_transition_probability_override: float | None = None
     adaptive_transition_bootstrap_mode_override: bool = False
+    # Full resumes restore the checkpoint's PPO entropy coefficient. Use this
+    # explicit treatment to change it after restore, including rollback loads.
+    # Fresh/legacy runs otherwise keep agent.algorithm.entropy_coef.
+    adaptive_entropy_coef_override: float | None = None
+    # Experimental, bounded consolidation selected from native gate feedback.
+    # Off for fresh recipes until behavioral validation; full resumes inherit it.
+    adaptive_entropy_consolidation: bool = False
+    # Explicit post-acquisition mode. A full trainer resume moves adaptive-owned
+    # CoM axes to their canonical final stages and disables gate decisions.
+    adaptive_final_range_finetune: bool = False
+    # Optional axis-isolation treatment for final-range fine-tuning. Empty means
+    # all axes owned by the selected adaptive mode.
+    adaptive_final_range_axes: tuple[str, ...] = ()
+    # A bounded reward relief used by the lateral-drive adaptive recipe when
+    # the yaw frontier is still unacquired.  The runner owns its state and
+    # persists it in the adaptive checkpoint; the canonical action-rate
+    # curriculum remains the fallback outside the relief window.
+    adaptive_action_rate_relief: bool = False
+    adaptive_action_rate_relief_weight: float = -0.2
+    adaptive_action_rate_relief_trigger: float = 0.55
+    adaptive_action_rate_relief_release: float = 0.80
+    adaptive_action_rate_relief_windows: int = 4
+    adaptive_action_rate_relief_cooldown_windows: int = 1
+    adaptive_action_rate_relief_scope: str = "all"
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -271,6 +294,34 @@ def make_microduck_adaptive_velocity_env_cfg(
         "composed": "Mjlab-Velocity-Flat-Adaptive-MicroDuck",
     }[axis_mode]
     cfg.adaptive_source_sha = os.environ.get("MICRODUCK_SOURCE_SHA", "")
+    cfg.adaptive_final_range_finetune = (
+        os.environ.get("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "0") == "1"
+    )
+    target_final_axis_mode = os.environ.get(
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE", "composed"
+    )
+    # The task registry constructs every adaptive variant while importing the
+    # package.  A final-range launcher environment is therefore also visible
+    # to the static registration entry; leave that unrelated factory in its
+    # ordinary mode and let the launcher/runner reject a static fine-tune.
+    if axis_mode == "all_static" or axis_mode != target_final_axis_mode:
+        cfg.adaptive_final_range_finetune = False
+        cfg.adaptive_final_range_axes = ()
+    elif cfg.adaptive_final_range_finetune:
+        raw_final_axes = os.environ.get("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES")
+        enabled_axes = resolve_enabled_axes(axis_mode)
+        requested_axes = enabled_axes if raw_final_axes is None else tuple(
+            name.strip() for name in raw_final_axes.split(",") if name.strip()
+        )
+        if not requested_axes or any(name not in enabled_axes for name in requested_axes):
+            raise ValueError("final-range axes must be a nonempty subset of adaptive axes")
+        if len(set(requested_axes)) != len(requested_axes):
+            raise ValueError("final-range axes must not contain duplicates")
+        cfg.adaptive_final_range_axes = tuple(
+            name for name in enabled_axes if name in requested_axes
+        )
+    else:
+        cfg.adaptive_final_range_axes = ()
     cfg.adaptive_evaluator_config_sha256 = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_CONFIG_SHA256", "")
     cfg.adaptive_evaluation_interval = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "0"))
     cfg.adaptive_evaluation_seed = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_SEED", "20260916"))
@@ -291,6 +342,12 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
+    if cfg.adaptive_final_range_finetune:
+        # The final-range segment is fixed-budget PPO; it never launches a
+        # native gate evaluator or an automatic consolidation attempt.
+        cfg.adaptive_evaluation_interval = 0
+        cfg.adaptive_evaluation_distribution = "final"
+        cfg.adaptive_allow_distribution_migration = True
     sensor_corner_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION")
     if sensor_corner_fraction is not None:
         try:
@@ -338,6 +395,10 @@ def make_microduck_adaptive_velocity_env_cfg(
         cfg.adaptive_final_com_fraction = float(final_com_fraction)
         if not 0.0 <= cfg.adaptive_final_com_fraction <= 0.20:
             raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
+    if cfg.adaptive_final_range_finetune:
+        if cfg.adaptive_final_com_fraction not in (None, 0.0):
+            raise ValueError("final-range fine-tuning cannot enable final-CoM rehearsal")
+        cfg.adaptive_final_com_fraction = 0.0
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
@@ -387,6 +448,30 @@ def make_microduck_adaptive_velocity_env_cfg(
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
                     cfg.adaptive_yaw_feedback_weight = LATERAL_DRIVE_YAW_L1_WEIGHT
+                    # Test bounded relief for a late yaw acquisition deficit
+                    # that persisted under reduced additive observation noise.
+                    # The controller temporarily softens action smoothing while
+                    # the strict native capability gate stays unchanged.
+                    cfg.adaptive_action_rate_relief = True
+                    saved = (_resume_adaptive_state() or {}).get("action_rate_relief")
+                    if isinstance(saved, dict):
+                        for field, key in (
+                            ("weight", "relief_weight"),
+                            ("trigger", "trigger_threshold"),
+                            ("release", "release_threshold"),
+                            ("windows", "active_windows"),
+                            ("cooldown_windows", "cooldown_windows"),
+                        ):
+                            if key in saved:
+                                setattr(cfg, f"adaptive_action_rate_relief_{field}", saved[key])
+                    scope = os.environ.get("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE")
+                    if scope is None:
+                        scope = saved.get("scope", "all") if isinstance(saved, dict) else "all"
+                    if scope not in ("all", "pure_yaw"):
+                        raise ValueError("action-rate relief scope must be all or pure_yaw")
+                    cfg.adaptive_action_rate_relief_scope = scope
+                    if scope == "pure_yaw":
+                        cfg.rewards["action_rate_l2"].func = microduck_mdp.adaptive_action_rate_l2
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can
@@ -485,6 +570,9 @@ def make_microduck_adaptive_velocity_env_cfg(
         cfg.adaptive_frontier_stall_windows = override
     if play:
         cfg.adaptive_evaluation_interval = 0
+    saved_consolidation = (_resume_adaptive_state() or {}).get("entropy_consolidation")
+    if saved_consolidation is not None and not play and not cfg.adaptive_final_range_finetune:
+        cfg.adaptive_entropy_consolidation = True
     return cfg
 
 

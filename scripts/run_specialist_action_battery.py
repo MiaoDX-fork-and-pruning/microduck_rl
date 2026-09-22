@@ -21,7 +21,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from infer_policy import DEFAULT_POSE, PolicyInference  # noqa: E402
+from infer_policy import (  # noqa: E402
+    DEFAULT_CURRENT_LIMIT_A,
+    DEFAULT_POSE,
+    PolicyInference,
+    apply_xl330_current_limit,
+)
 
 
 COMMAND_SPEEDS = (0.03, 0.05, 0.08, 0.10, 0.15, 0.20)
@@ -135,11 +140,19 @@ def trunk_metrics(
     up_dot = float(np.clip(rotation[2, 2], -1.0, 1.0))
     position = data.xpos[body_id].copy()
     quaternion = data.xquat[body_id].copy()
+    # BODY uses the rotated principal-inertia frame at the CoM. XBODY uses
+    # the link axes and origin shared by commands and MJLab root_link_*_b.
+    velocity = np.zeros(6, dtype=np.float64)
+    mujoco.mj_objectVelocity(
+        model, data, mujoco.mjtObj.mjOBJ_XBODY, body_id, velocity, 1
+    )
     return {
         "position": position.tolist(),
         "quaternion_wxyz": quaternion.tolist(),
         "height_m": float(position[2]),
         "tilt_rad": float(math.acos(up_dot)),
+        "angular_velocity_rad_s": velocity[:3].astype(np.float32),
+        "linear_velocity_m_s": velocity[3:].astype(np.float32),
     }
 
 
@@ -274,6 +287,7 @@ def run_case(
     profile = POLICY_PROFILES[policy_id]
     model = mujoco.MjModel.from_xml_path(str(PROFILE_SCENES[profile]))
     model.opt.timestep = 0.005
+    torque_limit = apply_xl330_current_limit(model)
     data = mujoco.MjData(model)
     policy = _load_policy(model, data, onnx_path)
     reset_pose(policy_id, case["id"], model, data, policy)
@@ -335,14 +349,8 @@ def run_case(
         records["trunk_quaternion_wxyz"].append(metrics["quaternion_wxyz"])
         records["trunk_tilt_rad"].append(tilt)
         records["trunk_height_m"].append(metrics["height_m"])
-        # mj_objectVelocity(local=1) returns body-frame angular then linear
-        # velocity; this is the frame used by the velocity command contract.
-        body_vel = np.zeros(6, dtype=np.float64)
-        mujoco.mj_objectVelocity(
-            model, data, mujoco.mjtObj.mjOBJ_BODY, body_id, body_vel, 1
-        )
-        records["trunk_angular_velocity_rad_s"].append(body_vel[:3].astype(np.float32))
-        records["trunk_linear_velocity_m_s"].append(body_vel[3:].astype(np.float32))
+        records["trunk_angular_velocity_rad_s"].append(metrics["angular_velocity_rad_s"])
+        records["trunk_linear_velocity_m_s"].append(metrics["linear_velocity_m_s"])
         records["contacts"].append("|".join(contact_names(model, data)))
         records["recovered"].append(recovered)
 
@@ -365,6 +373,11 @@ def run_case(
         "id": case["id"],
         "seed": seed,
         "input_mode": case["input_mode"],
+        "actuator_profile": {
+            "model": "xml_position_pd",
+            "current_limit_a": DEFAULT_CURRENT_LIMIT_A,
+            "force_limit_nm": torque_limit,
+        },
         "requested_speed_m_s": case.get("speed"),
         "steps": len(records["raw_action"]),
         "finite_61d_14d": finite
