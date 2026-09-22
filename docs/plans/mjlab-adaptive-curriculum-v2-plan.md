@@ -2,9 +2,10 @@
 
 Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
 unproven. Runner consolidation, native MJLab/BAM evaluation, signed-EMA gate
-calibration, and bounded command-exposure feedback are implemented, but the
-single-seed acquisition continuation still fails the six-bucket gate across
-native reset/DR seeds. See the active status capsule for current proof.
+calibration, and bounded command-exposure feedback are implemented. The
+command-conditioned evidence contract is now proven in a bounded continuation,
+but the policy still fails the six-bucket gate across native reset/DR seeds.
+See the active status capsule for current proof.
 Date: 2026-09-22
 Related:
 
@@ -70,9 +71,11 @@ The final native traces support that diagnosis: held-out mean velocity bias is
 small (`-0.015 / -0.0025 m/s` forward/lateral and `+0.014 rad/s` yaw), while
 samplewise ripple remains large (`0.0217 / 0.1070 m/s` and `0.2227 rad/s`).
 The extra reset/DR seeds move the failing bucket between yaw and linear
-commands. The next contract must record bucket-conditioned sample counts and
-weighted reward mass, rather than treating a single checkpoint's aggregate as
-an acquisition explanation.
+commands. The command-conditioned contract is now implemented and exercised in
+`/tmp/microduck-adaptive-evidence-s17-3750-r2/`: two native windows recorded
+seven-class exposure and weighted reward mass with zero unclassified samples,
+while the held-out lower-tail remained `0.75130`. The next intervention must
+use that evidence rather than another coefficient-only continuation.
 
 ## Goal
 
