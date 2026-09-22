@@ -688,27 +688,56 @@ def test_low_score_preservation_failure_restores_sampling_without_rewinding_budg
     assert runner.evaluation_events[-1]["kind"] == "rollback"
 
 
-def test_repeated_preservation_failures_accumulate_live_exposure_repairs(monkeypatch, tmp_path):
+@pytest.mark.parametrize("resume_after_first", [False, True])
+def test_repeated_preservation_failures_accumulate_live_exposure_repairs(
+    monkeypatch, tmp_path, resume_after_first
+):
     _fake_parent_io(monkeypatch)
     runner = _runner()
-    term = _attach_exposure(runner)
+    _attach_exposure(runner)
     runner.completed_iterations = 10
-    checkpoint = tmp_path / "candidate.pt"
+    checkpoint = tmp_path / "known-good.eval.pt"
     checkpoint.write_bytes(b"candidate")
     runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint))
     runner._evaluate_window(str(checkpoint))
+    known_good = Path(runner.last_known_good_checkpoint)
+    known_good_bytes = known_good.read_bytes()
+    expected_policy = copy.deepcopy(runner.alg.state)
+    expected_gate = runner.capability_gate.state_dict()
+    yaw_probability = runner.command_exposure.probabilities["yaw"]
+    windows = runner.command_exposure.windows
+    raw = _raw(low=False)
+    raw["yaw"]["angular_tracking_error_rad_s"] = 0.4
 
-    runner.completed_iterations = 20
-    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint, low=True))
-    runner._evaluate_window(str(checkpoint))
-    first = runner.command_exposure.state_dict()
-    first_probability = first["probabilities"]["lateral"]
-    assert first["retention_repairs"] == 1
-
-    runner.completed_iterations = 30
-    runner._evaluate_window(str(checkpoint))
-    second = runner.command_exposure.state_dict()
-    assert second["retention_repairs"] == 2
-    assert second["windows"] == first["windows"] + 1
-    assert second["probabilities"]["lateral"] != pytest.approx(first_probability)
-    assert term.cfg.bucket_probabilities == pytest.approx(tuple(second["probabilities"].values()))
+    for repair_index, completed in enumerate((20, 30), start=1):
+        runner.completed_iterations = completed
+        runner.current_learning_iteration = completed - 1
+        runner.alg.state["weight"] = torch.tensor([float(completed)])
+        candidate = tmp_path / f"model_{completed - 1}.eval.pt"
+        runner.save(str(candidate))
+        runner.evaluator = SimpleNamespace(
+            evaluate=lambda **kw: _report_with_raw(kw["checkpoint_path"], raw)
+        )
+        runner._evaluate_window(str(candidate))
+        state = runner.command_exposure.state_dict()
+        assert runner.last_gate_outcome == "preservation_failure"
+        assert runner.last_known_good_checkpoint == str(known_good)
+        assert known_good.read_bytes() == known_good_bytes
+        torch.testing.assert_close(runner.alg.state, expected_policy)
+        assert runner.capability_gate.state_dict() == expected_gate
+        assert runner.completed_iterations == completed
+        assert runner.env.common_step_counter == completed * 24
+        assert state["retention_repairs"] == repair_index
+        assert state["windows"] == windows + repair_index
+        assert state["last_repair_buckets"] == ["yaw"]
+        assert state["probabilities"]["yaw"] > yaw_probability
+        yaw_probability = state["probabilities"]["yaw"]
+        assert state["probabilities"]["zero"] == pytest.approx(0.20)
+        assert sum(state["probabilities"].values()) == pytest.approx(0.80)
+        live = runner.env.command_manager.get_term("twist").cfg.bucket_probabilities
+        assert live == pytest.approx(tuple(state["probabilities"].values()))
+        if repair_index == 1 and resume_after_first:
+            runner = _runner()
+            _attach_exposure(runner)
+            runner.load(str(candidate.with_suffix(".adaptive.pt")))
+            assert runner.command_exposure.state_dict() == state
