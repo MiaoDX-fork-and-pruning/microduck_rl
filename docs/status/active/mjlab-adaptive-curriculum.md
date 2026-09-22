@@ -1,125 +1,121 @@
 # MJLab Adaptive Curriculum v2
 
-Status: **ACTIVE** — no usable policy established. Updated: 2026-09-23.
+Status: **ACTIVE** — no usable policy accepted. Updated: 2026-09-23.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
-The user authorized sustained necessary changes, training and checks through
-`intuitive-flow`. Latest user requested status; the execution objective remains
-active. Latest slice: teacher allocation repair and an inconclusive behavioral
-comparison. The boundary-controlled replay and a 10-seed native yaw
-robustness diagnostic are complete; no training process is currently running.
+The user authorized sustained necessary changes, training and verification through
+`intuitive-flow`; the latest status request does not cancel execution.
+Project-status writer: not assigned; project-status delta: none.
 
-## Current evidence
+## Current state
 
-Two bounded seed-17 6,000→6,500 campaigns have completed. Neither is accepted.
-Scores are normalized capability scores, not success rates; each bucket must
-reach .80. Both CoM axes remain at ±3 mm.
+Phase 0/1 automation is implemented; Phase 2A usable-policy acquisition remains
+open. The seed-17 relief campaign completed 6250→6750 updates at 4096 envs.
+The 6750 candidate lost turn preservation and was automatically rejected; the
+final checkpoint retains the 6500 actor. Consumed budget remains 6750.
+All 13 actor-state tensors equal the known-good snapshot and differ from the
+rejected actor. Both adaptive CoM axes remain at stage 0 (±3 mm).
 
-| Retained policy | Native stage minimum | Native final held-out minimum | Corrected CPU minimum |
-| --- | ---: | ---: | ---: |
-| Original stage-gate control | .248 yaw | .347 yaw | .000 yaw (5/6 pass) |
-| Teacher-repair replay | .589 yaw | .748 yaw | .343 turn-right (3/6 pass) |
+Scores below are normalized capability, not success rates. **Every bucket must
+reach .80.** The seed sets and distributions are deliberately labelled separately.
 
-The replay's 6500 candidate failed right-turn preservation and was rolled back.
-Its final actor and normalizer exactly equal the 6250 snapshot (25 tensors),
-while consumed budget remains 6500. The rejected candidate's stage yaw .363
-must not be presented as the retained policy's stage score. Retained native
-held-out scores: zero .909, forward .899, lateral .804, yaw .748, left .799,
-right .782. CPU: zero .970, forward .879, lateral .783, yaw .705, left .829,
-right .343. The protected set contains zero and turn-right.
+| Retained 6500 actor evaluation | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stage gate, seeds 20260815–17 | .938 | .735 | .796 | .669 | .830 | .812 |
+| Final native, seed 20260915 | .923 | .879 | .797 | .837 | .737 | .820 |
+| Stage diagnostic, worst of 20260915–24 | .914 | .696 | .298 | .146 | .707 | .767 |
+| Corrected CPU rehearsal, seed 20260915 | .940 | .903 | .727 | .000 | .696 | .849 |
 
-Authoritative summaries, exact report/checkpoint paths and hashes:
+No diagnostic seed passes all six buckets. Yaw passes 3/10; lateral passes 3/10
+and falls on seed 20260916. Worst yaw seed 20260919 averages .360 rad/s for a
+.8 command; the first four seconds include under-speed and a brief reverse,
+then the last two seconds reach approximately .86. CPU yaw is a different
+failure: average **1.390 rad/s** for the same .8 command (native final: .843),
+with samplewise error .655 exceeding the .6 cap. Do not label it idle.
 
-- Control: `/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/experiment-summary.json`.
-- Replay: `/tmp/microduck-adaptive-deficit-s17-6500-96fd557/experiment-summary.json`.
-  Its `retained-policy-proof.json` verifies the rollback tensor equality.
+All 60 native/ONNX action parity cases pass (maximum absolute error 1.67e-6).
+All cohort member reports, trace hashes and source-manifest files were verified.
+Parity confirms the export on identical inputs; it does not explain the
+native/CPU physics and reset-distribution difference.
 
-## Controller repair and experiment limit
+Authoritative artifact:
+`/tmp/microduck-adaptive-action-rate-s17-500/experiment-summary.json`.
+It records exact checkpoint, report, trace, ONNX and source hashes, retained vs
+rejected evidence, and the matched first-250-update comparison. The matched
+control's stage yaw is .353 versus relief .669 on the same gate seeds. Both
+fail mastery; the relief campaign consumed 500 updates in total, not 250.
+This single training seed establishes neither reproducibility nor superiority.
 
-`96fd557` interrupts configured frontier dwell when another directional bucket
-trails the current focus by more than .25 normalized capability. It preserves
-.80 mastery, quarter-step probability updates, directional floors, zero/nominal
-anchors and existing rollback. The old saved .784 lateral / .248 yaw state
-incorrectly increased lateral probability and reduced yaw; regression tests
-now redirect the bounded focus slice to yaw, including actual command sampling
-and exact save/resume decisions.
+## Implemented slice and proof boundaries
 
-The replay **did not exercise that intervention during training**. At 6250,
-lateral .787 versus yaw .589 was below the .25 urgency margin; at terminal
-6500 a mastered right-turn failure invoked the existing retention repair and
-rollback. Last-window real samples remained .253 lateral versus .083 yaw.
-GPU training diverged before the first gate despite matching seed/checkpoint,
-so score differences cannot be credited to the repair. See
-`first-gate-comparison.json` and `pre-intervention-comparison.json` in the replay.
+- `ef4734e`: bounded adaptive action-rate relief, enabled only in LateralDrive.
+  Worst yaw/turn capability below .55 activates weight -.2; release requires
+  .80 mastery or four gate windows, followed by cooldown. Training confirms
+  the live -.2 override, and the campaign's smoke64/5 passed.
+- `75f479f`: relief cannot strengthen an earlier smaller canonical penalty;
+  legacy loads clear stale relief; rejected candidates cannot release it;
+  full resumes cannot silently discard the enabled controller. Focused proof:
+  83 tests, then 6 relief tests after constructor validation, adaptive Ruff and
+  diff checks. Full `mdp.py` Ruff has 17 pre-existing findings.
+- Training used `ef4734e`, not the later fixes. Source snapshot
+  `/tmp/microduck-adaptive-action-rate-source-ef4734e` has 1001 verified files,
+  including unrelated copied files and the existing CPU seed overlay. Its
+  recorded manifest hash is `4dd1470ff30c1cc4f136737b8951b008606e3ed56b7b6f13933ce7a1d2bab5f4`.
+- Current diagnostic source is a clean `git archive 75f479f` plus only the
+  explicit CPU seed overlay: `/tmp/microduck-adaptive-relief-source-75f479f`,
+  680 verified files, manifest file SHA
+  `29a3eecea543830a2b6af0246f671c9eacb47f57ae6cca9a0ca1df69abdcf9bf`.
+  No long training has run on this newer source; smoke64/5 is still required.
+- Earlier infrastructure proof: 269 relevant tests and a fresh non-editable
+  locked install/config/14-actuator model compile pass. Fresh-environment GPU
+  training and remote execution remain unproven. CPU link-frame correction is
+  `931e3c9`; old principal-inertia-frame tracking scores are superseded.
 
-A 6500→7000 extension was briefly launched on the mistaken premise that the
-retained model had the rejected candidate's .363 yaw score. It was stopped
-before completing the budget after verifying the rollback. Its terminal status
-is `stopped_invalid_experiment_premise` at
-`/tmp/microduck-adaptive-deficit-s17-6500-7000-96fd557/execution-status.json`.
-Do not restart it or treat it as behavioral evidence.
+## Current diagnostic and next decision
 
-## Remaining blocker and next proof
+Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
+Global smoothing relief improves native yaw acquisition but does not repair
+reset robustness, lateral survival, or CPU rate transfer; do not blindly extend
+it or repeat the failed direct-yaw/turn-proxy exposure budgets.
 
-Blocker fingerprint: `direct_command_yaw_under_reset_dr_robustness`.
-The strict boundary treatment and its matched no-injection control both
-completed the same 6250→6500 budget. The treatment changed only the teacher
-decision from lateral focus to yaw focus, increased yaw sampling from about
-8.2% to 12.5%, and still degraded native held-out yaw to `.129` (corrected CPU
-to `0`). The control retained native held-out lower-tail `.528` and corrected
-CPU lower-tail `.458`; neither is accepted. These are rejection results, not
-retained-policy scores.
+The earlier 6250 actor white-noise ablation is complete at
+`/tmp/microduck-obs-sensitivity-6250/probe.json`. Removing additive white noise
+did not rescue the failed seed. Fixed IMU misalignment and encoder bias were
+unchanged, so the probe does not exclude persistent sensor calibration effects.
 
-The exact 6250 actor was then evaluated natively over ten reset/DR seeds at the
-stage distribution (CoM and head-CoM ±3 mm):
-`/tmp/microduck-yaw-robustness-6250-96fd557/capability-stage.json`. The
-conservative aggregate lower tail is `0.000`. Pure yaw scores by seed were
-`0, .766, .035, 0, .038, 0, 0, 0, 0, 0`; no member reached `.80`, while all
-yaw rollouts survived without falling. The manifest records the same DR ranges
-and reset sources for every member, with consumed-state hashes, so this proves
-reset/DR sensitivity but does not yet identify one scalar friction, armature or
-CoM realization as the cause.
+The fixed-bias comparison **completed**, terminal session `61738` exited 0.
+Evidence: `/tmp/microduck-relief-6500-sensor-bias/analysis-summary.json`.
+Twelve evaluations cover seeds 20260915/16/19 × nominal, zero encoder bias,
+identity IMU misalignment and both nominal. All 72 trace hashes pass; six
+recorded physical reset fields match, unchanged sensor fields match, and
+white-noise settings are identical. Nominal scores reproduce the prior cohort.
 
-Do not repeat direct-yaw exposure or turn-proxy exposure as if either repaired
-the policy. The next bounded intervention must target reset-conditioned pure-yaw
-acquisition and should record the realized reset/DR state needed to distinguish
-an initialization sensitivity from a missing yaw behavior. Keep the smoke64/5
-contract, native-vs-CPU separation, and exact retained-policy rollback rules.
+Seed 20260919 yaw rises from .146 to .807 without encoder bias (mean rate
+.360→.830 rad/s); identity IMU alone leaves .115. Seed 20260915 yaw rises
+.744→.859 with identity IMU. Seed 20260916 lateral still falls in all four
+conditions. These are diagnostic interventions, not product acceptance.
 
-## Proven implementation and portability
+Next decision: calibration robustness now has direct evidence. Keep product
+sensor DR, diagnose the persistent lateral fall under physical reset/dynamics,
+and select a bounded treatment that preserves turns. CPU overspeed remains a
+separate unresolved transfer problem. No training or diagnostic process is
+currently running. Any new training needs an evidence-backed contract,
+immutable source, smoke64/5 and unchanged native/CPU acceptance.
 
-- 269 relevant tests pass; one existing specialist-manifest test is excluded
-  because `artifacts/specialist_artifact_manifest.json` is absent. Focused Ruff
-  (`E4,E7,E9,F`) and diff checks pass. Full-suite/full-Ruff cleanliness is not claimed.
-- New-source real smoke64/5 passed with a three-member stage gate (±3 mm), final
-  held-out distribution (body ±15/head ±10 mm), checkpointed sensor reset,
-  normalized ONNX and corrected CPU frame. All six CPU reset-noise arrays match
-  consumed seeds: `/tmp/microduck-adaptive-deficit-smoke-96fd557/runtime-proof.json`.
-- Frozen source `/tmp/microduck-adaptive-deficit-source-96fd557/` has 679 verified
-  files. Its manifest explicitly records the pre-existing uncommitted CPU seed
-  overlay; label `96fd557-cpu-seed-overlay-5ae829076760`. Preserve that worktree
-  patch and do not describe the overlay as the plain committed tree.
-- `931e3c9` corrects CPU velocity measurement from principal-inertia/CoM
-  `mjOBJ_BODY` to link-frame/origin `mjOBJ_XBODY`. Identical-ONNX replay changed
-  measurements only. Historical old-frame CPU and actuator A/B tracking scores
-  are superseded; proof: `/tmp/microduck-adaptive-cpu-link-frame-s17-6000/`.
-- A fresh non-editable locked install, isolated imports, config loading and
-  packaged 14-actuator model compilation pass on Linux x86_64. Explicit
-  `--default-index https://pypi.org/simple` avoids local mirror/lock mismatch.
-  Proof: `/tmp/microduck-adaptive-fresh-sync-proof-96fd557.json`.
-  Fresh-environment GPU training and remote execution remain unproven.
+## Remaining acceptance and boundaries
 
-## Acceptance and boundaries
+Required: retained six-bucket native mastery at final ranges, a fresh held-out
+seed set after diagnostics, rollout/video inspection, normalized ONNX and CPU
+rehearsal, the same autonomous procedure across training seeds 17/23/47, canonical
+final-distribution fine-tuning and matched-budget fixed/axis comparisons.
+No hardware or adaptive-superiority claim exists. No external blocker prevents
+the next required diagnostic; the goal is neither complete nor blocked.
 
-Required: retained six-bucket native mastery, fresh final-distribution held-out,
-rollout/video inspection, normalized ONNX/CPU rehearsal, the same automated
-procedure across training seeds 17/23/47, then a matched-budget fixed baseline.
-No hardware or adaptive-superiority claim exists. There is no external blocker
-preventing the next diagnostic, and the goal is not complete.
-
-Preserve canonical Velocity, 61D/14D ABI, BAM M6, unfiltered actions, reward signs,
-.80 thresholds and exact-zero/nominal anchors. IsaacLab, uv.lock, generated files
-and unrelated processes remain outside this task. Advisor, stronger teachers,
-generalist and hardware deployment remain parked. Do not repeat unchanged
-sensor-reset, slew, rejected yaw-planar or non-intervening teacher budgets.
-Runs use TensorBoard and the validated local venv under `/tmp`.
+Preserve canonical Velocity, 61D/14D ABI, BAM M6, unfiltered actions, reward
+signs, .80 thresholds and exact-zero/nominal anchors. Keep native and CPU proof,
+and rejected and retained actors, separate. Preserve the pre-existing CPU seed
+patch in `scripts/run_specialist_action_battery.py`. IsaacLab, `uv.lock`,
+generated files and unrelated processes are outside this task. Advisor,
+stronger teachers, generalist and hardware deployment remain parked.
+Use the validated local venv and unique `/tmp` working directories; the
+worktree's `logs/rsl_rl` is not writable. Do not change its ownership.
