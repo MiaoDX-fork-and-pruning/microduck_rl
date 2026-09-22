@@ -144,6 +144,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # Optional adaptive-only startup coverage for coupled sensor DR corners.
     # The canonical fixed Velocity recipe keeps the ordinary independent draws.
     adaptive_sensor_corner_fraction: float = 0.0
+    # Optional adaptive-only reset resampling for the coupled sensor realization.
+    # The realization stays fixed within an episode and is redrawn on reset.
+    adaptive_sensor_reset_fraction: float = 0.0
     # None inherits the checkpoint (or zero on a fresh run). An explicit value
     # starts a recorded experiment override after resume; at most 20% is final.
     adaptive_final_com_fraction: float | None = None
@@ -261,6 +264,26 @@ def make_microduck_adaptive_velocity_env_cfg(
             mode="startup",
             params={
                 "fraction": cfg.adaptive_sensor_corner_fraction,
+                "max_angle_deg": 6.0,
+                "bias_range": (-0.015, 0.015),
+            },
+        )
+    sensor_reset_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION")
+    if sensor_reset_fraction is not None:
+        try:
+            cfg.adaptive_sensor_reset_fraction = float(sensor_reset_fraction)
+        except ValueError as exc:
+            raise ValueError("adaptive sensor reset fraction must be numeric") from exc
+        if not 0.0 <= cfg.adaptive_sensor_reset_fraction <= 1.0:
+            raise ValueError("adaptive sensor reset fraction must be in [0, 1]")
+    if cfg.adaptive_sensor_corner_fraction > 0.0 and cfg.adaptive_sensor_reset_fraction > 0.0:
+        raise ValueError("sensor corner and sensor reset coverage are mutually exclusive")
+    if cfg.adaptive_sensor_reset_fraction > 0.0:
+        cfg.events["adaptive_sensor_resample"] = EventTermCfg(
+            func=microduck_mdp.randomize_sensor_realization,
+            mode="reset",
+            params={
+                "fraction": cfg.adaptive_sensor_reset_fraction,
                 "max_angle_deg": 6.0,
                 "bias_range": (-0.015, 0.015),
             },

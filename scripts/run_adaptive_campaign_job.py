@@ -222,6 +222,7 @@ def main() -> int:
         # Sensor-corner coverage is a training-only augmentation.  Frozen
         # native and CPU reports must use the product DR distribution.
         "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
+        "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

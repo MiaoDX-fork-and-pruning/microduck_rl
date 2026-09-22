@@ -3814,6 +3814,59 @@ def randomize_sensor_corners(
     asset.data.encoder_bias[corner_ids] = midpoint + magnitude * signs
 
 
+def randomize_sensor_realization(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    fraction: float,
+    max_angle_deg: float,
+    bias_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> None:
+    """Resample the coupled sensor realization for reset environments.
+
+    The ordinary adaptive recipe samples IMU mounting error and encoder bias at
+    startup, which makes each environment carry one hidden realization for the
+    entire run.  This opt-in reset event keeps a realization constant between
+    resets while decorrelating it from the command and reset stream on every
+    episode.  It is an adaptive acquisition probe only; the canonical fixed
+    recipe and frozen evaluators do not register it.
+    """
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("sensor reset fraction must be finite and in [0, 1]")
+    if not math.isfinite(max_angle_deg) or max_angle_deg < 0.0:
+        raise ValueError("sensor reset angle must be finite and nonnegative")
+    lo, hi = bias_range
+    if not math.isfinite(lo) or not math.isfinite(hi) or lo > hi:
+        raise ValueError("sensor reset bias range must be finite and ordered")
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.long)
+    else:
+        env_ids = env_ids.to(env.device, dtype=torch.long)
+    if env_ids.numel() == 0 or fraction == 0.0:
+        return
+
+    count = min(env_ids.numel(), max(1, math.ceil(env_ids.numel() * fraction)))
+    if count == env_ids.numel():
+        selected = env_ids
+    else:
+        order = torch.randperm(env_ids.numel(), device=env.device)[:count]
+        selected = env_ids[order]
+
+    asset: Entity = env.scene[asset_cfg.name]
+    q = _imu_misalignment_quat(env, math.radians(max_angle_deg))
+    axis = torch.randn((count, 3), device=env.device, dtype=q.dtype)
+    axis = axis / (torch.norm(axis, dim=-1, keepdim=True) + 1e-8)
+    angle = torch.rand(count, device=env.device, dtype=q.dtype) * math.radians(max_angle_deg)
+    q[selected] = quat_from_angle_axis(angle, axis)
+
+    joint_count = asset.data.encoder_bias.shape[1]
+    bias = torch.rand(
+        (count, joint_count), device=env.device, dtype=asset.data.encoder_bias.dtype
+    ) * (hi - lo) + lo
+    asset.data.encoder_bias[selected] = bias
+
+
 def projected_gravity_imu_misaligned(
     env: ManagerBasedRlEnv,
     max_angle_deg: float = 1.0,

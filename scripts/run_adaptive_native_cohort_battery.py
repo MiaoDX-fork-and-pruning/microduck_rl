@@ -36,6 +36,7 @@ _TRAINING_ONLY_ENV_NAMES = (
     "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
     "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
     "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
+    "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
 )
 # Keep the old name as a compatibility alias for existing contract tests and
 # callers that only know about transition overrides.

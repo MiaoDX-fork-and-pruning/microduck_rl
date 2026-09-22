@@ -333,6 +333,8 @@ class CommandCapabilityEvaluator:
             "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
             "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
             "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+            "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
+            "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
         ):
             evaluator_env.pop(name, None)
         with (output.parent / "evaluator.log").open("w") as log:
