@@ -2,9 +2,9 @@
 
 Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
 unproven. The 6,000-update sensor-reset policy still fails native and CPU product
-checks. Stage-aware acquisition gates are implemented and CPU-verified; real
-smoke and a bounded changed-contract campaign are next. Formal seeds 17/23/47
-remain gated.
+checks. Stage-aware acquisition gates are implemented and verified by real
+smoke; a bounded 6,000→6,500 campaign is running. Formal seeds 17/23/47 remain
+gated.
 Date: 2026-09-23
 Related:
 
@@ -40,10 +40,14 @@ override is supplied. Independent held-out native and CPU checks retain the
 final product distribution and original thresholds.
 
 Validation: 250 adaptive/config/capability tests pass, as do focused Ruff
-(`E4,E7,E9,F`) and diff checks. Real 64-env/5-update smoke, a fixed-checkpoint
-three-member stage evaluation, and a bounded 6,000→6,500 training segment must
-establish runtime wiring and whether the corrected feedback changes retained
-learning. Do not interpret this implementation proof as policy acceptance.
+(`E4,E7,E9,F`) and diff checks. The real 64-env/5-update smoke at
+`/tmp/microduck-adaptive-stage-gate-smoke-beea4f8/runtime-proof.json` validates
+three-member stage gating, final-distribution held-out separation, sensor reset,
+and ONNX/CPU execution. The bounded 6,000→6,500 campaign is running at
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`, preceded by a fixed-checkpoint
+three-member stage evaluation. Both use the read-only `beea4f8` source snapshot
+with 679 recorded/verified file hashes. Retained learning is still unproven;
+implementation and smoke proof do not establish policy acceptance.
 
 ### Sustained objective
 

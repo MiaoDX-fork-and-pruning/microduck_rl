@@ -114,25 +114,35 @@ No retained learning gain is established. The campaign source is read-only
 
 ## Current slice and next decision
 
-Blocker fingerprint: `stage_gate_uses_final_com_distribution`.
-Root cause: the evaluator command omitted distribution, so final difficulty
-controlled acquisition at stage 0. The stage-aware contract is implemented;
+Blocker fingerprint: `native_stage0_capability_below_threshold`.
+The feedback-distribution mismatch is repaired in `beea4f8`. Runtime proof is
+`/tmp/microduck-adaptive-stage-gate-smoke-beea4f8/runtime-proof.json`: a real
+64-env/5-update run consumed a valid three-member stage report at ±3 mm;
+held-out native stayed at final ±15/±10 mm, sensor reset stayed at 1.0, and
+normalized ONNX/CPU evaluation completed. No NaN terminations were logged.
 250 adaptive/config/capability tests, focused Ruff (`E4,E7,E9,F`) and diff checks
-pass. No new runtime training evidence is available yet.
+pass. Default full Ruff also exposes existing style findings; it is not claimed
+clean.
 
-Next: record a read-only source snapshot; run a real 64-env/5-update smoke with
-one three-member stage gate; evaluate the 6,000-update policy at checkpointed
-stages with the same final reference step; then run a bounded 6,000→6,500 segment
-using `--gate-distribution stage --rebaseline-gate`. The smoke must pass before
-long training. A stage pass only controls acquisition: final native held-out,
-CPU/XML rehearsal, videos, independent seeds 17/23/47 and matched fixed baseline
-remain required. Do not repeat sensor-reset-only or slew-only budgets.
+A bounded 6,000→6,500 campaign is running under PID `2665136` at
+`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/`. Its `experiment-contract.json`
+owns commands, starting checkpoint hash, seed/budget and stop condition. The
+launcher first evaluates the 6,000-update policy at checkpointed stages with
+the final reference step, then smokes before training 500 more updates with
+`--gate-distribution stage --rebaseline-gate`. Source is read-only
+`/tmp/microduck-adaptive-stage-source-beea4f8/`; all 679 tracked file hashes were
+verified against its adjacent `.manifest.json`. This campaign uses the local
+validated venv, not a fresh dependency sync.
 
-Runtime proof already established for prior slices: 61D actor, 14D action,
-normalizer-baked export, sensor-reset restore, valid native cohort reports and
-retention rollback. Latest policy results above are failures. The local venv
-works; fresh-sync portability remains unproven. Repo `logs/rsl_rl` is not writable
-and W&B has no local key, so local runs use TensorBoard under `/tmp`.
+Next: inspect `execution-status.json`, `campaign-result.json` and both new gate
+windows. Compare retained candidate with the before-training stage report;
+inspect final-distribution held-out and CPU reports independently. Do not
+repeat the segment without a decision-changing hypothesis. A stage pass only
+controls acquisition: final native held-out, CPU/XML rehearsal, videos,
+independent seeds 17/23/47 and matched fixed baseline remain required.
+
+Repo `logs/rsl_rl` is not writable and W&B has no local key, so local runs use
+TensorBoard under `/tmp`. Neither blocks local training.
 
 ## Boundaries and verification inventory
 
