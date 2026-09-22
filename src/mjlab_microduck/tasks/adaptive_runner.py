@@ -949,7 +949,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             action_rate_relief = getattr(self, "action_rate_relief", None)
             if action_rate_relief is not None and action_rate_relief_state is not None:
                 action_rate_relief.load_state_dict(action_rate_relief_state)
-                action_rate_relief.update(metrics)
+                # Successful buckets from a rejected candidate do not prove
+                # that the restored actor has acquired them. Account for the
+                # consumed window without releasing relief on that evidence.
+                action_rate_relief.update(metrics, accepted=False)
                 action_rate_relief.apply(_manager_env(self.env))
                 event["action_rate_relief"] = action_rate_relief.state_dict()
             return None
@@ -1180,20 +1183,17 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             saved_action_rate_relief = state.get("action_rate_relief")
             if saved_action_rate_relief is not None:
                 if action_rate_relief is None:
-                    if bool(saved_action_rate_relief.get("active", False)):
-                        raise ValueError("adaptive checkpoint action-rate relief mismatch")
+                    raise ValueError("adaptive checkpoint action-rate relief mismatch")
                 else:
                     action_rate_relief.load_state_dict(saved_action_rate_relief)
-            elif (
-                action_rate_relief is not None
-                and gate is not None
-                and set(action_rate_relief.yaw_buckets) <= set(gate.best_metrics)
-            ):
+            elif action_rate_relief is not None:
                 # Legacy adaptive checkpoints predate this controller. Seed a
                 # bounded window from their measured yaw deficit so a resume
                 # can repair the missing behavior immediately rather than
                 # waiting for the next evaluation interval.
-                action_rate_relief.bootstrap(gate.best_metrics)
+                action_rate_relief.reset()
+                if gate is not None and set(action_rate_relief.yaw_buckets) <= set(gate.best_metrics):
+                    action_rate_relief.bootstrap(gate.best_metrics)
             feedback_state = state.get("command_feedback")
             if feedback_state is not None:
                 tracker = self._ensure_bucket_feedback()

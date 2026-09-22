@@ -64,3 +64,24 @@ def test_reward_weight_preserves_relief_until_runner_clears_override() -> None:
     env._adaptive_action_rate_weight = None
     reward_weight(env, None, "action_rate_l2", stages)
     assert term.weight == -1.0
+
+
+def test_relief_never_hardens_early_canonical_smoothing() -> None:
+    term = SimpleNamespace(weight=-0.1)
+    env = SimpleNamespace(
+        _adaptive_action_rate_weight=-0.2,
+        reward_manager=SimpleNamespace(get_term_cfg=lambda _: term),
+        common_step_counter=24,
+    )
+    reward_weight(env, None, "action_rate_l2", [{"step": 0, "weight": -0.1}])
+    assert term.weight == -0.1
+
+
+def test_legacy_bootstrap_does_not_keep_live_relief_state() -> None:
+    relief = AdaptiveActionRateRelief()
+    relief.bootstrap({"yaw": 0.0, "turn-left": 0.7, "turn-right": 0.7})
+    relief.update({"yaw": 0.0, "turn-left": 0.7, "turn-right": 0.7})
+    relief.bootstrap({"yaw": 0.85, "turn-left": 0.85, "turn-right": 0.85})
+    assert not relief.active
+    assert relief.remaining_windows == 0
+    assert relief.triggers == 0

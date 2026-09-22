@@ -23,6 +23,7 @@ from mjlab.envs.mdp import dr
 
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report, canonical_sha256
 from mjlab_microduck.tasks.adaptive_curriculum import (
+    AdaptiveActionRateRelief,
     AxisConfig,
     CapabilityGate,
     TransitionExposure,
@@ -144,6 +145,73 @@ def _runner(*, mode: str = "composed", gate=None) -> AdaptiveMicroduckOnPolicyRu
     runner.last_gate_outcome = None
     runner.capability_gate = gate or _gate(mode=mode)
     return runner
+
+
+@pytest.mark.parametrize("legacy_scores", [{}, dict.fromkeys(BUCKETS, 0.9)])
+def test_legacy_resume_clears_previous_live_relief(monkeypatch, tmp_path, legacy_scores):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.capability_gate.best_metrics = legacy_scores
+    checkpoint = tmp_path / "legacy.pt"
+    source.save(str(checkpoint))
+    resumed = _runner()
+    resumed.action_rate_relief = AdaptiveActionRateRelief()
+    resumed.action_rate_relief.bootstrap(dict.fromkeys(BUCKETS, 0.0))
+    resumed.action_rate_relief.apply(resumed.env)
+    resumed.load(str(checkpoint))
+    assert not resumed.action_rate_relief.active
+    assert resumed.action_rate_relief.remaining_windows == 0
+    assert resumed.action_rate_relief.triggers == 0
+    assert resumed.env._adaptive_action_rate_weight is None
+
+
+def test_relief_round_trip_and_expiry_survive_policy_rollback(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner(gate=_gate(pass_windows=100))
+    runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2)
+    known_metrics = {**dict.fromkeys(BUCKETS, 0.9), "yaw": 0.2}
+    runner.record_capability_metrics(known_metrics)
+    assert runner.env._adaptive_action_rate_weight == -0.2
+    runner.completed_iterations = 10
+    known = tmp_path / "known.pt"
+    runner.last_known_good_checkpoint = str(known)
+    runner.save(str(known))
+    expected_policy = copy.deepcopy(runner.alg.state)
+    # The rejected actor acquires yaw but loses forward. Its successful yaw
+    # result must not release relief for the restored actor's missing yaw.
+    failed = {**dict.fromkeys(BUCKETS, 0.9), "forward": 0.1}
+    for completed in (20, 30):
+        runner.completed_iterations = completed
+        runner.alg.state["weight"] = torch.tensor([float(completed)])
+        runner.record_capability_metrics(failed)
+        assert runner.last_gate_outcome == "preservation_failure"
+        assert runner.completed_iterations == completed
+        torch.testing.assert_close(runner.alg.state, expected_policy)
+        if completed == 20:
+            assert runner.action_rate_relief.active
+            assert runner.action_rate_relief.remaining_windows == 1
+            repair = tmp_path / "repair.pt"
+            runner.save(str(repair))
+            state = runner.action_rate_relief.state_dict()
+            runner = _runner(gate=_gate(pass_windows=100))
+            runner.action_rate_relief = AdaptiveActionRateRelief(active_windows=2)
+            runner.load(str(repair))
+            assert runner.action_rate_relief.state_dict() == state
+            assert runner.env._adaptive_action_rate_weight == -0.2
+    assert not runner.action_rate_relief.active
+    assert runner.action_rate_relief.remaining_windows == 0
+    assert runner.env._adaptive_action_rate_weight is None
+
+
+def test_full_resume_cannot_silently_drop_inactive_relief_controller(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    runner.action_rate_relief = AdaptiveActionRateRelief()
+    checkpoint = tmp_path / "enabled-inactive.pt"
+    runner.save(str(checkpoint))
+    destination = _runner()
+    with pytest.raises(ValueError, match="action-rate relief mismatch"):
+        destination.load(str(checkpoint))
 
 
 def _raw(*, low: bool = False):

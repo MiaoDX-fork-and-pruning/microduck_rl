@@ -397,10 +397,10 @@ def make_microduck_adaptive_velocity_env_cfg(
                 if diagnostic_mode == "lateral_drive":
                     cfg.adaptive_linear_feedback_weight = LATERAL_DRIVE_LINEAR_L1_WEIGHT
                     cfg.adaptive_yaw_feedback_weight = LATERAL_DRIVE_YAW_L1_WEIGHT
-                    # The current blocker is a severe yaw acquisition deficit,
-                    # not sensor noise. Enable the bounded adaptive relief so
-                    # the controller can temporarily release the -1.0
-                    # action-rate tax while it searches for that first motion.
+                    # Test bounded relief for a late yaw acquisition deficit
+                    # that persisted under reduced additive observation noise.
+                    # The controller temporarily softens action smoothing while
+                    # the strict native capability gate stays unchanged.
                     cfg.adaptive_action_rate_relief = True
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler

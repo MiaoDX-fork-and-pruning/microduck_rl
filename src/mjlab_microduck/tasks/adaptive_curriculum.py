@@ -406,15 +406,19 @@ class AdaptiveActionRateRelief:
             raise ValueError("action-rate relief weight must be nonpositive")
         if not 0.0 <= trigger_threshold < release_threshold <= 1.0:
             raise ValueError("action-rate relief thresholds must be ordered in [0, 1]")
-        if not isinstance(active_windows, int) or active_windows < 1:
+        if type(active_windows) is not int or active_windows < 1:
             raise ValueError("action-rate relief active windows must be positive")
-        if not isinstance(cooldown_windows, int) or cooldown_windows < 0:
+        if type(cooldown_windows) is not int or cooldown_windows < 0:
             raise ValueError("action-rate relief cooldown windows must be nonnegative")
         self.relief_weight = float(relief_weight)
         self.trigger_threshold = float(trigger_threshold)
         self.release_threshold = float(release_threshold)
         self.active_windows = active_windows
         self.cooldown_windows = cooldown_windows
+        self.reset()
+
+    def reset(self) -> None:
+        """Clear live state before loading a checkpoint without this controller."""
         self.active = False
         self.remaining_windows = 0
         self.cooldown_remaining = 0
@@ -435,6 +439,7 @@ class AdaptiveActionRateRelief:
 
     def bootstrap(self, metrics: Mapping[str, float]) -> None:
         """Restore a useful relief window when resuming a legacy checkpoint."""
+        self.reset()
         frontier = self._frontier(metrics)
         if frontier < self.trigger_threshold:
             self.active = True
@@ -443,11 +448,11 @@ class AdaptiveActionRateRelief:
             self.triggers += 1
             self.last_reason = "legacy_checkpoint_deficit"
 
-    def update(self, metrics: Mapping[str, float]) -> None:
+    def update(self, metrics: Mapping[str, float], *, accepted: bool = True) -> None:
         """Consume one capability window and update the bounded relief state."""
         frontier = self._frontier(metrics)
         if self.active:
-            if frontier >= self.release_threshold:
+            if accepted and frontier >= self.release_threshold:
                 self.active = False
                 self.remaining_windows = 0
                 self.last_reason = "yaw_frontier_released"
@@ -508,9 +513,20 @@ class AdaptiveActionRateRelief:
         remaining = payload.get("remaining_windows")
         cooldown = payload.get("cooldown_remaining")
         triggers = payload.get("triggers")
-        if not isinstance(active, bool) or not isinstance(remaining, int) or remaining < 0:
+        if (
+            not isinstance(active, bool)
+            or type(remaining) is not int
+            or not 0 <= remaining <= self.active_windows
+            or active != (remaining > 0)
+        ):
             raise ValueError("invalid action-rate relief active state")
-        if not isinstance(cooldown, int) or cooldown < 0 or not isinstance(triggers, int) or triggers < 0:
+        if (
+            type(cooldown) is not int
+            or not 0 <= cooldown <= self.cooldown_windows
+            or (active and cooldown > 0)
+            or type(triggers) is not int
+            or triggers < 0
+        ):
             raise ValueError("invalid action-rate relief counters")
         frontier = payload.get("last_frontier")
         if frontier is not None and (not math.isfinite(float(frontier)) or not 0.0 <= float(frontier) <= 1.0):
