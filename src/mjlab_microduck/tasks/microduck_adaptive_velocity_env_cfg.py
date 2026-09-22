@@ -146,6 +146,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_final_com_fraction: float | None = None
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
+    # Native gate cohort size.  The legacy single-seed evaluator remains the
+    # default; campaign launchers opt into a fixed multi-seed cohort explicitly.
+    adaptive_evaluation_cohort_size: int = 1
     adaptive_evaluator_schema_version: int = 2
     adaptive_seed_set_id: str = "adaptive-gate-20260916"
     adaptive_evaluation_timeout_s: int = 900
@@ -226,6 +229,11 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_evaluator_config_sha256 = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_CONFIG_SHA256", "")
     cfg.adaptive_evaluation_interval = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "0"))
     cfg.adaptive_evaluation_seed = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_SEED", "20260916"))
+    cfg.adaptive_evaluation_cohort_size = int(
+        os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE", "1")
+    )
+    if cfg.adaptive_evaluation_cohort_size < 1:
+        raise ValueError("adaptive evaluation cohort size must be positive")
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900

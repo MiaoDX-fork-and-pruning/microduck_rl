@@ -56,6 +56,10 @@ def main() -> int:
     parser.add_argument("--resume", type=Path, help="Exact checkpoint path; supported by adaptive/static experiment runners")
     parser.add_argument("--num-envs", type=int, default=4096)
     parser.add_argument("--gate-interval", type=int, default=250)
+    parser.add_argument(
+        "--gate-cohort-size", type=int, default=3,
+        help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
+    )
     parser.add_argument("--final-com-fraction", type=float, default=None,
                         help="Final-CoM rehearsal fraction (0..0.20); defaults to checkpoint value or zero")
     parser.add_argument("--transition-probability", type=float, default=None,
@@ -67,8 +71,8 @@ def main() -> int:
     args = parser.parse_args()
     if set(range(args.gate_seed, args.gate_seed + 6)) & set(range(args.heldout_seed, args.heldout_seed + 6)):
         parser.error("gate and held-out six-bucket seed sets overlap")
-    if args.iterations < 1 or args.num_envs < 1 or args.gate_interval < 1:
-        parser.error("iterations, num-envs and gate-interval must be positive")
+    if args.iterations < 1 or args.num_envs < 1 or args.gate_interval < 1 or args.gate_cohort_size < 1:
+        parser.error("iterations, num-envs, gate-interval and gate-cohort-size must be positive")
     if args.resume and args.branch == "fixed":
         parser.error("the canonical fixed runner has no audited resume budget; use an adaptive/static branch")
     task_id, axis_mode = TASKS[args.branch]
@@ -139,11 +143,13 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY": str(args.transition_probability),
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
+        "MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE": str(args.gate_cohort_size),
         "MICRODUCK_ADAPTIVE_SEED_SET_ID": f"adaptive-gate-{args.gate_seed}",
         "MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND": (
-            f"{shlex.quote(sys.executable)} {shlex.quote(str(source / 'scripts/run_adaptive_native_checkpoint_battery.py'))} "
-            "--checkpoint {checkpoint} --task-id {task_id} --axis-mode {axis_mode} "
-            "--evaluation-seed {evaluation_seed} --seed-set-id {seed_set_id} --output {output}"
+            f"{shlex.quote(sys.executable)} {shlex.quote(str(source / 'scripts/run_adaptive_native_cohort_battery.py'))} "
+            "--checkpoint {checkpoint} --task {task_id} --axis-mode {axis_mode} "
+            "--evaluation-seed {evaluation_seed} --cohort-size {cohort_size} "
+            "--seed-set-id {seed_set_id} --output {output}"
         ),
     })
     if transition_override_requested:

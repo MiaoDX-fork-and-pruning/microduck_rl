@@ -4889,7 +4889,7 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         self._update_command()
 
     def _set_transition_state(self, env_ids: torch.Tensor, buckets: torch.Tensor) -> None:
-        """Start bounded forward lead-ins and attribute them to forward."""
+        """Start bounded ramps and attribute acquisition to the bootstrap bucket."""
         if not hasattr(self, "_transition_active"):
             with torch.inference_mode(False):
                 self._transition_active = torch.zeros(
@@ -4950,9 +4950,7 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
                 bootstrap[pure_yaw, 0] = max_forward * forward_fraction[pure_yaw]
             bootstrap[:, 1:] = 0.0
         else:
-            # Hold the exact idle command before switching to the sampled yaw
-            # or turn target. This supplies direct zero→rotation transitions;
-            # the original forward bootstrap remains the default recipe.
+            # Start at exact idle, then slew toward the sampled yaw/turn target.
             bootstrap.zero_()
         self._transition_bootstrap[selected_ids] = bootstrap
         self.vel_command_b[selected_ids] = bootstrap
@@ -4961,8 +4959,8 @@ class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
         self._transition_duration[selected_ids] = duration
         self._transition_elapsed[selected_ids] = 0.0
         self._transition_active[selected_ids] = True
-        # Reward feedback tracks the command actually shown to the policy. It
-        # is a forward lesson during the lead-in, then returns to yaw/turn.
+        # Attribute the ramp to its bootstrap bucket until the exact target is
+        # reached, then return attribution to the sampled yaw/turn bucket.
         if hasattr(self, "bucket_ids"):
             self.bucket_ids[selected_ids] = 1 if bootstrap_mode == "forward" else 0
         self.is_forward_env[selected_ids] = bootstrap_mode == "forward"

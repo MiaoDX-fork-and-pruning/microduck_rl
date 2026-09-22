@@ -176,12 +176,15 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
     if {case.get("bucket") for case in cases} != set(BUCKETS):
         raise ValueError("native cases must contain each canonical bucket once")
     seed_manifest = payload.get("seed_manifest", {})
-    if seed_manifest.get("version") != "native-reset-dr-v3":
+    seed_manifest_version = seed_manifest.get("version")
+    if seed_manifest_version not in ("native-reset-dr-v3", "native-reset-dr-cohort-v1"):
         raise ValueError("native seed manifest version missing or unsupported")
     evaluation_seed = metadata.get("evaluation_seed")
     if isinstance(evaluation_seed, bool) or not isinstance(evaluation_seed, (int, float)) or not np.isfinite(evaluation_seed) or not float(evaluation_seed).is_integer():
         raise ValueError("native evaluation seed must be an integer")
-    if seed_manifest.get("startup_seed") != evaluation_seed or seed_manifest.get("seed_set_id") != metadata["seed_set_id"]:
+    if seed_manifest.get("seed_set_id") != metadata["seed_set_id"]:
+        raise ValueError("native seed manifest startup seed or seed set mismatch")
+    if seed_manifest_version == "native-reset-dr-v3" and seed_manifest.get("startup_seed") != evaluation_seed:
         raise ValueError("native seed manifest startup seed or seed set mismatch")
     seed_cases = seed_manifest.get("cases")
     if not isinstance(seed_cases, list) or len(seed_cases) != len(BUCKETS) or {case.get("bucket") for case in seed_cases} != set(BUCKETS):
@@ -189,8 +192,44 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
     seed_cases = {case["bucket"]: case for case in seed_cases}
     if seed_manifest.get("consumed_state_fields") != list(CONSUMED_STATE_FIELDS):
         raise ValueError("native consumed state fields do not match reset contract")
+    cohort = seed_manifest_version == "native-reset-dr-cohort-v1"
+    if cohort:
+        cohort_seeds = seed_manifest.get("cohort_seeds")
+        if (
+            not isinstance(cohort_seeds, list)
+            or not cohort_seeds
+            or any(isinstance(seed, bool) or not isinstance(seed, (int, float)) or not float(seed).is_integer() for seed in cohort_seeds)
+            or len(set(int(seed) for seed in cohort_seeds)) != len(cohort_seeds)
+            or int(evaluation_seed) != int(cohort_seeds[0])
+        ):
+            raise ValueError("native cohort seed manifest is invalid")
+        metadata_cohort = metadata.get("cohort", {})
+        if metadata_cohort.get("version") != "native-reset-dr-cohort-v1" or [int(seed) for seed in metadata_cohort.get("seeds", [])] != [int(seed) for seed in cohort_seeds]:
+            raise ValueError("native cohort metadata does not match seed manifest")
+        selected = seed_manifest.get("selected_seed_by_bucket", {})
+        if set(selected) != set(BUCKETS) or any(int(selected[bucket]) not in {int(seed) for seed in cohort_seeds} for bucket in BUCKETS):
+            raise ValueError("native cohort selected seed map is invalid")
+        members = seed_manifest.get("members")
+        if not isinstance(members, list) or {int(member.get("seed", -1)) for member in members} != {int(seed) for seed in cohort_seeds}:
+            raise ValueError("native cohort member manifest is incomplete")
+        for member in members:
+            member_path = Path(member.get("path", ""))
+            if not member_path.is_file():
+                raise ValueError("native cohort member report is missing")
+            member_payload = _read(member_path)
+            CapabilityReport.from_dict(member_payload)
+            member_digest = member_payload.get("report_sha256")
+            expected_digest = canonical_sha256({key: value for key, value in member_payload.items() if key != "report_sha256"})
+            if member.get("sha256") != member_digest or member_digest != expected_digest:
+                raise ValueError("native cohort member report hash mismatch")
     for offset, bucket in enumerate(BUCKETS):
-        if seed_cases[bucket].get("reset_seed") != evaluation_seed + offset:
+        if cohort:
+            selected_seed = int(seed_manifest["selected_seed_by_bucket"][bucket])
+            if seed_cases[bucket].get("cohort_seed") != selected_seed:
+                raise ValueError("native cohort selected seed mismatch")
+            if seed_cases[bucket].get("reset_seed") != selected_seed + offset:
+                raise ValueError("native cohort bucket reset seed mismatch")
+        elif seed_cases[bucket].get("reset_seed") != evaluation_seed + offset:
             raise ValueError("native bucket reset seed mismatch")
     for case in cases:
         steps = case.get("steps", 0)

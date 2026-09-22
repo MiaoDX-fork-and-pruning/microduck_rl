@@ -1,12 +1,9 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
-unproven. Command-conditioned evidence and retention repair operate, including
-persistent exposure across repeated policy rollbacks. The zero→yaw diagnostic
-identified missing command-initiation coverage; a bounded, opt-in transition
-acquisition slice has completed one matched 4500→5000 comparison, but the
-candidate still fails native gate and CPU transfer. Formal multi-seed runs stay
-blocked.
+Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
+unproven. The slew acquisition experiment completed 5000→5500 updates but both
+gate windows triggered retention rollback. Native cohort gate wiring is now
+implemented and verified; formal seeds 17/23/47 remain gated.
 Date: 2026-09-22
 Related:
 
@@ -48,49 +45,54 @@ and rollback still restore saved state. Immutable-checkpoint regression cases
 (`873db35`) fail on the old implementation and pass continuously and across
 restart. Native windows demonstrate repair counts increasing through 3, 4 and 5.
 
-Latest comparison:
-`/tmp/microduck-adaptive-com-rehearsal-s17-5000/comparison-summary.json`.
-The 20% final-CoM rehearsal branch repeats the no-rehearsal control's exact
-cumulative-4500 checkpoint, 4096 envs, 500-update budget/cadence and evaluation
-seeds. Gate minimum moves 0.70988→0.71551, with four failures in both. Held-out
-minimum moves 0.79519→0.0: the new candidate remains upright but yaw averages
-0.10769 rad/s under a 0.8 rad/s command. Rollback leaves retained-policy minimum
-0.42439 and CPU/XML transfer 0.0. Both CoM axes remain at stage 0. Candidate
-progress, retained-policy quality and CPU transfer remain separate verdicts.
+Current evidence is at `/tmp/microduck-adaptive-slew-s17-5500/` (read-only source
+`b942d44`, 676 tracked hashes). The matched control is
+`/tmp/microduck-adaptive-yaw-planar-s17-5500/clean-control/` at `e86a1f4`;
+both start from the same 5000-update checkpoint and consume 500 updates at
+4096 envs with the same 250-update cadence, transition probability and seeds.
 
-The transition comparison is recorded at
-`/tmp/microduck-adaptive-transition-s17-5000/campaign-result.json`. Its native
-candidate lower-tail score is 0.73638, native held-out candidate score is
-0.59512, and retained-policy held-out score is 0.46801. The candidate held-out
-failures are yaw (0.59512) and turn-right (0.75738); the retained policy fails
-yaw and turn-left. Candidate and retained CPU/XML transfer both have lower-tail
-0.0. The campaign used source SHA `20e31f2` from the shared working tree, so it
-is evidence for behavior but not an immutable-provenance final experiment.
+`e86a1f4` removes training transition overrides from evaluators. The earlier
+zero-bootstrap checkpoint's ten reset/DR seeds yielded yaw scores
+`.809, .000, .776, .000, .000, .595, .555, .842, .000, .000`: five zero scores,
+only two passes at 0.80. Scalar friction correlation (~0.13) is weak evidence,
+not causal exclusion. The blocker is
+`direct_command_yaw_under_reset_DR_robustness`.
 
-`da51889` provides opt-in `--final-com-fraction` (0..0.20), explicit launch and
-checkpoint persistence, and live-setting preservation through automatic policy
-rollback. Explicit load restores saved state. Only adaptive-owned axes use the
-mixture; stock non-accumulation/recomputation and live stage ranges are preserved.
-Native evaluation disables training rehearsal. 196 adaptive/config tests,
-native cohort/partial-reset proof, smoke64/5 and normalized smoke ONNX export
-pass. The transition checkpoint contract restores saved exposure exactly,
-clears live exposure on explicit legacy loads, and applies a CLI override only
-after full restore; runner tests cover repeated rollback repair. No new Ruff
-findings were introduced.
+`ac21204` rejects/reverts the yaw-planar reward treatment (`1f17e81`).
+`b942d44` implements actual 1–2 s bootstrap→target command interpolation in the
+opt-in transition sampler. Previously it held bootstrap, then jumped to target.
+The bounded controller still caps exposure at 0.40, preserves anchors and exact
+checkpoint/rollback state, and is disabled in native evaluation. Formal product
+commands and thresholds are unchanged.
 
-Decision: this bounded rehearsal setting is insufficient and is not selected
-for the default procedure. Fresh runs still default to zero. The paired native
-zero→yaw/forward→yaw diagnostic then isolated command initiation as the active
-failure class. The selected repair is an opt-in `TransitionExposure` controller:
-it exposes yaw and moving-turn buckets to a 1–2 s forward bootstrap, adapts
-probability within `[0, 0.40]`, persists through checkpoint/resume/rollback,
-and is disabled in the frozen evaluator. Focused tests, a CUDA/MJLab/BAM probe,
-and 64-env/5-update smoke pass. The matched 4500→5000 comparison improved the
-candidate's native held-out score over the retained policy but stayed below the
-0.80 gate and showed no CPU/XML transfer. The probe manually forced timer
-completion, so it is not evidence of natural deadline switching. Formal seeds
-17/23/47, fresh held-out/video/deployment acceptance and matched-budget
-comparison remain required.
+The slew candidate's 5250/5500 native gate minima are .71733/.72894. Forward
+then forward/turn-left retention failures caused rollback; the retained actor
+(including normalizer) equals the starting actor. Its held-out native and CPU/XML
+minima are both zero. Candidate learning and retained-policy evidence must remain
+separate: a reverted actor does not directly measure treatment learning.
+
+The next evaluator slice adds `run_adaptive_native_cohort_battery.py`. It keeps
+the single-seed native battery as a primitive, accepts a fixed cohort, selects
+the lowest-scoring raw bucket evidence, records the member reports and selected
+seed map, and emits a schema-v2 report accepted by the runner. The campaign
+launcher defaults to `--gate-cohort-size 3`; held-out evaluation remains an
+independent single-seed check. A native 3-seed proof was validated at
+`/tmp/microduck-adaptive-cohort-proof/capability-rebuilt.json` with lower-tail
+`.72200` and `passed=false`, correctly rejecting the current policy.
+
+Implementation proof: 203 adaptive/config tests, transition-enabled smoke64/5,
+fresh cohort-size smoke64/5, and native 64-env command execution. All 26 sampled transitions completed under
+the real environment clock within 52–96 steps, reaching exact targets with
+matching actor command inputs. No timers were forced to completion. The source
+manifest, runtime proof and post-training report paths live in the experiment
+directory. Native ONNX parity for the candidate is part of the paired probe.
+
+The 20% final-CoM rehearsal setting remains rejected for default use; its
+implementation is opt-in and checkpointed (`da51889`). Routine resumes inherit
+settings. Continue only with a changed, evidence-backed hypothesis when a
+bounded attempt fails. Required acceptance remains retained native mastery,
+fresh held-out/video/export/deployment proof, three independent training seeds,
+and the matched-budget comparison; none is replaced by passing unit tests.
 
 ## Goal
 

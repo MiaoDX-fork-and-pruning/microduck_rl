@@ -194,11 +194,14 @@ class BucketFeedbackTracker:
 class CommandCapabilityEvaluator:
     """Run the frozen battery through a configured command at runner boundaries."""
 
-    def __init__(self, command: str, timeout_s: int = 900):
+    def __init__(self, command: str, timeout_s: int = 900, cohort_size: int = 1):
         if not command.strip():
             raise ValueError("adaptive evaluator command cannot be empty")
         self.command = command
         self.timeout_s = int(timeout_s)
+        self.cohort_size = int(cohort_size)
+        if self.cohort_size < 1:
+            raise ValueError("adaptive evaluator cohort size must be positive")
 
     def evaluate(self, *, checkpoint_path: Path, task_id: str, axis_mode: str,
                  curriculum_state: Mapping[str, object], iteration: int,
@@ -212,6 +215,7 @@ class CommandCapabilityEvaluator:
             "iteration": str(iteration),
             "seed_set_id": seed_set_id,
             "evaluation_seed": str(evaluation_seed),
+            "cohort_size": str(self.cohort_size),
             "output": str(output),
         }
         # Split the configured argv before substituting paths, so spaces in a
@@ -259,6 +263,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.evaluation_seed_set_id = str(
             getattr(env.cfg, "adaptive_seed_set_id", str(self.evaluation_seed))
         )
+        self.evaluation_cohort_size = int(
+            getattr(env.cfg, "adaptive_evaluation_cohort_size", 1)
+        )
+        if self.evaluation_cohort_size < 1:
+            raise ValueError("adaptive evaluation cohort size must be positive")
         self.evaluation_events: list[dict[str, object]] = []
         self.last_evaluation_provenance: dict[str, object] | None = None
         self.last_known_good_checkpoint: str | None = None
@@ -298,6 +307,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.evaluator = CommandCapabilityEvaluator(
                 evaluator_command,
                 int(getattr(env.cfg, "adaptive_evaluation_timeout_s", 900)),
+                self.evaluation_cohort_size,
             )
         if axis_configs and self.evaluation_interval > 0 and self.evaluator is None:
             raise ValueError("adaptive evaluation enabled without an evaluator command")
@@ -804,6 +814,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "completed_iterations": completed,
             "evaluation_seed_set_id": getattr(self, "evaluation_seed_set_id", None),
             "evaluation_seed": getattr(self, "evaluation_seed", None),
+            "evaluation_cohort_size": getattr(self, "evaluation_cohort_size", 1),
             "env_step": completed * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
         })
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
@@ -834,6 +845,16 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint task mismatch")
             if int(state.get("evaluation_schema_version", 2)) != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
                 raise ValueError("adaptive checkpoint evaluator schema mismatch")
+            saved_cohort_size = state.get("evaluation_cohort_size")
+            # Checkpoints written before cohort gates existed have no field and
+            # may be upgraded explicitly by a campaign launch.  Once a cohort
+            # size is persisted, changing it would make the gate history
+            # incomparable and is rejected.
+            if (
+                saved_cohort_size is not None
+                and int(saved_cohort_size) != getattr(self, "evaluation_cohort_size", 1)
+            ):
+                raise ValueError("adaptive checkpoint evaluation cohort size mismatch")
             if gate is not None:
                 gate.load_state_dict(state)
             elif state.get("enabled_axes"):
