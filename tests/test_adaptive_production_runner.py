@@ -686,3 +686,29 @@ def test_low_score_preservation_failure_restores_sampling_without_rewinding_budg
     assert runner.completed_iterations == 20
     assert runner.env.common_step_counter == 20 * 24
     assert runner.evaluation_events[-1]["kind"] == "rollback"
+
+
+def test_repeated_preservation_failures_accumulate_live_exposure_repairs(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    term = _attach_exposure(runner)
+    runner.completed_iterations = 10
+    checkpoint = tmp_path / "candidate.pt"
+    checkpoint.write_bytes(b"candidate")
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint))
+    runner._evaluate_window(str(checkpoint))
+
+    runner.completed_iterations = 20
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint, low=True))
+    runner._evaluate_window(str(checkpoint))
+    first = runner.command_exposure.state_dict()
+    first_probability = first["probabilities"]["lateral"]
+    assert first["retention_repairs"] == 1
+
+    runner.completed_iterations = 30
+    runner._evaluate_window(str(checkpoint))
+    second = runner.command_exposure.state_dict()
+    assert second["retention_repairs"] == 2
+    assert second["windows"] == first["windows"] + 1
+    assert second["probabilities"]["lateral"] != pytest.approx(first_probability)
+    assert term.cfg.bucket_probabilities == pytest.approx(tuple(second["probabilities"].values()))

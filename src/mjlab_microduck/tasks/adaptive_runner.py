@@ -601,9 +601,19 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             event["provenance"] = dict(self.last_evaluation_provenance)
         self.evaluation_events.append(event)
         if decision.outcome.value == "preservation_failure":
+            # Exposure is the adaptive teacher's live state, rather than part
+            # of the policy snapshot being protected by rollback.  Preserve it
+            # across the policy/gate restore so repeated retention failures
+            # accumulate bounded repair slices instead of replaying the stale
+            # exposure from the old known-good checkpoint.
+            exposure = getattr(self, "command_exposure", None)
+            exposure_state = None if exposure is None else exposure.state_dict()
             if self.last_known_good_checkpoint:
                 self.rollback(self.last_known_good_checkpoint)
             exposure = getattr(self, "command_exposure", None)
+            if exposure is not None and exposure_state is not None:
+                exposure.load_state_dict(exposure_state)
+                exposure.apply(_manager_env(self.env))
             repair_buckets = tuple(name for name in regressed_buckets if name != "zero")
             if exposure is not None and repair_buckets:
                 repaired = exposure.repair(
