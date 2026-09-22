@@ -197,6 +197,14 @@ def main() -> int:
         if adaptive and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
                                 for event in adaptive_state["evaluation_events"]):
             raise ValueError("adaptive run produced no valid evaluation windows")
+    # Training may use launch-only transition overrides, but native and CPU
+    # evaluators explicitly disable transition acquisition and must not inherit
+    # those training-only settings. Passing the override through makes the
+    # evaluator construct a non-exposure command term and then reject the
+    # override before it can produce a behavioral report.
+    evaluation_environment = dict(environment)
+    evaluation_environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
+    evaluation_environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
     report_path = output / "heldout" / "capability.json"
     with (output / "heldout.log").open("w") as log:
         subprocess.run([
@@ -204,7 +212,7 @@ def main() -> int:
             "--checkpoint", str(checkpoint), "--task-id", task_id, "--axis-mode", axis_mode,
             "--evaluation-seed", str(args.heldout_seed),
             "--seed-set-id", f"adaptive-default-{args.heldout_seed}", "--output", str(report_path),
-        ], env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
+        ], env=evaluation_environment, check=True, stdout=log, stderr=subprocess.STDOUT)
     report = json.loads(report_path.read_text())
     transfer_path = output / "cpu-transfer" / "capability.json"
     with (output / "cpu-transfer.log").open("w") as log:
@@ -213,7 +221,7 @@ def main() -> int:
             "--checkpoint", str(checkpoint), "--task-id", task_id, "--axis-mode", axis_mode,
             "--evaluation-seed", str(args.heldout_seed),
             "--seed-set-id", f"adaptive-default-{args.heldout_seed}", "--output", str(transfer_path),
-        ], env=environment, check=True, stdout=log, stderr=subprocess.STDOUT)
+        ], env=evaluation_environment, check=True, stdout=log, stderr=subprocess.STDOUT)
     transfer = json.loads(transfer_path.read_text())
     result = {
         **config,

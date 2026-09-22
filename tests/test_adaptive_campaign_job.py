@@ -15,12 +15,16 @@ campaign = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(campaign)
 
 
-def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None, fraction=None):
+def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None,
+                  fraction=None, transition=False):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
              "evaluation_events": events or [{"kind": "hold"}]}
     if fraction is not None:
         state["final_com_fraction"] = fraction
+    if transition:
+        state["transition_exposure"] = {"probability": 0.2}
+        state["transition_bootstrap_mode"] = "zero"
     torch.save({"iter": completed - 1, "infos": {"adaptive_curriculum": state}}, checkpoint)
     result = {"version": 1, "status": "completed", "task_id": task,
               "completed_iterations": completed, "start_completed_iterations": start,
@@ -52,7 +56,8 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
 ):
     task, _ = campaign.TASKS["feedback"]
     checkpoint = tmp_path / "checkpoint with spaces.pt"
-    _write_result(tmp_path / "prior-result.json", checkpoint, start=0, completed=5, task=task, fraction=saved_fraction)
+    _write_result(tmp_path / "prior-result.json", checkpoint, start=0, completed=5, task=task,
+                  fraction=saved_fraction, transition=True)
     output = tmp_path / "continuation"
     monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "reviewed-source")
     monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", "/unrelated/inherited.pt")
@@ -62,6 +67,7 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
         "--gate-interval", "1", "--resume", str(checkpoint)]
     if requested_fraction is not None:
         argv += ["--final-com-fraction", str(requested_fraction)]
+    argv += ["--transition-probability", "0.2", "--transition-mode", "zero"]
     monkeypatch.setattr(sys, "argv", argv)
     calls = []
 
@@ -79,8 +85,11 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
                 assert env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] == str(checkpoint)
                 assert command[command.index("--agent.max-iterations") + 1] == "2"
                 final = output / "training" / "explicit-final.pt"
-                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task, fraction=expected_fraction)
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task,
+                              fraction=expected_fraction, transition=True)
         else:
+            assert "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE" not in kwargs["env"]
+            assert "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE" not in kwargs["env"]
             report = Path(command[command.index("--output") + 1])
             report.parent.mkdir(parents=True)
             report.write_text(json.dumps({"aggregate": {"passed": False, "score": 0.0}}))
