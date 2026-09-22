@@ -74,6 +74,15 @@ def test_decision_api_distinguishes_hold_and_preservation_failure() -> None:
     assert decision.outcome == GateOutcome.PRESERVATION_FAILURE
 
 
+def test_preservation_failures_identifies_only_previously_mastered_buckets() -> None:
+    gate = _gate()
+    gate.decide(0, {"zero": 0.9, "forward": 0.9, "yaw": 0.9})
+    assert gate.preservation_failures({"zero": 0.7, "forward": 0.9, "yaw": 0.9}) == (
+        "zero",
+    )
+    assert gate.preservation_failures({"zero": 0.86, "forward": 0.9, "yaw": 0.9}) == ()
+
+
 def test_default_axes_match_canonical_com_endpoints() -> None:
     assert ADAPTIVE_AXIS_CONFIGS[0].name == "com_range"
     assert ADAPTIVE_AXIS_CONFIGS[0].stages == (0.003, 0.005, 0.010, 0.015)

@@ -581,6 +581,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         """Consume one frozen battery window and apply at most one transition."""
         if self.capability_gate is None:
             return None
+        regressed_buckets = self.capability_gate.preservation_failures(metrics)
         if step is None:
             step = getattr(self, "completed_iterations", self.current_learning_iteration + 1) * self.cfg["num_steps_per_env"]
         decision = self.capability_gate.decide(
@@ -592,13 +593,27 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         transition = decision.transition
         self.last_gate_outcome = decision.outcome.value
         event = {"kind": decision.outcome.value, "step": step, "checkpoint": checkpoint, "reason": decision.reason}
+        if regressed_buckets:
+            event["regressed_buckets"] = list(regressed_buckets)
         if command_feedback is not None:
             event["command_feedback"] = dict(command_feedback)
         if getattr(self, "last_evaluation_provenance", None) is not None:
             event["provenance"] = dict(self.last_evaluation_provenance)
         self.evaluation_events.append(event)
-        if decision.outcome.value == "preservation_failure" and self.last_known_good_checkpoint:
-            self.rollback(self.last_known_good_checkpoint)
+        if decision.outcome.value == "preservation_failure":
+            if self.last_known_good_checkpoint:
+                self.rollback(self.last_known_good_checkpoint)
+            exposure = getattr(self, "command_exposure", None)
+            repair_buckets = tuple(name for name in regressed_buckets if name != "zero")
+            if exposure is not None and repair_buckets:
+                repaired = exposure.repair(
+                    repair_buckets,
+                    metrics,
+                    feedback=command_feedback,
+                )
+                exposure.apply(_manager_env(self.env))
+                event["retention_repair"] = list(repaired)
+                event["command_exposure"] = exposure.state_dict()
             return None
         exposure = getattr(self, "command_exposure", None)
         if exposure is not None:

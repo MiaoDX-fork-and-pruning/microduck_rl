@@ -9,7 +9,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 import math
-from typing import Mapping
+from typing import Mapping, Sequence
 from enum import StrEnum
 
 from mjlab_microduck.evaluation.capability import BUCKETS
@@ -63,6 +63,8 @@ class CommandExposure:
         self.windows = 0
         self.focus_best_score: float | None = None
         self.focus_stall_count = 0
+        self.retention_repairs = 0
+        self.last_repair_buckets: tuple[str, ...] = ()
 
     @classmethod
     def _validate_frontier_order(
@@ -130,6 +132,79 @@ class CommandExposure:
             self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
         self.windows += 1
 
+    def repair(
+        self,
+        buckets: Sequence[str],
+        metrics: Mapping[str, float],
+        feedback: Mapping[str, object] | None = None,
+    ) -> tuple[str, ...]:
+        """Reallocate one bounded exposure slice after a retention failure.
+
+        A rollback restores the last policy that mastered the protected
+        buckets.  Replaying the same command mixture after that rollback is
+        not adaptive: it repeatedly exposes the same failure.  This method
+        keeps the zero and nominal anchors and distributes the focus slice
+        across the buckets that regressed.  When several buckets regressed,
+        command-conditioned reward mass breaks ties toward the bucket with the
+        largest normalized tracking burden.
+        """
+        candidates = tuple(dict.fromkeys(str(name) for name in buckets))
+        if not candidates:
+            raise ValueError("retention repair requires at least one bucket")
+        if any(name not in self.frontier_order for name in candidates):
+            raise ValueError("retention repair accepts directional buckets only")
+        values = {name: float(metrics[name]) for name in candidates}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("retention repair scores must be finite and in [0, 1]")
+
+        # Score a failed bucket by capability deficit, then by the measured
+        # command-aligned penalty mass.  The latter is deliberately bounded so
+        # a noisy reward term cannot erase the product gate's direct evidence.
+        burden: dict[str, float] = dict.fromkeys(candidates, 0.0)
+        if feedback is not None:
+            counts = feedback.get("sample_count")
+            signed = feedback.get("weighted_reward_mass")
+            if isinstance(counts, Mapping) and isinstance(signed, Mapping):
+                for name in candidates:
+                    count = float(counts.get(name, 0.0))
+                    mass = signed.get(name)
+                    if count <= 0.0 or not isinstance(mass, Mapping):
+                        continue
+                    penalty = 0.0
+                    positive = 0.0
+                    for term in ("linear_velocity_error_l1", "yaw_velocity_error_l1"):
+                        value = mass.get(term)
+                        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                            penalty += max(0.0, -float(value))
+                    for term in ("track_linear_velocity", "track_angular_velocity", "upright"):
+                        value = mass.get(term)
+                        if isinstance(value, (int, float)) and math.isfinite(float(value)):
+                            positive += max(0.0, float(value))
+                    # Mass is dt-integrated.  Rates make windows comparable;
+                    # cap the ratio to keep this a tie-breaker, not a new gate.
+                    burden[name] = min(2.0, (penalty / max(count * 0.02, 1e-6)) / max(positive / max(count * 0.02, 1e-6), 1e-3))
+
+        ordered = tuple(
+            sorted(
+                candidates,
+                key=lambda name: (-(1.0 - values[name]) * (1.0 + burden[name]), self.frontier_order.index(name)),
+            )
+        )
+        target = {name: self.bucket_floor for name in BUCKETS}
+        target["zero"] = self.zero_floor
+        share = self.focus_extra / len(ordered)
+        for name in ordered:
+            target[name] += share
+        for name in BUCKETS:
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
+        self.focus_bucket = ordered[0]
+        self.focus_best_score = values[self.focus_bucket]
+        self.focus_stall_count = 0
+        self.windows += 1
+        self.retention_repairs += 1
+        self.last_repair_buckets = ordered
+        return ordered
+
     def state_dict(self) -> dict[str, object]:
         return {
             "version": self.version,
@@ -141,6 +216,8 @@ class CommandExposure:
             "stall_improvement": self.stall_improvement,
             "focus_best_score": self.focus_best_score,
             "focus_stall_count": self.focus_stall_count,
+            "retention_repairs": self.retention_repairs,
+            "last_repair_buckets": list(self.last_repair_buckets),
         }
 
     def load_state_dict(self, payload: Mapping[str, object]) -> None:
@@ -184,6 +261,16 @@ class CommandExposure:
         self.focus_bucket = str(focus)
         self.focus_best_score = None if best_score is None else float(best_score)
         self.focus_stall_count = stall_count
+        repairs = payload.get("retention_repairs", 0)
+        if not isinstance(repairs, int) or repairs < 0:
+            raise ValueError("invalid retention repair count")
+        repair_buckets = payload.get("last_repair_buckets", ())
+        if not isinstance(repair_buckets, (list, tuple)) or any(
+            str(name) not in self.frontier_order for name in repair_buckets
+        ):
+            raise ValueError("invalid retention repair buckets")
+        self.retention_repairs = repairs
+        self.last_repair_buckets = tuple(str(name) for name in repair_buckets)
 
     def apply(self, env: object) -> None:
         # CommandManager owns a deepcopy. The live term consumes these values
@@ -312,6 +399,17 @@ class CapabilityGate:
         decision = self.decide(step, metrics, checkpoint=checkpoint, seed=seed)
         return decision.transition
 
+    def preservation_failures(self, metrics: Mapping[str, float]) -> tuple[str, ...]:
+        """Return mastered buckets that violate the rollback tolerance."""
+        threshold = max(axis.upper_threshold for axis in self.axes.values())
+        failures = []
+        for name in self.critical_buckets:
+            best = self.best_metrics.get(name)
+            value = float(metrics[name])
+            if best is not None and best >= threshold and value < best * (1.0 - self.preservation_tolerance):
+                failures.append(name)
+        return tuple(failures)
+
     def decide(
         self,
         step: int,
@@ -328,12 +426,7 @@ class CapabilityGate:
             raise ValueError("capability metrics must be finite")
         score = min(values.values())
         previous_best = self.best_metrics.copy()
-        mastered_threshold = max(axis.upper_threshold for axis in self.axes.values())
-        if any(
-            previous_best.get(name, 0) >= mastered_threshold
-            and value < previous_best[name] * (1.0 - self.preservation_tolerance)
-            for name, value in values.items()
-        ):
+        if self.preservation_failures(values):
             # Regressions below the pass threshold must not evade preservation.
             return GateDecision(GateOutcome.PRESERVATION_FAILURE, reason="mastered bucket regressed")
         for name, value in values.items():

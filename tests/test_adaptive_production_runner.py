@@ -678,8 +678,11 @@ def test_low_score_preservation_failure_restores_sampling_without_rewinding_budg
     runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(checkpoint, low=True))
     runner._evaluate_window(str(checkpoint))
     assert runner.last_gate_outcome == "preservation_failure"
-    assert runner.command_exposure.state_dict() == saved_exposure
-    assert term.cfg.bucket_probabilities == probabilities
+    repaired = runner.command_exposure.state_dict()
+    assert repaired != saved_exposure
+    assert repaired["retention_repairs"] == 1
+    assert repaired["last_repair_buckets"] == ["forward", "lateral", "yaw", "turn-left", "turn-right"]
+    assert term.cfg.bucket_probabilities != probabilities
     assert runner.completed_iterations == 20
     assert runner.env.common_step_counter == 20 * 24
     assert runner.evaluation_events[-1]["kind"] == "rollback"

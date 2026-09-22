@@ -218,3 +218,59 @@ def test_equal_deficits_keep_balanced_samples():
     before = exposure.probabilities.copy()
     exposure.update(dict.fromkeys(BUCKETS, 0.0))
     assert exposure.probabilities == pytest.approx(before)
+
+
+def test_retention_repair_reallocates_only_bounded_focus_slice_and_keeps_anchors():
+    exposure = CommandExposure(
+        initial_focus="lateral",
+        frontier_order=("lateral", "forward", "yaw", "turn-left", "turn-right"),
+    )
+    before = exposure.state_dict()
+    repaired = exposure.repair(
+        ("turn-right",),
+        {name: (0.55 if name == "turn-right" else 0.9) for name in BUCKETS},
+        feedback={
+            "sample_count": {name: 100 for name in BUCKETS},
+            "weighted_reward_mass": {
+                name: {
+                    "track_linear_velocity": 1.0,
+                    "track_angular_velocity": 1.0,
+                    "upright": 1.0,
+                    "yaw_velocity_error_l1": -2.0 if name == "turn-right" else 0.0,
+                }
+                for name in BUCKETS
+            },
+        },
+    )
+    assert repaired == ("turn-right",)
+    assert exposure.focus_bucket == "turn-right"
+    assert exposure.probabilities["turn-right"] > before["probabilities"]["turn-right"]
+    assert exposure.probabilities["zero"] == pytest.approx(0.20)
+    assert sum(exposure.probabilities.values()) == pytest.approx(0.80)
+    assert exposure.retention_repairs == 1
+    restored = CommandExposure(frontier_order=exposure.frontier_order)
+    restored.load_state_dict(exposure.state_dict())
+    assert restored.state_dict() == exposure.state_dict()
+
+
+def test_retention_repair_uses_reward_mass_to_rank_multiple_regressions():
+    exposure = CommandExposure()
+    repaired = exposure.repair(
+        ("forward", "yaw"),
+        {name: (0.50 if name in ("forward", "yaw") else 0.9) for name in BUCKETS},
+        feedback={
+            "sample_count": {name: 100 for name in BUCKETS},
+            "weighted_reward_mass": {
+                name: {
+                    "track_linear_velocity": 1.0,
+                    "track_angular_velocity": 1.0,
+                    "upright": 1.0,
+                    "linear_velocity_error_l1": -3.0 if name == "forward" else 0.0,
+                }
+                for name in BUCKETS
+            },
+        },
+    )
+    assert repaired == ("forward", "yaw")
+    assert exposure.probabilities["forward"] == pytest.approx(0.255)
+    assert exposure.probabilities["yaw"] == pytest.approx(0.105)
