@@ -30,14 +30,16 @@ CPU transfer, and superiority to fixed training remain separate verdicts; no
 hardware success is inferred from simulation. Matched-budget comparison follows
 acquisition; the optional advisor and stronger teachers remain deferred.
 
-Feedback now averages signed tracking error over 0.5 s before L1 magnitude,
-keeps a 20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The
-seed17 continuation completed 1500 updates and demonstrated partial `zero` /
-`forward` preservation, automatic lateral focus, and a real rollback after
-forward regression at env step 33000. Held-out native lateral MAE plateaued
-at 0.1244 m/s and every held-out bucket still fails. Evidence and hashes:
-`/tmp/microduck-adaptive-zero20-s17-1500/campaign-result.json`. DR remains at
-stage 0; partial gate-set retention is not held-out usability.
+Feedback averages signed tracking error over 0.5 s before L1 magnitude, keeps a
+20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The latest
+`0c0b50e` diagnostic exempts pure-yaw commands from the remaining planar L1
+term while retaining idle and turn-forward alignment. At cumulative 500,
+held-out native yaw MAE improved to 0.5335 rad/s from about 0.73 in the prior
+500-update lateral-drive evidence, while zero drift regressed to 0.0689 m;
+all six buckets still fail. Evidence:
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/campaign-result.json`.
+Continue this exact checkpoint to cumulative 1000 before opening another
+reward or physics branch.
 
 A separate 500-update strictification diagnostic tested lighter motion costs,
 stronger tracking and 25% pure lateral sampling. Its native traces show mean

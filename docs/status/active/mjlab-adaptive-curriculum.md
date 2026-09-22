@@ -8,42 +8,39 @@ does not cancel necessary changes, training, or behavioral checks.
 
 ## Current slice
 
-The seed 17 yaw-feedback continuation is complete at 3000 updates and is not
-running in the background. It resumed the exact previous frontier checkpoint at
-4096 envs from source `e068387`; manifests are under
-`/tmp/microduck-adaptive-yaw-feedback-s17-3000/`. Smoke64/5 passed and the
-training result is finite, but both the native held-out report and the
-independent CPU/ONNX report have `passed: 0`.
-The current branch includes the canonical-curriculum ownership repair
-`920e0ec`; the focused suite is green at 54 tests.
+The pure-yaw linear-sway exemption is committed as `0c0b50e`. Focused tests
+(`55 passed`), compileall, and smoke64/5 passed with the canonical curriculum,
+61D/14D ABI, and BAM M6 intact. A fresh seed17 lateral-drive run completed 500
+updates at 4096 envs; manifests are under
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/`.
 
-The adaptive controller did execute its intended behavior: it retained the
-zero bucket, rotated focus after stalls, increased yaw exposure, and completed
-without a nonfinite event. The gate seed briefly improved yaw, but that did not
-transfer to held-out seeds. The final gate state focused `turn-right`; no
-difficulty stage was advanced and no usable checkpoint was established.
+The adaptive controller retained the zero bucket and completed four valid hold
+windows without rollback or nonfinite values. At 500 updates it was still
+lateral-focused (`28%` lateral exposure); no difficulty stage was advanced.
+The run is a bounded reward diagnostic, not a usable-policy result.
 
 ## Last proven evidence
 
-| Native held-out metric | Yaw-feedback 3000 | Product requirement |
+| Native held-out metric | Yaw-linear-exempt 500 | Product requirement |
 | --- | ---: | ---: |
-| Zero endpoint drift (m) | 0.04456 | <=0.012 |
-| Forward MAE (m/s) | 0.02133 | <=0.024 |
-| Lateral MAE (m/s) | 0.11037 | <=0.024 |
-| Yaw MAE (rad/s) | 0.74515 | <=0.12 |
-| Left/right turn MAE (rad/s) | 0.30365 / 0.21847 | <=0.12 |
+| Zero endpoint drift (m) | 0.06889 | <=0.012 |
+| Forward MAE (m/s) | 0.01952 | <=0.024 |
+| Lateral MAE (m/s) | 0.09693 | <=0.024 |
+| Yaw MAE (rad/s) | 0.53351 | <=0.12 |
+| Left/right turn MAE (rad/s) | 0.31074 / 0.38136 | <=0.12 |
 
 Only forward passes. All six native cases survive their 6 s rollouts. The
 native held-out report is at
-`/tmp/microduck-adaptive-yaw-feedback-s17-3000/heldout/capability.json`.
-CPU/ONNX passes only zero and reports yaw MAE 0.76967 rad/s; it remains
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/heldout/capability.json`.
+CPU/ONNX passes only zero and reports yaw MAE `0.61870 rad/s`; it remains
 separate transfer evidence using XML position actuators.
 
-Bounded anti-stall rotation works as orchestration: yaw exposure reached about
-12.3% and the final turn-right focus reached about 21.7%, with no invalid
-rollback. This did not acquire the missing yaw/turn capability on held-out
-seeds. CoM/head-CoM remain at +/-3 mm; no difficulty advance or reproducible
-usable-policy procedure is established.
+Compared with the earlier 500-update lateral-drive evidence, removing the
+remaining pure-yaw linear sway charge improved held-out yaw MAE from about
+`0.73` to `0.53 rad/s` and preserved forward/lateral progress, but zero drift
+regressed to `0.06889 m` and all six-bucket acceptance still fails. This changes
+the blocker classification from “linear sway conflict is untested” to “the
+conflict is real but insufficient by itself.”
 
 Completed repairs: runner state/rollback consolidation, command-aligned feedback,
 zero retention, checkpointed frontier order, inclusive tracking-stage boundaries
@@ -55,24 +52,19 @@ remain under their named `/tmp` campaign paths.
 ## Next decision and experiment boundary
 
 Blocker fingerprint: `native_yaw_acquisition`.
-Current classification: yaw stays near stationary despite increased exposure;
-the instantaneous zero-linear-command cost also penalizes pure-turn gait sway.
-Counterfactual reward replay:
-`/tmp/microduck-yaw-acquisition-diagnostic-e068387/reward-replay.json`.
-On a mature fixed-policy trace with mean yaw 0.7845 rad/s for a 0.8 command,
-current weighted linear L1 averages -2.3269; at yaw-feedback-2625, the nearly
-stationary trace costs -0.0152. Averaging planar error during active yaw would
-reduce the former to -0.3611 while retaining a cost for sustained translation.
-This is reward-conflict evidence, not a training or acceptance result.
+Current classification: the remaining pure-yaw planar penalty was a real
+conflict, because removing it improved yaw/turn traces, but yaw is still far
+from the product gate and zero recovery regressed. The old replay values in
+`/tmp/microduck-yaw-acquisition-diagnostic-e068387/reward-replay.json` describe
+the pre-`1780d58` implementation and must not be quoted as current reward
+semantics.
 
-The current bounded decision is a reward-semantics diagnostic, not a product
-threshold change. The recorded traces show the pure-yaw policy remains nearly
-stationary even while its yaw-specific L1 cost is substantial. Before another
-long run, test a command-aligned acquisition signal that distinguishes active
-turning from exact idle and preserves the canonical curriculum. Success requires
-lower native yaw/turn error while retaining zero/forward/lateral; run focused
-tests and smoke64/5 first, then a fresh bounded continuation. Do not start a
-multi-seed campaign until all six native held-out buckets pass.
+Continue the exact `model_499.pt` checkpoint to cumulative 1000 updates with
+the same source and gate settings. This tests whether the measured yaw gain
+survives adaptive focus rotation and whether zero recovery returns; it does not
+change thresholds or open a multi-seed campaign. Stop if zero/forward/lateral
+preservation fails, training becomes nonfinite, or the 1000-update held-out
+report shows no decision-changing yaw/turn improvement.
 
 The completed manifests are `training-result.json`, `campaign-result.json`,
 `heldout/capability.json`, and `cpu-transfer/capability.json` under the campaign
