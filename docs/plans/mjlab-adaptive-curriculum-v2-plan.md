@@ -1,10 +1,11 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
-unproven. The completed 6,000→6,500 stage-gate campaign passes 5/6 corrected CPU
-buckets but fails pure yaw and native product checks. The next bounded repair
-targets teacher dwell that ignores a severe deficit below mastery. Formal
-seeds 17/23/47 remain gated.
+unproven. Teacher dwell now responds to severe deficits, but its completed
+6,000→6,500 replay did not exercise the new allocation before training ended.
+The retained policy fails final native and CPU checks. The next comparison
+must start at an observed severe-deficit boundary. Formal seeds 17/23/47 remain
+gated.
 Date: 2026-09-23
 Related:
 
