@@ -2,9 +2,10 @@
 
 Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
 unproven. Runner consolidation, native MJLab/BAM evaluation, signed-EMA gate
-calibration, and bounded command-exposure feedback are implemented. The
-command-conditioned evidence contract is now proven in a bounded continuation,
-but the policy still fails the six-bucket gate across native reset/DR seeds.
+calibration, bounded command-exposure feedback, and retention repair are
+implemented. `b3db958` preserves live exposure across rollback; a two-window
+native validation is in progress. The policy still fails the six-bucket gate
+across native reset/DR seeds.
 See the active status capsule for current proof.
 Date: 2026-09-22
 Related:
@@ -74,8 +75,12 @@ The extra reset/DR seeds move the failing bucket between yaw and linear
 commands. The command-conditioned contract is now implemented and exercised in
 `/tmp/microduck-adaptive-evidence-s17-3750-r2/`: two native windows recorded
 seven-class exposure and weighted reward mass with zero unclassified samples,
-while the held-out lower-tail remained `0.75130`. The next intervention must
-use that evidence rather than another coefficient-only continuation.
+while the held-out lower-tail remained `0.75130`. The pre-fix 4250-update
+continuation under `/tmp/microduck-adaptive-evidence-s17-4250-repair/` ended at
+lower-tail `0.42439` and exposed repeated rollback state reversion. The
+controller fix is committed as `b3db958`; its bounded validation is under
+`/tmp/microduck-adaptive-evidence-s17-4500-retention/`. Do not begin the
+formal multi-seed matrix until that validation changes the retention decision.
 
 ## Goal
 

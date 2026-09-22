@@ -15,22 +15,24 @@ sample counts, exposure fractions, and per-term signed and absolute weighted
 reward mass. The state is checkpointed, attached to evaluation events, and
 reset safely across rollback/resume.
 
-Focused adaptive tests pass (`142 passed`), the canonical 64-env/5-update
-smoke passes, and the Feedback recipe smoke writes nonzero samples for all
-seven classes with `unclassified_count=0`. The 61D/14D ABI, BAM M6, unfiltered
-actions, and normalizer-baked export remain intact.
+The retention repair is committed as `b2dc088`; the follow-up controller-state
+fix is `b3db958`. The latter preserves live command exposure across policy
+rollback so repeated failures accumulate bounded repair slices instead of
+restoring stale exposure from the old known-good checkpoint. Focused adaptive
+tests pass (`147 passed`), and the canonical 64-env/5-update BAM smoke passes.
+The 61D/14D ABI, BAM M6, unfiltered actions, and normalizer-baked export remain
+intact.
 
-Seed17 then completed a cumulative 3500-update continuation at 4096 envs from
-the cumulative-2500 checkpoint. The complete campaign is under
-`/tmp/microduck-adaptive-corrected-s17-3500/`.
-
-The bounded evidence continuation is
-`/tmp/microduck-adaptive-evidence-s17-3750-r2/`. It resumed the cumulative
-3500 checkpoint for 250 updates, completed two valid native evaluation windows
-with command feedback, and recorded exposure/rollback behavior. The final
-held-out native report has lower-tail `0.75130`, with forward, lateral, and
-turn-right below threshold. Both adaptive difficulty axes stayed at stage 0.
-This validates the measurement path but does not establish a usable policy.
+The prior bounded evidence continuation is
+`/tmp/microduck-adaptive-evidence-s17-3750-r2/`; it validated seven-class
+feedback but ended with held-out native lower-tail `0.75130`. The first
+post-repair continuation is
+`/tmp/microduck-adaptive-evidence-s17-4250-repair/`; it completed 500 updates,
+recorded four native windows, and ended with held-out native lower-tail
+`0.42439`. It reproduced three rollback cycles and showed the pre-`b3db958`
+state-reversion bug (`retention_repairs` repeatedly reset to 1). The new
+250-update validation is running under
+`/tmp/microduck-adaptive-evidence-s17-4500-retention/`.
 
 ## Last proven evidence
 
@@ -47,19 +49,13 @@ seed `20260921` fails yaw (`0.15395 rad/s`, aggregate `0.74342`), while seed
 (`0.10184 rad/s`, aggregate `0.64188`). These are native MJLab/BAM reports,
 not CPU transfer results. The CPU/ONNX rehearsal has lower-tail score `0.0`
 and is retained only as separate transfer evidence using XML position
-actuators. The new bounded continuation's held-out report is
-`/tmp/microduck-adaptive-evidence-s17-3750-r2/heldout/capability.json`; its
-native gate-window reports are under the training run's
-`adaptive_eval/model_3624.eval/` and `adaptive_eval/model_3749.eval/`
-directories. Each feedback window contains roughly 12.4M samples, seven-class
-fractions matching live exposure, and zero unclassified samples. Per-bucket
-reward mass is now available for the next acquisition intervention; the
-failure remains native capability retention.
-
-The runner metadata shows the final preservation failure at env step `84000`
-and rollback to `model_3249.eval.adaptive.pt`; the campaign's
-`status: evaluated` therefore means artifacts were produced, not that the
-policy passed. There is still no usable policy.
+actuators. The 4250-update native continuation is
+`/tmp/microduck-adaptive-evidence-s17-4250-repair/`; it completed four valid
+windows and ended with held-out lower-tail `0.42439`. Its event trace shows
+three rollback cycles and the pre-`b3db958` bug: every rollback restored stale
+exposure, so `retention_repairs` reset to 1. The campaign's `status: evaluated`
+means artifacts were produced, not that the policy passed. There is still no
+usable policy.
 
 The diagnostic traces also separate command bias from gait ripple: on the
 held-out trace, mean velocity bias is about `-0.015 m/s` forward and
@@ -75,14 +71,14 @@ Blocker fingerprint: `native_command_conditioned_acquisition_and_retention`.
 The remaining issue is no longer missing orchestration or evaluator parity. The
 controller can alter exposure and roll back safely, but the learned policy does
 not retain all six capabilities across native reset/DR seeds. Lateral remains
-near the gate, yaw is seed-sensitive, and the final turn-left result regresses.
+near the gate, yaw is seed-sensitive, and turn retention regresses. The current
+slice tests whether preserving live exposure changes that failure mode.
 
-Do not start the formal training seeds `17/23/47` matrix yet. The evidence
-contract is now proven, so the next intervention must use the recorded
-per-bucket reward mass to change one bounded acquisition mechanism and then
-repeat native held-out evaluation. Keep product thresholds, signed-EMA metric,
-61D/14D ABI, BAM M6, and the zero anchor fixed. Do not make another
-coefficient-only continuation.
+Do not start the formal training seeds `17/23/47` matrix yet. Finish the
+post-`b3db958` two-window native check first, then use the recorded per-bucket
+reward mass to choose the next bounded acquisition mechanism. Keep product
+thresholds, signed-EMA metric, 61D/14D ABI, BAM M6, and the zero anchor fixed.
+Do not make another coefficient-only continuation.
 
 The completed manifests are `training-result.json`, `campaign-result.json`,
 `heldout/capability.json`, and `cpu-transfer/capability.json` under the campaign
@@ -111,9 +107,9 @@ state, preservation decision, and native seed replay.
 ## Verification inventory
 
 Focused proof: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest
-pytest -q tests/test_adaptive_*.py` (`142 passed`), plus compileall and the
-canonical/Feedback 64-env five-update smokes. The changed adaptive files pass
-Ruff; pre-existing full-file `mdp.py` lint findings remain outside this slice.
+pytest -q tests/test_adaptive_*.py` (`147 passed`), plus the canonical 64-env
+five-update BAM smoke after `b3db958`. The changed adaptive files pass Ruff;
+pre-existing full-file `mdp.py` lint findings remain outside this slice.
 Every training change requires smoke64/5 before a long run. Campaign launch uses
 `scripts/run_adaptive_campaign_job.py --branch lateral-drive --seed 17
 --output <new-dir> --iterations <cumulative-budget> --resume <exact-checkpoint>
