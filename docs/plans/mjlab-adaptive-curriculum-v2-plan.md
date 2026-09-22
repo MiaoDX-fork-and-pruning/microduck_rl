@@ -6,8 +6,12 @@ unproven. Bounded adaptive smoothing relief improved native yaw in one matched
 fails native/CPU acceptance, and a 10-seed stage diagnostic exposes startup and
 lateral-survival failures. Fixed sensor-bias ablations confirm calibration
 sensitivity in yaw; matched push ablations locate the lateral recovery regression.
-A bounded pure-yaw-only relief treatment (`610fbc5`) passed real smoke64/5
-and live per-command cost checks; its 250-update comparison is running. Formal training seeds 17/23/47 remain gated.
+A bounded pure-yaw-only relief treatment (`610fbc5`) completed smoke64/5 and
+250 updates. It preserved survival in the failing full-push case but lost yaw
+acquisition (zero gate/native/CPU yaw scores), so it is not promoted. A fixed-actor
+noise diagnostic exposes deterministic startup failure masked by stochastic
+rollouts. The next bounded comparison tests low-entropy consolidation; formal
+training seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
 
@@ -141,11 +145,13 @@ costs are scaled only for zero-planar/nonzero-yaw commands, with the canonical
 manager weight and other command costs retained. Pure-yaw capability controls
 the existing bounded window. Versioned state preserves the scope through resume
 and rollback; legacy controllers remain global and mismatches fail closed.
-Default LateralDrive stays global pending evidence. Product pushes, sensors,
-commands, reward signs, ABI and gates are unchanged. Focused tests, smoke64/5
-and a 64-env live weighted-cost probe pass. The 250-update treatment is running
-at `/tmp/microduck-adaptive-pure-yaw-s17-250` on an immutable `610fbc5` source
-plus the recorded CPU seed overlay; actor acceptance remains unproven.
+Default LateralDrive stays global. Product pushes, sensors, commands, reward
+signs, ABI and gates are unchanged. Focused tests, smoke64/5 and a 64-env live
+weighted-cost probe passed. The 250-update treatment completed at
+`/tmp/microduck-adaptive-pure-yaw-s17-250` on immutable `610fbc5` plus the
+recorded CPU seed overlay. All 680 source files and retained actor equality
+were verified; the candidate was retained without rollback, but not accepted
+as usable. Its authoritative `experiment-summary.json` records the negative result.
 
 Training contract: exact common 6250 checkpoint, seed 17, 4096 environments,
 250 updates to 6500, gate seeds 20260815–17, stage distribution and existing
@@ -158,6 +164,51 @@ full-push rollout. Failure to preserve lateral recovery or yaw learning rejects
 this treatment as sufficient. Do not extend its budget without a changed
 hypothesis. Fresh held-out seeds, multi-training-seed proof and CPU transfer
 remain required even if this diagnostic comparison improves.
+
+Completed scores (zero/forward/lateral/yaw/left/right): gate cohort
+.975/.718/.802/.000/.749/.719; native final diagnostic seed 20260915
+.949/.868/.812/.000/.649/.788; CPU .973/.859/.789/.000/.838/.841.
+Native/CPU yaw mean rates are .103/.046 rad/s for a .8 command: under-speed.
+The full-push stage case at seed 20260916 survives with lateral .796, versus
+global relief .298 and no-relief .790. All six recorded reset fields and the
+initial raw actor observation match the no-relief control. Six native/ONNX
+action comparisons pass (maximum error 6.56e-7). This rejects pure-yaw-only
+relief as a sufficient treatment; do not extend it unchanged.
+
+### Deterministic startup and consolidation comparison
+
+The matched training windows have nearly equal command fractions. Learned
+action std means differ: no-relief .185, global relief .280, pure-yaw relief
+.197. The distribution uses state-independent per-action std, so local reward
+relief does not isolate exploration by command. This is a mechanism clue,
+not proof that a different exploration schedule will repair the policy.
+
+Fixed-actor diagnostic:
+`/tmp/microduck-yaw-exploration-dependence-v2/analysis-summary.json`.
+Six 64-env rollouts compare deterministic inference, learned Gaussian action
+noise for the first second, and continuous noise. All eleven recorded initial
+state/observation fields match, all six trace hashes pass. For pure-yaw relief,
+45/64 deterministic rollouts end near idle; a one-second pulse reduces this to
+17/64 and continuous noise to 1/64. Mean final-two-second rates are .202/.609/
+.805 rad/s. The global actor's corresponding means are .819/.845/.816. These
+are diagnostic tail rates, not capability passes; no deployment noise is proposed.
+One pulse rollout falls. Auto-reset keeps other batch members running but failed
+members remain excluded. Batched Warp contact trajectories are not bitwise
+replays: initially tiny differences grow even with equal noise samples.
+
+Hypothesis: reducing the entropy incentive during late consolidation makes PPO
+optimize behavior closer to deterministic inference and can retain the global
+actor's acquired yaw without its late recovery/transfer regressions. Test the
+standard `--agent.algorithm.entropy-coef 0.0` against the existing .01 extension,
+starting from the exact global-relief 6500 known-good adaptive snapshot, not the
+final 6750-budget filename. Use seed 17, 4096 envs, 250 updates, inherited
+global relief, unchanged gate cohort/distribution and final/CPU diagnostics.
+The launch wrapper must record the actual argv, entropy override and source
+hash, run smoke64/5 first, and verify saved `params/agent.yaml`. No automatic
+entropy controller or default change is justified before behavioral proof.
+Improvement must be measured on the retained actor and accompanied by actual
+std reduction; failure rejects this bounded consolidation treatment. Full
+six-bucket mastery, fresh held-out seeds and all remaining acceptance still apply.
 
 ## Goal
 
