@@ -146,12 +146,17 @@ def run_battery(
 
         np.savez_compressed(trace_path, **trace)
         report["trace"] = str(trace_path)
+    actuator_profile = cases[0]["actuator_profile"]
+    if any(case["actuator_profile"] != actuator_profile for case in cases):
+        raise ValueError("CPU actuator profile changed between capability buckets")
     config = {
-        "name": "adaptive_velocity_six_bucket_v3",
+        "name": "adaptive_velocity_six_bucket_v4",
         "velocity_frame": "body_link_origin",
+        "actuator_profile": actuator_profile,
         "implementation_sha256": {
             "battery": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
             "rollout": hashlib.sha256((ROOT / "scripts/run_specialist_action_battery.py").read_bytes()).hexdigest(),
+            "inference": hashlib.sha256((ROOT / "scripts/infer_policy.py").read_bytes()).hexdigest(),
         },
         "thresholds": dict(DEFAULT_THRESHOLDS),
         "tracking_metric": tracking_metric,
