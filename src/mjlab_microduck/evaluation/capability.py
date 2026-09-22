@@ -32,11 +32,10 @@ DEFAULT_THRESHOLDS = {
     "tilt_p95_rad": math.radians(35),
 }
 
-# The training-side acquisition term averages signed error over a 0.5 s gait
-# cycle before taking its magnitude.  The native gate must measure the same
-# command-following quantity; otherwise a healthy alternating gait is scored
-# as if it were standing still.  Instantaneous error remains a hard stability
-# cap so a violent oscillation cannot pass by averaging alone.
+# Average signed error before taking its magnitude to measure sustained
+# command-following bias separately from alternating gait motion. The 0.5 s
+# time constant is also used by the acquisition reward. A separate samplewise
+# MAE cap limits ripple; it does not bound individual velocity peaks.
 TRACKING_METRIC_SAMPLEWISE = "samplewise_mae_v1"
 TRACKING_METRIC_SIGNED_EMA = "signed_ema_v1"
 DEFAULT_TRACKING_METRIC = TRACKING_METRIC_SIGNED_EMA
@@ -128,14 +127,24 @@ def _tracking_metric_mode(evaluator_config: Mapping[str, Any]) -> str:
 
 def _thresholds(evaluator_config: Mapping[str, Any]) -> dict[str, float]:
     thresholds = dict(DEFAULT_THRESHOLDS)
-    if _tracking_metric_mode(evaluator_config) == TRACKING_METRIC_SIGNED_EMA:
-        thresholds.update(DEFAULT_INSTANTANEOUS_CAPS)
     configured = evaluator_config.get("thresholds")
     if isinstance(configured, Mapping):
         for key, value in configured.items():
             if key in thresholds and _finite(value) and float(value) > 0:
                 thresholds[key] = float(value)
     return thresholds
+
+
+def _instantaneous_caps(evaluator_config: Mapping[str, Any]) -> dict[str, float]:
+    caps = dict(DEFAULT_INSTANTANEOUS_CAPS)
+    configured = evaluator_config.get("instantaneous_caps", {})
+    if not isinstance(configured, Mapping):
+        raise ValueError("instantaneous_caps must be a mapping")
+    for key, value in configured.items():
+        if key not in caps or not _finite(value) or float(value) <= 0:
+            raise ValueError(f"invalid samplewise error cap: {key}")
+        caps[key] = float(value)
+    return caps
 
 
 def _metadata(m: Mapping[str, Any]) -> dict[str, Any]:
@@ -151,6 +160,7 @@ def _bucket(
     t: Mapping[str, float],
     *,
     tracking_metric: str = TRACKING_METRIC_SAMPLEWISE,
+    instantaneous_caps: Mapping[str, float] | None = None,
 ) -> dict[str, Any]:
     tracking_key = (
         "angular_tracking_error_rad_s"
@@ -193,12 +203,10 @@ def _bucket(
             if name in ("yaw", "turn-left", "turn-right")
             else "tracking_m_s"
         )
-        # This is deliberately a hard stability cap, rather than another
-        # smooth score.  It preserves the product threshold for DC tracking
-        # while rejecting visibly violent samplewise excursions.
+        caps = DEFAULT_INSTANTANEOUS_CAPS if instantaneous_caps is None else instantaneous_caps
         c["instantaneous_stability"] = float(
             _finite(raw.get(instantaneous_key))
-            and abs(float(raw[instantaneous_key])) <= t[cap_key]
+            and abs(float(raw[instantaneous_key])) <= caps[cap_key]
         )
     if not valid:
         c = {k: 0.0 for k in c}
@@ -235,13 +243,15 @@ class CapabilityReport:
             raise ValueError("invalid evaluator config")
         tracking_metric = _tracking_metric_mode(evaluator_config)
         thresholds = _thresholds(evaluator_config)
+        caps = _instantaneous_caps(evaluator_config)
         expected_buckets: dict[str, dict[str, Any]] = {}
         for n in BUCKETS:
             b = payload["buckets"][n]
             if not isinstance(b, Mapping) or not isinstance(b.get("raw"), Mapping):
                 raise ValueError(f"missing raw bucket evidence: {n}")
             expected = _bucket(
-                b["raw"], n, thresholds, tracking_metric=tracking_metric
+                b["raw"], n, thresholds, tracking_metric=tracking_metric,
+                instantaneous_caps=caps,
             )
             # Raw evidence is the source of truth.  Reject forged aggregates,
             # components, validity, or pass flags rather than silently trusting them.
@@ -296,12 +306,14 @@ def build_capability_report(
     cfg = dict(evaluator_config or {})
     tracking_metric = _tracking_metric_mode(cfg)
     t = _thresholds(cfg)
+    caps = _instantaneous_caps(cfg)
     cfg.setdefault("tracking_metric", tracking_metric)
     if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
         cfg.setdefault("tracking_metric_tau_s", DEFAULT_TRACKING_TAU_S)
-        cfg.setdefault("instantaneous_caps", dict(DEFAULT_INSTANTANEOUS_CAPS))
+        cfg["instantaneous_caps"] = caps
     bs = {
-        n: _bucket(bucket_raw[n], n, t, tracking_metric=tracking_metric)
+        n: _bucket(bucket_raw[n], n, t, tracking_metric=tracking_metric,
+                   instantaneous_caps=caps)
         for n in BUCKETS
     }
     valid = all(x["valid"] for x in bs.values())

@@ -1,7 +1,9 @@
 import math
+import pytest
 
 from mjlab_microduck.evaluation.capability import (
     BUCKETS,
+    DEFAULT_THRESHOLDS,
     TRACKING_METRIC_SIGNED_EMA,
     build_capability_report,
     resolve_enabled_axes,
@@ -62,7 +64,7 @@ def test_signed_ema_metric_keeps_gait_ripple_but_caps_instantaneous_excursion():
     actual = [0.12 + 0.20 * math.sin(2.0 * math.pi * 2.0 * step * 0.02) for step in range(500)]
     samplewise, signed_ema = tracking_error_metrics(actual, [0.12] * len(actual))
     assert samplewise > 0.12
-    assert signed_ema < 0.06
+    assert signed_ema < 0.024
 
     report = build_capability_report(
         _signed_raw(error=signed_ema, samplewise=samplewise),
@@ -85,6 +87,34 @@ def test_signed_ema_metric_rejects_violent_ripple_and_dc_miss():
         evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA},
     )
     assert not dc_miss.payload["buckets"]["forward"]["passed"]
+
+
+@pytest.mark.parametrize("thresholds", [None, DEFAULT_THRESHOLDS])
+def test_stability_caps_never_replace_product_tracking_thresholds(thresholds):
+    config = {"tracking_metric": TRACKING_METRIC_SIGNED_EMA}
+    if thresholds is not None:
+        config["thresholds"] = thresholds
+    # Both sides of the contract must be independent of whether the caller
+    # explicitly supplies the product thresholds.
+    biased = build_capability_report(
+        _signed_raw(error=0.04, samplewise=0.04), metadata=META, evaluator_config=config
+    )
+    assert not biased.payload["buckets"]["forward"]["passed"]
+    ripple = build_capability_report(
+        _signed_raw(error=0.01, samplewise=0.20), metadata=META, evaluator_config=config
+    )
+    assert ripple.payload["buckets"]["forward"]["passed"]
+    assert ripple.payload["evaluator_config"]["thresholds"] == DEFAULT_THRESHOLDS
+
+
+def test_report_uses_the_declared_samplewise_cap():
+    report = build_capability_report(
+        _signed_raw(error=0.01, samplewise=0.20), metadata=META,
+        evaluator_config={"tracking_metric": TRACKING_METRIC_SIGNED_EMA,
+                          "instantaneous_caps": {"tracking_m_s": 0.18,
+                                                 "angular_tracking_rad_s": 0.6}},
+    )
+    assert not report.payload["buckets"]["forward"]["passed"]
 
 
 def test_missing_or_nonfinite_data_is_invalid():
