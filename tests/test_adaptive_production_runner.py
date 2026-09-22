@@ -698,6 +698,7 @@ def test_transition_checkpoint_load_is_exact_and_legacy_load_disables_live_state
         "repairs": 2,
         "last_reason": "test",
     }
+
     assert term.cfg.transition_probability == pytest.approx(0.30)
 
     # An old checkpoint has no transition state. Explicit load must clear a
@@ -712,6 +713,32 @@ def test_transition_checkpoint_load_is_exact_and_legacy_load_disables_live_state
     assert runner.transition_exposure.windows == 0
     assert runner.transition_exposure.last_reason == "legacy_checkpoint_bootstrap"
     assert term.cfg.transition_probability == 0.0
+
+
+def test_sensor_reset_fraction_is_checkpointed_and_must_match_environment(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.env.cfg.adaptive_sensor_reset_fraction = 1.0
+    source.env.event_manager.cfgs["adaptive_sensor_resample"] = SimpleNamespace(
+        params={"fraction": 1.0}
+    )
+    checkpoint = tmp_path / "sensor-reset.pt"
+    source.save(str(checkpoint))
+    saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    assert saved["infos"]["adaptive_curriculum"]["sensor_reset_fraction"] == 1.0
+
+    resumed = _runner()
+    with pytest.raises(ValueError, match="sensor reset fraction mismatch"):
+        resumed.load(str(checkpoint))
+
+    resumed.env.cfg.adaptive_sensor_reset_fraction = 1.0
+    resumed.env.event_manager.cfgs["adaptive_sensor_resample"] = SimpleNamespace(
+        params={"fraction": 1.0}
+    )
+    resumed.load(str(checkpoint))
+    assert resumed.env.cfg.adaptive_sensor_reset_fraction == 1.0
 
 
 def test_zero_transition_checkpoint_loads_into_legacy_command_exposure_runner(

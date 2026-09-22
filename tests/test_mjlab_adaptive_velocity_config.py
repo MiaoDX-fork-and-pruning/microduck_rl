@@ -306,6 +306,25 @@ def test_sensor_reset_resampling_is_opt_in_and_exclusive(monkeypatch) -> None:
         make_microduck_adaptive_velocity_env_cfg()
 
 
+def test_resume_checkpoint_recreates_sensor_reset_event(monkeypatch, tmp_path) -> None:
+    import torch
+
+    checkpoint = tmp_path / "sensor-reset.pt"
+    torch.save(
+        {
+            "infos": {
+                "adaptive_curriculum": {"sensor_reset_fraction": 1.0}
+            }
+        },
+        checkpoint,
+    )
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION", raising=False)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_sensor_reset_fraction == 1.0
+    assert cfg.events["adaptive_sensor_resample"].params["fraction"] == 1.0
+
+
 def test_registered_task_ids_match_checkpoint_provenance():
     from mjlab.tasks.registry import load_env_cfg
     from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES

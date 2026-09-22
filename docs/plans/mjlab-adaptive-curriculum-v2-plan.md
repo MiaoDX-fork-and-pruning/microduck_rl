@@ -100,6 +100,14 @@ at `0.0`. This is useful negative evidence for the CPU diagnosis, but it is
 not a matched BAM-vs-XML experiment and does not authorize a product or
 training conclusion by itself.
 
+The sensor-reset checkpoint contract is now implemented and verified: the
+fraction is persisted in adaptive metadata, full loads fail closed on a live
+configuration mismatch, campaign resumes propagate the saved value before
+constructing the environment, and direct resumes recover it from the explicit
+checkpoint path. The 222-test adaptive/config suite, focused lint, real 64-env
+smoke, and one-update direct resume all pass. This removes a reproducibility
+blocker while leaving the native usability and CPU-transfer gates unresolved.
+
 The cohort repair is now closed at both boundaries: aggregation checks every
 member's provenance, evaluator config and trace hash, while the runner checks
 the persisted member manifest and recomputes the worst-member selection before

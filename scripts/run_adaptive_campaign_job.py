@@ -81,6 +81,7 @@ def main() -> int:
     transition_override_requested = args.transition_probability is not None
     start_iterations = 0
     saved_final_com_fraction = 0.0
+    saved_sensor_reset_fraction = 0.0
     saved_transition_probability = 0.0
     saved_transition_mode = "forward"
     transition_mode_override_requested = args.transition_mode is not None
@@ -95,6 +96,10 @@ def main() -> int:
         start_iterations = int(state["completed_iterations"])
         saved_fraction = state.get("final_com_fraction", 0.0)
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
+        saved_sensor_fraction = state.get("sensor_reset_fraction", 0.0)
+        saved_sensor_reset_fraction = 0.0 if saved_sensor_fraction is None else float(saved_sensor_fraction)
+        if not 0.0 <= saved_sensor_reset_fraction <= 1.0:
+            parser.error("checkpoint sensor reset fraction must be in [0, 1]")
         transition_state = state.get("transition_exposure") or {}
         saved_transition_probability = float(transition_state.get("probability", 0.0))
         saved_transition_mode = str(state.get("transition_bootstrap_mode", "forward"))
@@ -138,6 +143,14 @@ def main() -> int:
     environment.pop("MICRODUCK_ADAPTIVE_RESULT_FILE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
     environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
+    if args.resume:
+        # The checkpoint owns this training-distribution setting. Recreate it
+        # before the environment is constructed, even when the shell that
+        # launched the continuation has no sensor-reset variable.
+        environment.pop("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION", None)
+        environment["MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION"] = str(
+            saved_sensor_reset_fraction
+        )
     environment.update({
         "PYTHONUNBUFFERED": "1",
         "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
@@ -174,8 +187,9 @@ def main() -> int:
         "task_id": task_id,
         "axis_mode": axis_mode,
         "source_sha": source_sha,
-        "sensor_reset_fraction": os.environ.get(
-            "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION", "0"
+        "sensor_reset_fraction": environment.get(
+            "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+            str(saved_sensor_reset_fraction),
         ),
     }
     (output / "campaign-config.json").write_text(json.dumps(config, indent=2) + "\n")
@@ -230,6 +244,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+        "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT",
         # Sensor-corner coverage is a training-only augmentation.  Frozen
         # native and CPU reports must use the product DR distribution.
         "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",

@@ -333,6 +333,7 @@ class CommandCapabilityEvaluator:
             "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
             "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
             "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+            "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT",
             "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
             "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
         ):
@@ -913,6 +914,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         gate = self.capability_gate
         completed = getattr(self, "completed_iterations", self.current_learning_iteration + 1)
         exposure = getattr(self, "command_exposure", None)
+        sensor_reset_fraction = float(
+            getattr(self.env.cfg, "adaptive_sensor_reset_fraction", 0.0)
+        )
+        if not np.isfinite(sensor_reset_fraction) or not 0.0 <= sensor_reset_fraction <= 1.0:
+            raise ValueError("adaptive sensor reset fraction must be finite and in [0, 1]")
         state = gate.state_dict() if gate is not None else {"axis_mode": "all_static", "enabled_axes": []}
         state.update({
             "version": 1,
@@ -926,6 +932,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "transition_bootstrap_mode": getattr(
                 self.env.cfg, "adaptive_transition_bootstrap_mode", "forward"
             ),
+            # Sensor reset coverage changes the consumed training distribution.
+            # Persist it beside the controller state so a full resume cannot
+            # silently fall back to the ordinary fixed realization.
+            "sensor_reset_fraction": sensor_reset_fraction,
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
@@ -970,6 +980,36 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint task mismatch")
             if int(state.get("evaluation_schema_version", 2)) != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
                 raise ValueError("adaptive checkpoint evaluator schema mismatch")
+            saved_sensor_fraction = float(state.get("sensor_reset_fraction", 0.0))
+            current_sensor_fraction = float(
+                getattr(self.env.cfg, "adaptive_sensor_reset_fraction", 0.0)
+            )
+            if (
+                not np.isfinite(saved_sensor_fraction)
+                or not 0.0 <= saved_sensor_fraction <= 1.0
+                or not np.isfinite(current_sensor_fraction)
+                or not 0.0 <= current_sensor_fraction <= 1.0
+            ):
+                raise ValueError("adaptive checkpoint sensor reset fraction is invalid")
+            if saved_sensor_fraction != current_sensor_fraction:
+                raise ValueError(
+                    "adaptive checkpoint sensor reset fraction mismatch; "
+                    "recreate the environment with the checkpoint setting"
+                )
+            if saved_sensor_fraction > 0.0:
+                try:
+                    sensor_term = _manager_env(self.env).event_manager.get_term_cfg(
+                        "adaptive_sensor_resample"
+                    )
+                except (AttributeError, KeyError, AssertionError) as exc:
+                    raise ValueError(
+                        "adaptive checkpoint sensor reset event is missing"
+                    ) from exc
+                live_fraction = float(sensor_term.params.get("fraction", 0.0))
+                if live_fraction != saved_sensor_fraction:
+                    raise ValueError(
+                        "adaptive checkpoint sensor reset event fraction mismatch"
+                    )
             saved_cohort_size = state.get("evaluation_cohort_size")
             legacy_cohort_migration = (
                 saved_cohort_size is None and self.evaluation_cohort_size > 1

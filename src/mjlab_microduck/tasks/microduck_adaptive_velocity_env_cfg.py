@@ -8,6 +8,7 @@ an evaluator or training adapter owns feeding it frozen battery metrics.
 from copy import deepcopy
 from dataclasses import dataclass, fields
 import os
+from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
 from mjlab.managers import CurriculumTermCfg, EventTermCfg, RewardTermCfg
@@ -85,6 +86,36 @@ STRICTIFICATION_PROFILE_STAGES = (
         "action_rate_l2": -0.6,
     },
 )
+
+
+def _resume_sensor_reset_fraction() -> float | None:
+    """Read the persisted sensor coverage before constructing a resume env.
+
+    The adaptive runner restores its state after the environment exists, so a
+    reset event must be registered during config construction. The launcher
+    normally propagates this value as an environment variable; this fallback
+    also makes direct ``train`` resumes reproduce the checkpoint distribution.
+    """
+
+    checkpoint_name = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
+    if not checkpoint_name:
+        return None
+    checkpoint = Path(checkpoint_name)
+    if not checkpoint.is_file():
+        raise ValueError(f"adaptive resume checkpoint does not exist: {checkpoint}")
+    import torch
+
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    state = (payload.get("infos") or {}).get("adaptive_curriculum")
+    if not isinstance(state, dict) or "sensor_reset_fraction" not in state:
+        return None
+    try:
+        fraction = float(state["sensor_reset_fraction"])
+    except (TypeError, ValueError) as exc:
+        raise ValueError("adaptive checkpoint sensor reset fraction must be numeric") from exc
+    if not 0.0 <= fraction <= 1.0:
+        raise ValueError("adaptive checkpoint sensor reset fraction must be in [0, 1]")
+    return fraction
 
 # Feedback-only acquisition signal: at low commanded speeds the Gaussian
 # tracking reward is nearly flat around standing. These dimensionless,
@@ -269,7 +300,11 @@ def make_microduck_adaptive_velocity_env_cfg(
             },
         )
     sensor_reset_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION")
-    if sensor_reset_fraction is not None:
+    if sensor_reset_fraction is None:
+        resumed_fraction = _resume_sensor_reset_fraction()
+        if resumed_fraction is not None:
+            cfg.adaptive_sensor_reset_fraction = resumed_fraction
+    else:
         try:
             cfg.adaptive_sensor_reset_fraction = float(sensor_reset_fraction)
         except ValueError as exc:

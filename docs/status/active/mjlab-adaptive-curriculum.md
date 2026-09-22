@@ -40,6 +40,15 @@ remained `0.0`. This rules out the current-limit switch as a standalone
 explanation and makes delay a sensitivity factor, while leaving the full
 BAM-vs-XML dynamics/observation split unresolved.
 
+The resume contract is now closed for this augmentation: checkpoint metadata
+stores `sensor_reset_fraction`, full loads reject a mismatched live event, the
+campaign launcher propagates the saved value before environment construction,
+and direct `train` resumes read it from `MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT`.
+The adaptive/config suite passes (`222`), focused lint and diff checks pass, and
+a real 64-env/5-update smoke followed by a one-update resume with the sensor
+variable unset restored `sensor_reset_fraction=1.0`. This fixes reproducibility;
+it does not improve the failed policy capability scores above.
+
 Runner evaluation, bounded command exposure, checkpoint/resume and retention
 rollback operate. Both CoM axes remain at ±3 mm. Formal training seeds 17/23/47
 remain gated on a retained six-capability policy; no video/hardware usability or

@@ -16,12 +16,14 @@ spec.loader.exec_module(campaign)
 
 
 def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None,
-                  fraction=None, transition=False):
+                  fraction=None, sensor_reset_fraction=None, transition=False):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
              "evaluation_events": events or [{"kind": "hold"}]}
     if fraction is not None:
         state["final_com_fraction"] = fraction
+    if sensor_reset_fraction is not None:
+        state["sensor_reset_fraction"] = sensor_reset_fraction
     if transition:
         state["transition_exposure"] = {"probability": 0.2}
         state["transition_bootstrap_mode"] = "zero"
@@ -121,3 +123,53 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
     assert result["heldout_aggregate"]["passed"] is False
     assert result["cpu_transfer_aggregate"]["passed"] is False
     assert result["final_com_fraction"] == expected_fraction
+
+
+def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(
+    monkeypatch, tmp_path
+):
+    task, _ = campaign.TASKS["feedback"]
+    checkpoint = tmp_path / "sensor-reset-checkpoint.pt"
+    _write_result(
+        tmp_path / "prior-result.json",
+        checkpoint,
+        start=0,
+        completed=5,
+        task=task,
+        sensor_reset_fraction=1.0,
+    )
+    output = tmp_path / "continuation"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "reviewed-source")
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION", raising=False)
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "feedback", "--seed", "17",
+        "--output", str(output), "--iterations", "7", "--num-envs", "64",
+        "--gate-interval", "1", "--resume", str(checkpoint),
+    ])
+
+    def run(command, **kwargs):
+        env = kwargs["env"]
+        if Path(command[0]).name == "train":
+            assert env["MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION"] == "1.0"
+            phase = Path(kwargs["cwd"]).name
+            if phase == "training":
+                final = output / "training" / "model_6.pt"
+                _write_result(
+                    Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]),
+                    final,
+                    start=5,
+                    completed=7,
+                    task=task,
+                    sensor_reset_fraction=1.0,
+                )
+        else:
+            assert "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION" not in env
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True, exist_ok=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    config = json.loads((output / "campaign-config.json").read_text())
+    assert config["sensor_reset_fraction"] == "1.0"
