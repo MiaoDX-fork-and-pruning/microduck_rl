@@ -138,15 +138,35 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
     from mjlab.envs import ManagerBasedRlEnv
     from mjlab.rl import RslRlVecEnvWrapper
     from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
+    from mjlab_microduck.tasks.adaptive_curriculum import ADAPTIVE_AXIS_CONFIGS, evaluation_com_widths
 
     if (
         steps < 1
         or not seed_set_id.strip()
-        or distribution not in ("initial", "final")
+        or distribution not in ("initial", "final", "stage")
         or zero_mode not in ("nominal", "push")
     ):
         raise ValueError("invalid evaluation steps, seed set or distribution")
     checkpoint = checkpoint.resolve()
+    stage_values = {}
+    if distribution == "stage":
+        state = (torch.load(checkpoint, map_location="cpu", weights_only=False).get("infos") or {}).get("adaptive_curriculum")
+        if not isinstance(state, dict) or state.get("task_id") != task or state.get("axis_mode") != axis_mode:
+            raise ValueError("stage evaluation checkpoint task/axis mismatch")
+        stage_values = state.get("stage_values")
+        widths = evaluation_com_widths(distribution, axis_mode, stage_values)
+        if set(state.get("enabled_axes", ())) != set(stage_values):
+            raise ValueError("stage evaluation checkpoint enabled axes mismatch")
+        for axis in ADAPTIVE_AXIS_CONFIGS:
+            if axis.name not in stage_values:
+                continue
+            index = state.get("states", {}).get(axis.name, {}).get("current_stage")
+            if (isinstance(index, bool) or not isinstance(index, int)
+                or not 0 <= index < len(axis.stages) or axis.stages[index] != widths[axis.name]):
+                raise ValueError("stage evaluation checkpoint stage/value mismatch")
+    widths = evaluation_com_widths(distribution, axis_mode, stage_values)
+    reference_step = 0 if distribution == "initial" else 96000
+    ranges = (widths["com_range"], widths["head_com_range"])
     output.mkdir(parents=True, exist_ok=True)
     session = None
     if onnx is not None:
@@ -185,9 +205,8 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
         # and can silently overwrite the ranges before the first sample.
         for curriculum_name in ("com_range", "head_com_range"):
             cfg.curriculum.pop(curriculum_name, None)
-        # Use the same canonical reference distribution for every branch/checkpoint.
-        reference_step = 96000 if distribution == "final" else 0
-        ranges = (0.015, 0.01) if distribution == "final" else (0.003, 0.003)
+        # Stage gates vary only owned CoM axes; the product battery retains
+        # final CoM and the same final reference for all other curricula.
         for event, width in zip(("randomize_com", "randomize_head_com"), ranges, strict=True):
             cfg.events[event].params["ranges"] = (-width, width)
         agent_cfg = load_rl_cfg(task)
@@ -307,6 +326,7 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
               "zero_mode": zero_mode, "environment_profile": "training",
               "bucket_isolation": "fresh_environment",
               "distribution": distribution, "reference_env_step": reference_step,
+              "stage_values": stage_values, "com_widths": widths,
               "auto_reset": False, "num_envs": 1, "device": device,
               "step_dt": step_dt,
               "actuator_config": actuator_config,
@@ -340,7 +360,7 @@ def main() -> int:
     p.add_argument("--seed-set-id", default="adaptive-native-gate-20260920")
     p.add_argument("--axis-mode", default="all_static", choices=("all_static", "com", "head_com", "composed"))
     p.add_argument("--source-sha", default="unknown")
-    p.add_argument("--distribution", choices=("initial", "final"), default="final")
+    p.add_argument("--distribution", choices=("initial", "final", "stage"), default="final")
     p.add_argument("--zero-mode", choices=("nominal", "push"), default="nominal")
     payload = run_native(**vars(p.parse_args()))
     print(json.dumps(payload["aggregate"], indent=2))

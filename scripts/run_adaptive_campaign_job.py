@@ -60,6 +60,10 @@ def main() -> int:
         "--gate-cohort-size", type=int, default=3,
         help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
     )
+    parser.add_argument("--gate-distribution", choices=("final", "stage"), default=None,
+                        help="Inherit on resume; fresh adaptive runs use checkpointed CoM stages")
+    parser.add_argument("--rebaseline-gate", action="store_true",
+                        help="Explicitly discard old gate evidence when changing distribution on resume")
     parser.add_argument("--final-com-fraction", type=float, default=None,
                         help="Final-CoM rehearsal fraction (0..0.20); defaults to checkpoint value or zero")
     parser.add_argument("--transition-probability", type=float, default=None,
@@ -78,6 +82,7 @@ def main() -> int:
     if args.resume and args.branch == "fixed":
         parser.error("the canonical fixed runner has no audited resume budget; use an adaptive/static branch")
     task_id, axis_mode = TASKS[args.branch]
+    saved_gate_distribution = "final" if axis_mode == "all_static" else "stage"
     transition_override_requested = args.transition_probability is not None
     start_iterations = 0
     saved_final_com_fraction = 0.0
@@ -94,6 +99,7 @@ def main() -> int:
         if not state or state.get("task_id") != task_id:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
         start_iterations = int(state["completed_iterations"])
+        saved_gate_distribution = state.get("evaluation_distribution", "final")
         saved_fraction = state.get("final_com_fraction", 0.0)
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
         saved_sensor_fraction = state.get("sensor_reset_fraction", 0.0)
@@ -109,6 +115,14 @@ def main() -> int:
             parser.error("resume must retain the checkpoint's gate seed")
         if args.iterations <= start_iterations:
             parser.error("iterations must exceed the checkpoint's completed update count")
+    if args.gate_distribution is None:
+        args.gate_distribution = saved_gate_distribution
+    if args.gate_distribution not in ("final", "stage"):
+        parser.error("checkpoint evaluation distribution must be final or stage")
+    if args.resume and args.gate_distribution != saved_gate_distribution and not args.rebaseline_gate:
+        parser.error("changing gate distribution requires --rebaseline-gate")
+    if axis_mode == "all_static" and args.gate_distribution != "final":
+        parser.error("stage gate requires an adaptive axis")
     if args.final_com_fraction is None:
         args.final_com_fraction = saved_final_com_fraction
     if not 0.0 <= args.final_com_fraction <= 0.20:
@@ -159,6 +173,8 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
         "MICRODUCK_ADAPTIVE_EVALUATION_SEED": str(args.gate_seed),
         "MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE": str(args.gate_cohort_size),
+        "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION": args.gate_distribution,
+        "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION": "1" if args.rebaseline_gate else "0",
         "MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION": (
             "1" if args.resume and args.gate_cohort_size > 1 else "0"
         ),
@@ -167,6 +183,7 @@ def main() -> int:
             f"{shlex.quote(sys.executable)} {shlex.quote(str(source / 'scripts/run_adaptive_native_cohort_battery.py'))} "
             "--checkpoint {checkpoint} --task {task_id} --axis-mode {axis_mode} "
             "--evaluation-seed {evaluation_seed} --cohort-size {cohort_size} "
+            "--distribution {distribution} "
             "--seed-set-id {seed_set_id} --output {output}"
         ),
     })
@@ -223,6 +240,8 @@ def main() -> int:
         )
         if float(adaptive_state.get("final_com_fraction", 0.0)) != args.final_com_fraction:
             raise ValueError("training result lost the configured final CoM rehearsal fraction")
+        if adaptive_state.get("evaluation_distribution", "final") != args.gate_distribution:
+            raise ValueError("training result lost the configured gate distribution")
         transition_state = adaptive_state.get("transition_exposure")
         if args.transition_probability > 0.0:
             if not isinstance(transition_state, dict):
@@ -249,6 +268,8 @@ def main() -> int:
         # native and CPU reports must use the product DR distribution.
         "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
         "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+        "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
+        "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

@@ -361,7 +361,7 @@ def main() -> int:
     parser.add_argument("--steps", type=int, default=300)
     parser.add_argument("--device", default=os.environ.get("MICRODUCK_NATIVE_DEVICE", "cuda:0"))
     parser.add_argument("--onnx", type=Path)
-    parser.add_argument("--distribution", choices=("initial", "final"), default="final")
+    parser.add_argument("--distribution", choices=("initial", "final", "stage"), default="final")
     parser.add_argument("--zero-mode", choices=("nominal", "push"), default="nominal")
     args = parser.parse_args()
     explicit = None

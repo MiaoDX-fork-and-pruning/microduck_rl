@@ -16,10 +16,11 @@ spec.loader.exec_module(campaign)
 
 
 def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None,
-                  fraction=None, sensor_reset_fraction=None, transition=False):
+                  fraction=None, sensor_reset_fraction=None, transition=False, distribution="final"):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
-             "evaluation_events": events or [{"kind": "hold"}]}
+             "evaluation_events": events or [{"kind": "hold"}],
+             "evaluation_distribution": distribution}
     if fraction is not None:
         state["final_com_fraction"] = fraction
     if sensor_reset_fraction is not None:
@@ -64,8 +65,9 @@ def test_gate_cohort_seed_coverage_cannot_overlap_heldout(monkeypatch, tmp_path)
 @pytest.mark.parametrize("saved_fraction,requested_fraction,expected_fraction", [
     (None, None, 0.0), (0.2, None, 0.2), (None, 0.2, 0.2), (0.2, 0.0, 0.0),
 ])
+@pytest.mark.parametrize("gate_distribution", ["final", "stage"])
 def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
-    monkeypatch, tmp_path, saved_fraction, requested_fraction, expected_fraction
+    monkeypatch, tmp_path, saved_fraction, requested_fraction, expected_fraction, gate_distribution
 ):
     task, _ = campaign.TASKS["feedback"]
     checkpoint = tmp_path / "checkpoint with spaces.pt"
@@ -81,6 +83,8 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
     if requested_fraction is not None:
         argv += ["--final-com-fraction", str(requested_fraction)]
     argv += ["--transition-probability", "0.2", "--transition-mode", "zero"]
+    if gate_distribution == "stage":
+        argv += ["--gate-distribution", "stage", "--rebaseline-gate"]
     monkeypatch.setattr(sys, "argv", argv)
     calls = []
 
@@ -90,6 +94,8 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
         if Path(command[0]).name == "train":
             phase = Path(kwargs["cwd"]).name
             env = kwargs["env"]
+            assert env["MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION"] == gate_distribution
+            assert "--distribution {distribution}" in env["MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND"]
             if phase == "smoke":
                 assert "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT" not in env
                 assert env["MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL"] == "0"
@@ -99,7 +105,7 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
                 assert command[command.index("--agent.max-iterations") + 1] == "2"
                 final = output / "training" / "explicit-final.pt"
                 _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task,
-                              fraction=expected_fraction, transition=True)
+                              fraction=expected_fraction, transition=True, distribution=gate_distribution)
         else:
             for name in (
                 "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
@@ -107,6 +113,8 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
                 "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
                 "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
                 "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
+                "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
+                "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
             ):
                 assert name not in kwargs["env"]
             report = Path(command[command.index("--output") + 1])
@@ -123,6 +131,21 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
     assert result["heldout_aggregate"]["passed"] is False
     assert result["cpu_transfer_aggregate"]["passed"] is False
     assert result["final_com_fraction"] == expected_fraction
+    assert result["gate_distribution"] == gate_distribution
+
+
+def test_campaign_cannot_silently_reuse_final_gate_evidence_for_stage_gate(monkeypatch, tmp_path):
+    task, _ = campaign.TASKS["feedback"]
+    checkpoint = tmp_path / "final.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, task=task)
+    monkeypatch.setattr(sys, "argv", [
+        "campaign", "--branch", "feedback", "--seed", "17", "--iterations", "8",
+        "--num-envs", "64", "--resume", str(checkpoint),
+        "--output", str(tmp_path / "run"), "--gate-distribution", "stage",
+    ])
+    with pytest.raises(SystemExit):
+        campaign.main()
+    assert not (tmp_path / "run").exists()
 
 
 def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(

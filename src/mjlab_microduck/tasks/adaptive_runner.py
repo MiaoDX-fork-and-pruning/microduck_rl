@@ -22,6 +22,7 @@ from .adaptive_curriculum import (
     CommandExposure,
     TransitionExposure,
     apply_stage_to_env,
+    evaluation_com_widths,
 )
 from mjlab_microduck.evaluation.capability import (
     BUCKETS,
@@ -119,6 +120,9 @@ def _validate_cohort_envelope(
         member_config_hash = canonical_sha256(member_report.payload.get("evaluator_config", {}))
         if member_meta.get("evaluator_config_sha256") != member_config_hash:
             raise ValueError("cohort member evaluator config hash mismatch")
+        for key in ("distribution", "stage_values", "com_widths", "reference_env_step"):
+            if member_report.payload.get("evaluator_config", {}).get(key) != payload.get("evaluator_config", {}).get(key):
+                raise ValueError("cohort member evaluation distribution mismatch")
         if config_hash is None:
             config_hash = member_config_hash
         elif member_config_hash != config_hash:
@@ -318,6 +322,7 @@ class CommandCapabilityEvaluator:
             "seed_set_id": seed_set_id,
             "evaluation_seed": str(evaluation_seed),
             "cohort_size": str(self.cohort_size),
+            "distribution": str(curriculum_state.get("evaluation_distribution", "final")),
             "output": str(output),
         }
         # Split the configured argv before substituting paths, so spaces in a
@@ -376,6 +381,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.allow_legacy_cohort_migration = bool(
             getattr(env.cfg, "adaptive_allow_legacy_cohort_migration", False)
         )
+        self.evaluation_distribution = getattr(env.cfg, "adaptive_evaluation_distribution", None) or "final"
         self.evaluation_events: list[dict[str, object]] = []
         self.last_evaluation_provenance: dict[str, object] | None = None
         self.last_known_good_checkpoint: str | None = None
@@ -589,7 +595,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 checkpoint_path=Path(checkpoint_path),
                 task_id=self.env.cfg.task_id,
                 axis_mode=self.capability_gate.axis_mode,
-                curriculum_state=self.capability_gate.state_dict(),
+                curriculum_state={
+                    **self.capability_gate.state_dict(),
+                    "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
+                },
                 iteration=self.current_learning_iteration,
                 seed_set_id=seed_set_id,
                 evaluation_seed=self.evaluation_seed,
@@ -610,7 +619,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 "report_path": str(Path(checkpoint_path).parent / "adaptive_eval" / Path(checkpoint_path).stem / "capability.json"),
             }
             previous_best = self.capability_gate.best_metrics.copy()
-            self.record_capability_metrics(
+            transition = self.record_capability_metrics(
                 metrics,
                 step=getattr(self, "completed_iterations", self.current_learning_iteration) * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
                 checkpoint=checkpoint_path,
@@ -631,7 +640,26 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             # capability mastered before it. Waiting for aggregate ``passed``
             # meant the first useful zero/forward checkpoint was discarded,
             # leaving preservation failures with no rollback target.
-            if (mastered_before | mastered_now) and preserved and self.last_gate_outcome != "preservation_failure":
+            stage_changed = transition is not None and getattr(self, "evaluation_distribution", "final") == "stage"
+            if stage_changed:
+                # The report proves the old stage. Do not label the newly
+                # applied difficulty mastered or compare its first score with
+                # an easier distribution's best score/EMA/rollback target.
+                self.evaluation_events.append({
+                    "kind": "stage_evidence_rebaseline",
+                    "transition": transition.as_dict(),
+                    "previous_best_metrics": dict(self.capability_gate.best_metrics),
+                    "previous_known_good_checkpoint": self.last_known_good_checkpoint,
+                    "previous_known_good_buckets": list(self.last_known_good_buckets),
+                })
+                self.capability_gate.reset_evidence(step=transition.step)
+                self.last_known_good_checkpoint = None
+                self.last_known_good_buckets = ()
+                exposure = getattr(self, "command_exposure", None)
+                if exposure is not None:
+                    exposure.focus_best_score = None
+                    exposure.focus_stall_count = 0
+            elif (mastered_before | mastered_now) and preserved and self.last_gate_outcome != "preservation_failure":
                 self.last_known_good_checkpoint = str(Path(checkpoint_path).with_suffix(".adaptive.pt"))
                 self.last_known_good_buckets = tuple(sorted(mastered_before | mastered_now))
         # A hold also changes pass counters/EMA. Persist every boundary without
@@ -670,6 +698,21 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         expected_task = getattr(self.env.cfg, "task_id", None)
         expected_seed = int(self.evaluation_seed)
         expected_seed_set = getattr(self, "evaluation_seed_set_id", None)
+        distribution = getattr(self, "evaluation_distribution", "final")
+        config = payload.get("evaluator_config", {})
+        if config.get("distribution", distribution) != distribution:
+            raise ValueError("capability report evaluation distribution mismatch")
+        if distribution == "stage":
+            stage_values = {name: self.capability_gate.stage_value(name) for name in self.capability_gate.axis_order}
+            if (
+                config.get("distribution") != "stage"
+                or config.get("stage_values") != stage_values
+                or config.get("com_widths") != evaluation_com_widths("stage", mode, stage_values)
+                or config.get("reference_env_step") != 96000
+            ):
+                raise ValueError("capability report stage distribution mismatch")
+            if metadata.get("evaluator_config_sha256") != canonical_sha256(config):
+                raise ValueError("capability report evaluator config hash mismatch")
         if int(getattr(self, "evaluation_cohort_size", 1)) > 1:
             _validate_cohort_envelope(
                 payload,
@@ -950,6 +993,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "evaluation_seed_set_id": getattr(self, "evaluation_seed_set_id", None),
             "evaluation_seed": getattr(self, "evaluation_seed", None),
             "evaluation_cohort_size": getattr(self, "evaluation_cohort_size", 1),
+            "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
             "env_step": completed * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
         })
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
@@ -973,6 +1017,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         exposure = deepcopy(getattr(self, "command_exposure", None))
         transition_exposure = deepcopy(getattr(self, "transition_exposure", None))
         completed = self.current_learning_iteration + 1
+        distribution = getattr(self, "evaluation_distribution", "final")
         if state:
             if state.get("version", 1) != 1:
                 raise ValueError("unsupported adaptive checkpoint version")
@@ -980,6 +1025,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint task mismatch")
             if int(state.get("evaluation_schema_version", 2)) != int(getattr(self.env.cfg, "adaptive_evaluator_schema_version", 2)):
                 raise ValueError("adaptive checkpoint evaluator schema mismatch")
+            saved_distribution = state.get("evaluation_distribution", "final")
+            distribution = getattr(self.env.cfg, "adaptive_evaluation_distribution", None) or saved_distribution
+            if saved_distribution not in ("final", "stage") or distribution not in ("final", "stage"):
+                raise ValueError("invalid adaptive checkpoint evaluation distribution")
+            distribution_migration = saved_distribution != distribution
+            if distribution_migration and not getattr(self.env.cfg, "adaptive_allow_distribution_migration", False):
+                raise ValueError("adaptive checkpoint evaluation distribution mismatch; explicit migration required")
             saved_sensor_fraction = float(state.get("sensor_reset_fraction", 0.0))
             current_sensor_fraction = float(
                 getattr(self.env.cfg, "adaptive_sensor_reset_fraction", 0.0)
@@ -1031,7 +1083,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             legacy_known_good = None
             if gate is not None:
                 gate.load_state_dict(state)
-                if legacy_cohort_migration:
+                if legacy_cohort_migration or distribution_migration:
                     # Keep the learned PPO policy, optimizer, stage difficulty,
                     # exposure and cumulative step budget. Rebaseline only the
                     # evidence that was measured under the old single-seed
@@ -1042,12 +1094,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                         "states": deepcopy(state.get("states", {})),
                         "trace_length": len(gate.trace),
                     }
-                    gate.best_metrics = {}
-                    for axis_state in gate.states.values():
-                        axis_state.pass_count = 0
-                        axis_state.fail_count = 0
-                        axis_state.ema_score = None
-                        axis_state.last_transition_step = -1
+                    gate.reset_evidence()
                     legacy_known_good = {
                         "checkpoint": state.get("last_known_good_checkpoint"),
                         "buckets": list(state.get("last_known_good_buckets", ())),
@@ -1058,6 +1105,9 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint command exposure mismatch")
             if exposure is not None:
                 exposure.load_state_dict(state["command_exposure"])
+                if distribution_migration:
+                    exposure.focus_best_score = None
+                    exposure.focus_stall_count = 0
             saved_transition = state.get("transition_exposure")
             saved_bootstrap_mode = str(state.get("transition_bootstrap_mode", "forward"))
             current_bootstrap_mode = str(
@@ -1117,14 +1167,16 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self.last_known_good_buckets = tuple(str(name) for name in buckets)
             self.evaluation_events = list(state.get("evaluation_events", []))
             self.last_evaluation_provenance = state.get("evaluation_provenance")
-            if legacy_cohort_migration:
+            if legacy_cohort_migration or distribution_migration:
                 self.last_known_good_checkpoint = None
                 self.last_known_good_buckets = ()
                 self.last_evaluation_provenance = None
                 self.evaluation_events.append({
-                    "kind": "cohort_rebaseline",
-                    "from_cohort_size": 1,
-                    "to_cohort_size": self.evaluation_cohort_size,
+                    "kind": "distribution_rebaseline" if distribution_migration else "cohort_rebaseline",
+                    "from_distribution": saved_distribution,
+                    "to_distribution": distribution,
+                    "from_cohort_size": state.get("evaluation_cohort_size", 1),
+                    "to_cohort_size": getattr(self, "evaluation_cohort_size", 1),
                     "completed_iterations": completed,
                     "legacy_gate": legacy_gate_audit,
                     "legacy_known_good": legacy_known_good,
@@ -1137,6 +1189,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         elif gate is not None or exposure is not None or transition_exposure is not None:
             raise ValueError("resume requires adaptive state; use actor-only load for a warm start")
         self.capability_gate = gate
+        self.evaluation_distribution = distribution
         self.command_exposure = exposure
         self.transition_exposure = transition_exposure
         self.completed_iterations = completed

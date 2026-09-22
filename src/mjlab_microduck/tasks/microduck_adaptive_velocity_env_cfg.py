@@ -190,6 +190,10 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # campaign must opt in explicitly when it re-baselines that evidence for a
     # larger native cohort while preserving the PPO state and cumulative budget.
     adaptive_allow_legacy_cohort_migration: bool = False
+    # None inherits a resumed checkpoint, otherwise preserves the legacy final
+    # gate. Changing this contract requires explicit evidence rebaselining.
+    adaptive_evaluation_distribution: str | None = None
+    adaptive_allow_distribution_migration: bool = False
     adaptive_evaluator_schema_version: int = 2
     adaptive_seed_set_id: str = "adaptive-gate-20260916"
     adaptive_evaluation_timeout_s: int = 900
@@ -277,6 +281,12 @@ def make_microduck_adaptive_velocity_env_cfg(
         raise ValueError("adaptive evaluation cohort size must be positive")
     cfg.adaptive_allow_legacy_cohort_migration = (
         os.environ.get("MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION", "0") == "1"
+    )
+    cfg.adaptive_evaluation_distribution = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION")
+    if cfg.adaptive_evaluation_distribution not in (None, "final", "stage"):
+        raise ValueError("adaptive evaluation distribution must be final or stage")
+    cfg.adaptive_allow_distribution_migration = (
+        os.environ.get("MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION", "0") == "1"
     )
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")

@@ -1,9 +1,10 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 infrastructure complete; Phase 2A usable-policy acquisition is
-unproven. The slew acquisition experiment completed 5000→5500 updates but both
-gate windows triggered retention rollback. Native cohort gate wiring is now
-implemented and verified; formal seeds 17/23/47 remain gated.
+unproven. The 6,000-update sensor-reset policy still fails native and CPU product
+checks. Stage-aware acquisition gates are implemented and CPU-verified; real
+smoke and a bounded changed-contract campaign are next. Formal seeds 17/23/47
+remain gated.
 Date: 2026-09-23
 Related:
 
@@ -12,6 +13,39 @@ Related:
 - [`status/active/mjlab-adaptive-curriculum.md`](../status/active/mjlab-adaptive-curriculum.md)
 
 ## Active execution contract
+
+### Stage-aware gate repair (2026-09-23)
+
+Training stayed at ±3 mm CoM while the in-run evaluator always defaulted to
+the final ±15 mm body / ±10 mm head distribution. The same checkpoint and
+three-member gate cohort scored `.267` on final and `.701514` on initial CoM;
+neither meets `.80`. The diagnostic is
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/diagnostic-initial-com/capability.json`.
+
+The native/cohort evaluator now accepts `--distribution stage`. It validates
+checkpoint axis indices against recorded stage values, substitutes only the
+owned CoM axes, and keeps the final reference step for all other curricula.
+Distribution, stage values and full CoM widths enter the evaluator config hash;
+the runner rejects reports and cohort members with mismatched distributions.
+Every stage change discards incomparable EMA/mastery/rollback evidence while
+preserving difficulty, PPO state and transition history. Retention is measured
+within a stage; passing an early stage does not establish product usability.
+
+Campaigns default to stage gates for fresh adaptive runs and inherit the saved
+contract on resume (legacy checkpoints mean `final`). An explicit change uses
+`--gate-distribution stage --rebaseline-gate`; it preserves the policy,
+optimizer, cumulative budget and exposure probabilities while clearing old
+gate evidence. Direct runner resumes inherit the saved distribution when no
+override is supplied. Independent held-out native and CPU checks retain the
+final product distribution and original thresholds.
+
+Validation: 250 adaptive/config/capability tests pass, as do focused Ruff
+(`E4,E7,E9,F`) and diff checks. Real 64-env/5-update smoke, a fixed-checkpoint
+three-member stage evaluation, and a bounded 6,000→6,500 training segment must
+establish runtime wiring and whether the corrected feedback changes retained
+learning. Do not interpret this implementation proof as policy acceptance.
+
+### Sustained objective
 
 Status: **ACTIVE**. Task control plane: thread
 `01a0c2ae-6895-7700-accd-89a0e7a46e1b`, workspace `holy-ape`.

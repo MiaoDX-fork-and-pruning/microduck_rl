@@ -8,6 +8,28 @@ Execution is local in the main session; other worktree changes are not owned.
 
 ## Current evidence and decision
 
+The current diagnostic isolates a curriculum/evaluator mismatch. The final
+6,000-update checkpoint evaluated on the same three native gate seeds scores
+`.267` on `final` CoM and `.701514` on `initial` CoM (±3 mm). Initial bucket
+scores are zero `.953`, forward `.702`, lateral `.773`, yaw `.733`, left `.818`,
+right `.792`; the artifact is
+`/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/diagnostic-initial-com/capability.json`.
+Neither distribution passes `.80`. The campaign currently omits `--distribution`
+and therefore uses the evaluator's `final` default even while training remains
+at stage 0. This is a confirmed feedback-distribution mismatch, not proof that
+changing the gate alone will produce a usable policy.
+
+Current bounded repair contract (medium context: evaluator and resume semantics
+must agree): evaluate acquisition against checkpointed CoM stages while retaining
+the final reference step and the independent final-distribution held-out/product
+gate. Persist distribution and stage provenance; reject mismatches; require an
+explicit migration to discard incomparable old gate evidence. Rebaseline mastery,
+EMA and rollback evidence when a stage changes. Success is validated stage
+consumption, fail-closed report/resume behavior and a real 64-env/5-update smoke,
+followed by a bounded training segment. Product success still requires all
+original gates below. Canonical Velocity, rewards, ABI and unrelated worktree
+changes are outside this repair.
+
 The sensor-reset experiment is complete at
 `/tmp/microduck-adaptive-sensor-reset-s17-6000-r2/` (source `07d31a5`,
 5,000→6,000 updates, seed 17, 4,096 environments, three-member native gate
@@ -92,61 +114,25 @@ No retained learning gain is established. The campaign source is read-only
 
 ## Current slice and next decision
 
-Blocker fingerprint: `direct_command_yaw_under_reset_DR_robustness`.
-Classification: command-initiation/retention depends strongly on reset/DR state;
-continuous acquisition commands alone have not cleared the retained-policy gate.
+Blocker fingerprint: `stage_gate_uses_final_com_distribution`.
+Root cause: the evaluator command omitted distribution, so final difficulty
+controlled acquisition at stage 0. The stage-aware contract is implemented;
+250 adaptive/config/capability tests, focused Ruff (`E4,E7,E9,F`) and diff checks
+pass. No new runtime training evidence is available yet.
 
-The paired candidate/control probe is complete. Slew improved mean yaw from
-about `.477` to `.646`, but only 2/10 reset/DR seeds passed yaw and 0/10 passed
-all six buckets. The candidate was rolled back at both gate windows; no retained
-learning gain is established. Startup sensor probes show a nonlinear failure
-interaction between IMU misalignment and encoder bias.
+Next: record a read-only source snapshot; run a real 64-env/5-update smoke with
+one three-member stage gate; evaluate the 6,000-update policy at checkpointed
+stages with the same final reference step; then run a bounded 6,000→6,500 segment
+using `--gate-distribution stage --rebaseline-gate`. The smoke must pass before
+long training. A stage pass only controls acquisition: final native held-out,
+CPU/XML rehearsal, videos, independent seeds 17/23/47 and matched fixed baseline
+remain required. Do not repeat sensor-reset-only or slew-only budgets.
 
-The current implementation slice adds
-`scripts/run_adaptive_native_cohort_battery.py`. It keeps the old single-seed
-battery as the primitive, while an explicit cohort size runs fixed native seeds
-and selects the worst score and raw evidence independently for each bucket.
-The campaign launcher now opts into a three-seed gate cohort; held-out CPU and
-native checks remain separate. Cohort metadata records all member reports and
-the selected seed map, and the runner persists the cohort size in checkpoint
-state. Member config/provenance and every member trace are checked before
-aggregation, and the runner rechecks the returned seed map and worst-member
-selection. Legacy checkpoints require an explicit migration flag; migration
-preserves PPO state and cumulative budget while clearing old single-seed
-mastery and rollback evidence.
-
-The actual native proof at `/tmp/microduck-adaptive-cohort-proof/` produced a
-schema-v2 report and passed the native trace validator. Its conservative
-lower-tail score was `.72200` and `passed=false`, correctly exposing the current
-policy's lack of robust mastery. A fresh real three-member native run at
-`/tmp/microduck-adaptive-native-cohort-smoke/capability.json` also passed the
-trace validator, with lower-tail `0.0` as expected from the 2-update smoke
-policy. No training remains running.
-
-Next action: use the cohort gate for the next changed training hypothesis and
-then address the causal sensor-DR robustness failure. Do not lower product
-thresholds, reuse a single lucky seed, or repeat the same 500-update slew budget.
-
-## Proof and remaining gates
-
-- Full adaptive/config suite: 207 passed, including cohort report, explicit
-  migration, and runner wiring contracts. The fresh real native cohort smoke
-  and the existing trace validator both passed; its policy score is negative
-  evidence, not a usability result.
-  Ruff retains
-  the 17 pre-existing findings in mdp.py. No new findings in the changed slice.
-- Transition-enabled smoke64/5 passed using TensorBoard in `/tmp`; the new
-  cohort-size configuration also passed a fresh 64-env/5-iteration smoke. Actor 61D,
-  action 14D, no NaN terminations. Repo `logs/rsl_rl` is not writable; W&B has no
-  local key. Neither prevents local training/evaluation.
-- `runtime-slew-proof.json`: 26/64 sampled transitions reached their exact target
-  naturally in 52–96 environment steps; actor command parity held for 110 steps.
-  This proves the ramp executes, not that the policy is usable.
-- Still required: retained six-bucket native gate, fresh held-out reset/DR proof,
-  rollout/video inspection, normalized ONNX and CPU deployment rehearsal,
-  three independent training seeds 17/23/47, then matched-budget comparison.
-- Fresh-sync portability remains unproven; current campaigns use the validated
-  local venv and explicit `PYTHONPATH` pointing to immutable source.
+Runtime proof already established for prior slices: 61D actor, 14D action,
+normalizer-baked export, sensor-reset restore, valid native cohort reports and
+retention rollback. Latest policy results above are failures. The local venv
+works; fresh-sync portability remains unproven. Repo `logs/rsl_rl` is not writable
+and W&B has no local key, so local runs use TensorBoard under `/tmp`.
 
 ## Boundaries and verification inventory
 
@@ -160,7 +146,9 @@ Tests: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest pytest -
  tests/test_adaptive_*.py tests/test_mjlab_adaptive_velocity_config.py`.
 Campaign: `scripts/run_adaptive_campaign_job.py --branch lateral-drive --seed 17
 --output <fresh-dir> --iterations <cumulative-updates> --resume <exact-checkpoint>
---num-envs 4096 --gate-interval 250 --gate-cohort-size 3`. Use a read-only source
+--num-envs 4096 --gate-interval 250 --gate-cohort-size 3`. Fresh runs use stage
+gates; resumes inherit their saved distribution. To migrate a legacy final
+gate, add `--gate-distribution stage --rebaseline-gate`. Use a read-only source
 snapshot and source manifest. Rehearsal/transition settings inherit the
 checkpoint unless explicitly overridden; frozen evaluators disable acquisition
 aids.
