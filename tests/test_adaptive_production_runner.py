@@ -213,7 +213,7 @@ def test_constructor_wires_command_evaluator_from_environment(monkeypatch):
     assert runner.evaluation_seed_set_id == "adaptive-default-20260915"
 
 
-def test_command_evaluator_writes_checkpoint_scoped_report_with_provenance(tmp_path):
+def test_command_evaluator_writes_checkpoint_scoped_report_with_provenance(tmp_path, monkeypatch):
     checkpoint = tmp_path / "model 2.eval.pt"
     checkpoint.write_bytes(b"checkpoint with a space")
     script = tmp_path / "fake_evaluator.py"
@@ -222,7 +222,16 @@ def test_command_evaluator_writes_checkpoint_scoped_report_with_provenance(tmp_p
 import argparse
 import hashlib
 import json
+import os
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report
+
+for _name in (
+    'MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY',
+    'MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE',
+    'MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE',
+    'MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE',
+):
+    assert _name not in os.environ, _name
 
 p = argparse.ArgumentParser()
 p.add_argument('--checkpoint', required=True)
@@ -253,6 +262,13 @@ with open(a.output, 'w') as f:
         "--checkpoint {checkpoint} --task-id {task_id} --axis-mode {axis_mode} "
         "--seed-set-id {seed_set_id} --evaluation-seed {evaluation_seed} --output {output}"
     )
+    for name in (
+        "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
+        "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
+        "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
+        "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+    ):
+        monkeypatch.setenv(name, "test")
     evaluator = CommandCapabilityEvaluator(command, timeout_s=30)
     report = evaluator.evaluate(
         checkpoint_path=checkpoint,

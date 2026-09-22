@@ -174,8 +174,12 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
             cfg.adaptive_final_com_fraction = 0.0
             cfg.adaptive_transition_acquisition = False
             cfg.adaptive_transition_probability = 0.0
+            cfg.adaptive_transition_probability_override = None
+            cfg.adaptive_transition_bootstrap_mode = "forward"
+            cfg.adaptive_transition_bootstrap_mode_override = False
             if hasattr(cfg.commands.get("twist"), "transition_probability"):
                 cfg.commands["twist"].transition_probability = 0.0
+                cfg.commands["twist"].transition_bootstrap_mode = "forward"
         # Evaluation uses an explicit frozen DR distribution. The training
         # curriculum is otherwise evaluated at ``reference_step`` during reset
         # and can silently overwrite the ranges before the first sample.

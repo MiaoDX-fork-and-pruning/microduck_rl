@@ -29,12 +29,20 @@ def test_native_construction_disables_training_rehearsal(monkeypatch, tmp_path, 
     from mjlab.envs.mdp import dr
 
     monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", "0.2")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE", "zero")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", "1")
 
     class CapturedConfiguration(Exception):
         pass
 
     def construct(*, cfg, device):
         assert cfg.adaptive_final_com_fraction == 0.0
+        assert not cfg.adaptive_transition_acquisition
+        assert cfg.adaptive_transition_probability_override is None
+        assert not cfg.adaptive_transition_bootstrap_mode_override
+        assert cfg.commands["twist"].transition_probability == 0.0
         for name, width in zip(("randomize_com", "randomize_head_com"), widths, strict=True):
             assert cfg.events[name].func is dr.body_ipos
             assert cfg.events[name].params["ranges"] == (-width, width)

@@ -217,8 +217,27 @@ class CommandCapabilityEvaluator:
         # Split the configured argv before substituting paths, so spaces in a
         # checkpoint path remain part of one argument. No shell is involved.
         command = [arg.format(**values) for arg in shlex.split(self.command)]
+        # Transition acquisition belongs to training command exposure. The
+        # frozen evaluator disables it explicitly; remove launch-only
+        # transition settings before spawning the evaluator so a training
+        # override cannot make the actor-only evaluation config inconsistent.
+        evaluator_env = dict(os.environ)
+        for name in (
+            "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
+            "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
+            "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
+            "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+        ):
+            evaluator_env.pop(name, None)
         with (output.parent / "evaluator.log").open("w") as log:
-            subprocess.run(command, check=True, timeout=self.timeout_s, stdout=log, stderr=subprocess.STDOUT)
+            subprocess.run(
+                command,
+                check=True,
+                timeout=self.timeout_s,
+                stdout=log,
+                stderr=subprocess.STDOUT,
+                env=evaluator_env,
+            )
         if not output.exists():
             raise FileNotFoundError(f"adaptive evaluator did not write {output}")
         from mjlab_microduck.evaluation.capability import CapabilityReport

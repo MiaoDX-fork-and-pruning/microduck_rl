@@ -88,8 +88,13 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
                 _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task,
                               fraction=expected_fraction, transition=True)
         else:
-            assert "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE" not in kwargs["env"]
-            assert "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE" not in kwargs["env"]
+            for name in (
+                "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
+                "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
+                "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
+                "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+            ):
+                assert name not in kwargs["env"]
             report = Path(command[command.index("--output") + 1])
             report.parent.mkdir(parents=True)
             report.write_text(json.dumps({"aggregate": {"passed": False, "score": 0.0}}))

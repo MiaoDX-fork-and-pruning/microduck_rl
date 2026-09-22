@@ -203,8 +203,13 @@ def main() -> int:
     # evaluator construct a non-exposure command term and then reject the
     # override before it can produce a behavioral report.
     evaluation_environment = dict(environment)
-    evaluation_environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
-    evaluation_environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE", None)
+    for name in (
+        "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY",
+        "MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE",
+        "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE",
+        "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_OVERRIDE",
+    ):
+        evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"
     with (output / "heldout.log").open("w") as log:
         subprocess.run([
