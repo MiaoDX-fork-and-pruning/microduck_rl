@@ -10,7 +10,7 @@ from dataclasses import dataclass, fields
 import os
 
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.managers import CurriculumTermCfg, RewardTermCfg
+from mjlab.managers import CurriculumTermCfg, EventTermCfg, RewardTermCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
 from . import mdp as microduck_mdp
@@ -141,6 +141,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_frontier_stall_improvement: float = 0.05
     adaptive_linear_feedback_weight: float = FEEDBACK_LINEAR_L1_WEIGHT
     adaptive_yaw_feedback_weight: float = FEEDBACK_YAW_L1_WEIGHT
+    # Optional adaptive-only startup coverage for coupled sensor DR corners.
+    # The canonical fixed Velocity recipe keeps the ordinary independent draws.
+    adaptive_sensor_corner_fraction: float = 0.0
     # None inherits the checkpoint (or zero on a fresh run). An explicit value
     # starts a recorded experiment override after resume; at most 20% is final.
     adaptive_final_com_fraction: float | None = None
@@ -244,6 +247,24 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
+    sensor_corner_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION")
+    if sensor_corner_fraction is not None:
+        try:
+            cfg.adaptive_sensor_corner_fraction = float(sensor_corner_fraction)
+        except ValueError as exc:
+            raise ValueError("adaptive sensor corner fraction must be numeric") from exc
+        if not 0.0 <= cfg.adaptive_sensor_corner_fraction <= 1.0:
+            raise ValueError("adaptive sensor corner fraction must be in [0, 1]")
+    if cfg.adaptive_sensor_corner_fraction > 0.0:
+        cfg.events["adaptive_sensor_corners"] = EventTermCfg(
+            func=microduck_mdp.randomize_sensor_corners,
+            mode="startup",
+            params={
+                "fraction": cfg.adaptive_sensor_corner_fraction,
+                "max_angle_deg": 6.0,
+                "bias_range": (-0.015, 0.015),
+            },
+        )
     final_com_fraction = os.environ.get("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION")
     if final_com_fraction is not None:
         cfg.adaptive_final_com_fraction = float(final_com_fraction)

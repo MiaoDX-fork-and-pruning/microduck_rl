@@ -3733,6 +3733,87 @@ def _imu_misalignment_quat(env: ManagerBasedRlEnv, max_angle_rad: float) -> torc
     return q
 
 
+def randomize_sensor_corners(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    fraction: float,
+    max_angle_deg: float,
+    bias_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> None:
+    """Reserve a bounded startup slice for coupled IMU/encoder DR corners.
+
+    The normal sensor randomizers draw each field independently.  That leaves
+    the joint tails of the fixed startup distribution sparsely represented,
+    even though the actor must handle the coupled realization on hardware.  A
+    small adaptive-only startup slice cycles through signed IMU axes and
+    encoder-bias patterns at the same physical limits.  Remaining environments
+    retain the ordinary random draws, so this is coverage, not a new range.
+
+    This is intentionally a startup event: a real robot's calibration error is
+    fixed for its lifetime.  It must not be registered on the canonical fixed
+    Velocity recipe unless a separate transfer contract adopts that semantics.
+    """
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("sensor corner fraction must be finite and in [0, 1]")
+    if not math.isfinite(max_angle_deg) or max_angle_deg < 0.0:
+        raise ValueError("sensor corner angle must be finite and nonnegative")
+    lo, hi = bias_range
+    if not math.isfinite(lo) or not math.isfinite(hi) or lo > hi:
+        raise ValueError("sensor corner bias range must be finite and ordered")
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.long)
+    else:
+        env_ids = env_ids.to(env.device, dtype=torch.long)
+    if env_ids.numel() == 0 or fraction == 0.0:
+        return
+
+    asset: Entity = env.scene[asset_cfg.name]
+    q = getattr(env, "_imu_misalign_quat", None)
+    if q is None:
+        n = env.num_envs
+        axis = torch.randn(n, 3, device=env.device)
+        axis = axis / (torch.norm(axis, dim=-1, keepdim=True) + 1e-8)
+        angle = torch.rand(n, device=env.device) * math.radians(max_angle_deg)
+        q = quat_from_angle_axis(angle, axis)
+        env._imu_misalign_quat = q
+
+    corner_count = min(env_ids.numel(), max(1, math.ceil(env_ids.numel() * fraction)))
+    corner_ids = env_ids[:corner_count]
+    axes = torch.tensor(
+        (
+            (1.0, 0.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, -1.0),
+        ),
+        device=env.device,
+        dtype=q.dtype,
+    )
+    pattern_count = len(corner_ids)
+    pattern = torch.arange(pattern_count, device=env.device)
+    axis = axes[pattern % len(axes)]
+    angle = torch.full(
+        (pattern_count,), math.radians(max_angle_deg), device=env.device, dtype=q.dtype
+    )
+    q[corner_ids] = quat_from_angle_axis(angle, axis)
+
+    joint_count = asset.data.encoder_bias.shape[1]
+    signs = torch.ones(pattern_count, joint_count, device=env.device, dtype=q.dtype)
+    pattern_id = pattern % 6
+    signs[pattern_id == 1] = -1.0
+    signs[pattern_id == 2, ::2] = -1.0
+    signs[pattern_id == 3, 1::2] = -1.0
+    signs[pattern_id == 4, : joint_count // 2] = -1.0
+    signs[pattern_id == 5, joint_count // 2 :] = -1.0
+    magnitude = (hi - lo) / 2.0
+    midpoint = (hi + lo) / 2.0
+    asset.data.encoder_bias[corner_ids] = midpoint + magnitude * signs
+
+
 def projected_gravity_imu_misaligned(
     env: ManagerBasedRlEnv,
     max_angle_deg: float = 1.0,

@@ -262,6 +262,25 @@ def test_legacy_cohort_migration_requires_explicit_launch_flag(monkeypatch) -> N
     assert cfg.adaptive_allow_legacy_cohort_migration is True
 
 
+def test_sensor_corner_coverage_is_opt_in_and_preserves_fixed_recipe(monkeypatch) -> None:
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", raising=False)
+    base = make_microduck_adaptive_velocity_env_cfg()
+    assert base.adaptive_sensor_corner_fraction == 0.0
+    assert "adaptive_sensor_corners" not in base.events
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", "0.25")
+    cfg = make_microduck_adaptive_velocity_env_cfg()
+    assert cfg.adaptive_sensor_corner_fraction == 0.25
+    assert cfg.events["adaptive_sensor_corners"].mode == "startup"
+    assert cfg.events["adaptive_sensor_corners"].params["fraction"] == 0.25
+    assert cfg.observations == base.observations
+    assert cfg.actions == base.actions
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION", "1.1")
+    with pytest.raises(ValueError, match="sensor corner fraction"):
+        make_microduck_adaptive_velocity_env_cfg()
+
+
 def test_registered_task_ids_match_checkpoint_provenance():
     from mjlab.tasks.registry import load_env_cfg
     from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES
