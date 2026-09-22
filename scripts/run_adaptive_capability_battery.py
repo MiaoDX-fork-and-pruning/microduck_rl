@@ -147,14 +147,17 @@ def run_battery(
         np.savez_compressed(trace_path, **trace)
         report["trace"] = str(trace_path)
     config = {
-        "name": "adaptive_velocity_six_bucket_v2",
+        "name": "adaptive_velocity_six_bucket_v3",
+        "velocity_frame": "body_link_origin",
+        "implementation_sha256": {
+            "battery": hashlib.sha256(Path(__file__).read_bytes()).hexdigest(),
+            "rollout": hashlib.sha256((ROOT / "scripts/run_specialist_action_battery.py").read_bytes()).hexdigest(),
+        },
         "thresholds": dict(DEFAULT_THRESHOLDS),
         "tracking_metric": tracking_metric,
         "tracking_metric_tau_s": tracking_tau_s,
         "instantaneous_caps": dict(DEFAULT_INSTANTANEOUS_CAPS),
     }
-    import hashlib
-
     config_hash = hashlib.sha256(
         json.dumps(config, sort_keys=True, separators=(",", ":")).encode()
     ).hexdigest()

@@ -19,6 +19,8 @@ EXPECTED_BATTERY_STEPS = 300
 
 def _validate_battery_traces(battery_dir: Path, payload: dict) -> None:
     """Require the frozen six-bucket trace ABI before accepting a report."""
+    if payload.get("evaluator_config", {}).get("velocity_frame") != "body_link_origin":
+        raise ValueError("battery velocity frame must be body_link_origin")
     cases = {str(case.get("bucket")): case for case in payload.get("cases", [])}
     if set(cases) != set(BUCKETS):
         raise ValueError("battery report must contain exactly six canonical buckets")

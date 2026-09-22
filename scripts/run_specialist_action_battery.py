@@ -135,11 +135,19 @@ def trunk_metrics(
     up_dot = float(np.clip(rotation[2, 2], -1.0, 1.0))
     position = data.xpos[body_id].copy()
     quaternion = data.xquat[body_id].copy()
+    # BODY uses the rotated principal-inertia frame at the CoM. XBODY uses
+    # the link axes and origin shared by commands and MJLab root_link_*_b.
+    velocity = np.zeros(6, dtype=np.float64)
+    mujoco.mj_objectVelocity(
+        model, data, mujoco.mjtObj.mjOBJ_XBODY, body_id, velocity, 1
+    )
     return {
         "position": position.tolist(),
         "quaternion_wxyz": quaternion.tolist(),
         "height_m": float(position[2]),
         "tilt_rad": float(math.acos(up_dot)),
+        "angular_velocity_rad_s": velocity[:3].astype(np.float32),
+        "linear_velocity_m_s": velocity[3:].astype(np.float32),
     }
 
 
@@ -335,14 +343,8 @@ def run_case(
         records["trunk_quaternion_wxyz"].append(metrics["quaternion_wxyz"])
         records["trunk_tilt_rad"].append(tilt)
         records["trunk_height_m"].append(metrics["height_m"])
-        # mj_objectVelocity(local=1) returns body-frame angular then linear
-        # velocity; this is the frame used by the velocity command contract.
-        body_vel = np.zeros(6, dtype=np.float64)
-        mujoco.mj_objectVelocity(
-            model, data, mujoco.mjtObj.mjOBJ_BODY, body_id, body_vel, 1
-        )
-        records["trunk_angular_velocity_rad_s"].append(body_vel[:3].astype(np.float32))
-        records["trunk_linear_velocity_m_s"].append(body_vel[3:].astype(np.float32))
+        records["trunk_angular_velocity_rad_s"].append(metrics["angular_velocity_rad_s"])
+        records["trunk_linear_velocity_m_s"].append(metrics["linear_velocity_m_s"])
         records["contacts"].append("|".join(contact_names(model, data)))
         records["recovered"].append(recovered)
 
