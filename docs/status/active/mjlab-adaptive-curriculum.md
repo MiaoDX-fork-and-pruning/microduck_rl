@@ -119,7 +119,15 @@ promotion. No observation, action, DR, push or acceptance change is included.
 
 Proof: 97 focused adaptive/config/cohort/campaign tests passed, then 13 campaign
 tests passed after adding the scope-inheritance regression. Focused Ruff passes.
-New-source smoke and training are next; no training process is currently running.
+The new-source smoke64/5 passed. A separate real 64-env probe confirms effective
+weights -.2 only on pure yaw and -1 on the other commands, finite 61D/14D data,
+nonpositive weighted costs and unchanged actions:
+`/tmp/microduck-pure-yaw-610fbc5-live-proof/runtime-proof.json`.
+The 250-update comparison is running in session `29482`, output
+`/tmp/microduck-adaptive-pure-yaw-s17-250`. Poll that handle; do not restart on
+timeout. Source: `/tmp/microduck-adaptive-pure-yaw-source-610fbc5`, 680 files,
+manifest SHA `5c2e75579942e6f46d1e8c94a6d6fb6f72de0c3eca11049553e54141948d5d58`.
+Training uses committed `610fbc5` plus the unchanged CPU seed overlay.
 
 Bounded comparison: resume the exact original 6250 `model_6249.eval.adaptive.pt`
 from the stage-gate campaign, seed 17, 4096 envs, 250 additional updates to 6500,

@@ -6,8 +6,8 @@ unproven. Bounded adaptive smoothing relief improved native yaw in one matched
 fails native/CPU acceptance, and a 10-seed stage diagnostic exposes startup and
 lateral-survival failures. Fixed sensor-bias ablations confirm calibration
 sensitivity in yaw; matched push ablations locate the lateral recovery regression.
-A bounded pure-yaw-only relief treatment is implemented for comparison; real smoke
-and training are next. Formal training seeds 17/23/47 remain gated.
+A bounded pure-yaw-only relief treatment (`610fbc5`) passed real smoke64/5
+and live per-command cost checks; its 250-update comparison is running. Formal training seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
 
@@ -142,8 +142,10 @@ manager weight and other command costs retained. Pure-yaw capability controls
 the existing bounded window. Versioned state preserves the scope through resume
 and rollback; legacy controllers remain global and mismatches fail closed.
 Default LateralDrive stays global pending evidence. Product pushes, sensors,
-commands, reward signs, ABI and gates are unchanged. Focused tests pass; real
-smoke and training proof are next.
+commands, reward signs, ABI and gates are unchanged. Focused tests, smoke64/5
+and a 64-env live weighted-cost probe pass. The 250-update treatment is running
+at `/tmp/microduck-adaptive-pure-yaw-s17-250` on an immutable `610fbc5` source
+plus the recorded CPU seed overlay; actor acceptance remains unproven.
 
 Training contract: exact common 6250 checkpoint, seed 17, 4096 environments,
 250 updates to 6500, gate seeds 20260815–17, stage distribution and existing
