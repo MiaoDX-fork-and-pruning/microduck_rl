@@ -16,63 +16,57 @@ Related:
 
 ### Respond to severe acquisition deficits (2026-09-23)
 
-Context budget: medium, to inspect the focused teacher update and regression
-tests. Current blocker: `teacher_ignores_severe_unmastered_deficit`.
-The completed control is summarized at
-`/tmp/microduck-adaptive-stage-gate-s17-6500-beea4f8/experiment-summary.json`.
-Its native stage yaw score fell .733→.248, while lateral stayed .773→.784;
-actual last-window sample fractions were .081 yaw versus .250 lateral. Final
-held-out yaw is .347 and corrected CPU yaw is zero; no policy is accepted.
+Current blocker: `severe_deficit_intervention_not_yet_trained`.
+`96fd557` repairs configured frontier dwell: if another directional bucket
+trails the focus by more than .25 normalized capability, the weakest bucket
+receives the bounded focus slice before ordinary patience expires. This is an
+allocation urgency margin; mastery remains .80. Sampling still moves one
+quarter toward the target, retaining zero/nominal anchors and directional
+floors. Smaller gaps keep consolidation dwell; ties use the saved order.
 
-Root cause: configured anti-stall dwell keeps the current unmastered focus
-until mastery or four stalled windows, regardless of other bucket scores.
-Retention repair only protects previously mastered buckets. Replaying the
-saved state and scores makes lateral exposure increase and yaw decrease.
+The old controller replay at lateral .784 / yaw .248 increased lateral exposure
+and decreased yaw. Two regressions fail on the old code; all 269 relevant tests
+now pass (one pre-existing absent specialist-manifest fixture is deselected).
+Real seeded sampling and saved/resumed decisions agree. Focused Ruff/diff checks
+pass. The real smoke64/5 proof, including stage/final separation, export and
+consumed CPU reset seeds, is
+`/tmp/microduck-adaptive-deficit-smoke-96fd557/runtime-proof.json`.
 
-Hypothesis: when another directional bucket trails the current focus by more
-than .25 normalized capability, selecting that weakest bucket before ordinary
-dwell expires gives the collapsed skill timely practice and improves retained
-capability. This is a sampling urgency margin, not a mastery/pass threshold.
-The existing quarter-step sampling update, zero/nominal anchors, per-direction
-floors, gate thresholds, and rollback semantics remain intact. Ordinary small
-gaps retain consolidation dwell; ties follow the saved frontier order.
+The matched-settings 6,000→6,500 replay completed at
+`/tmp/microduck-adaptive-deficit-s17-6500-96fd557/experiment-summary.json`.
+It is inconclusive about this repair: training diverged before feedback, the
+6250 lateral/yaw gap was .198 and did not trigger preemption, and terminal 6500
+invoked existing right-turn retention repair. The final actor was rolled back
+to 6250, verified by exact policy/normalizer tensor equality. Retained minima
+are .589 native stage, .748 final native held-out and .343 corrected CPU.
+No policy is accepted; no behavioral improvement is attributed to the repair.
 
-Proof command: `PYTEST_DISABLE_PLUGIN_AUTOLOAD=1 uv run --no-sync --with pytest
-pytest -q tests/test_adaptive_command_exposure.py`, then the relevant adaptive
-suite and a real 64-env/5-update campaign including the three-member stage gate,
-held-out native evaluation, normalized export and corrected CPU battery.
-The actual failed score vector must fail on the old logic and pass after the
-fix, including real sampling and equivalent saved/resumed decisions.
+An extension from that retained checkpoint was briefly started using the
+rejected candidate's .363 yaw score as its premise. It was stopped once the
+rollback was verified. The terminal evidence at
+`/tmp/microduck-adaptive-deficit-s17-6500-7000-96fd557/execution-status.json`
+is not a completed treatment and must not be resumed on that invalid premise.
 
-Product experiment: replay 6,000→6,500 from the control's exact checkpoint,
-4096 environments, seed 17, 250-update cadence, three-member stage gate,
-distribution migration, sensor-reset fraction 1 and inherited transition
-settings. Record immutable source hashes and any consumed CPU seed overlay.
-Compare the first gate before the allocation change, subsequent real sample
-fractions, retained native stage and independent final native/CPU scores.
-Do not count this paired replay as a new independent training seed.
+Next experiment contract: use the original control's frozen 6250 evaluation
+boundary (lateral .796, yaw .000) so the rule actually changes the next training
+window. Replay the controller decision with validated report/checkpoint hashes;
+compare matched resumed controls from identical policy, optimizer, gate, budget
+and RNG. Do not double-count a gate window or manually assign mastery.
+Hypothesis: earlier bounded allocation to the observed severe deficit improves
+retained yaw while preserving zero and other already-learned capabilities.
+Decision delta: increased actual samples without capability recovery rejects
+allocation alone as sufficient; improvement supports further independent-seed
+verification. Select and record the bounded budget before launch and preserve
+smoke64/5. No-touch scope: canonical Velocity, reward design, ABI, BAM, action
+filtering, pass thresholds, IsaacLab and unrelated files. Before-training
+rollback-baseline registration is a separate gap, not a silent extra treatment.
 
-Expected decision delta: improved retained yaw without losing the control's
-known-good zero/turn buckets supports the teacher repair; increased samples
-without recovery rejects allocation alone as a sufficient explanation.
-Success requires that behavioral improvement; implementation tests alone do
-not satisfy it. Failure stops this budget after 500 updates and returns to
-measured rollout diagnosis. No-touch scope: canonical Velocity, reward design,
-61D/14D ABI, BAM, filtering, metric thresholds, IsaacLab and unrelated files.
-Before-training rollback-baseline registration remains a separately assessed
-gap; it is not mixed into this teacher experiment.
-
-Implementation proof: the severe-gap and deterministic tie cases fail on the
-old controller. The relevant suite now reports 269 passed, 1 deselected (the
-existing absent specialist-manifest fixture), including actual seeded command
-resampling and equivalent save/resume decisions. Focused Ruff and diff checks
-pass. The repair is committed as `96fd557`. Real smoke64/5 passed at
-`/tmp/microduck-adaptive-deficit-smoke-96fd557/runtime-proof.json`, including
-stage/final distribution separation and six verified consumed CPU reset seeds.
-The matched behavioral replay is running at
-`/tmp/microduck-adaptive-deficit-s17-6500-96fd557/`; its contract and source
-manifest explicitly include the existing CPU reset-seed overlay. Behavioral
-improvement remains unproven.
+The source manifest includes the existing CPU seed overlay explicitly. A fresh
+locked non-editable installation, config and packaged-model compilation pass
+on Linux x86_64; proof:
+`/tmp/microduck-adaptive-fresh-sync-proof-96fd557.json`. Explicit PyPI selection
+avoids local mirror/lock-source drift without lockfile edits. Fresh-environment
+GPU and remote proof remain outstanding.
 
 ### Stage-aware gate repair (2026-09-23)
 
