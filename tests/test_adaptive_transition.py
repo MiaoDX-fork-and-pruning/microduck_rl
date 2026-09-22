@@ -126,6 +126,11 @@ def test_config_is_zero_by_default_and_transition_is_opt_in():
     assert feedback.adaptive_transition_acquisition
     assert feedback.adaptive_transition_probability == pytest.approx(0.20)
     assert feedback.commands["twist"].transition_probability == pytest.approx(0.20)
+    zero = make_microduck_adaptive_velocity_env_cfg(
+        command_exposure=True, transition_probability=0.0
+    )
+    assert zero.adaptive_transition_acquisition
+    assert zero.commands["twist"].transition_probability == 0.0
     with pytest.raises(ValueError, match="command_exposure"):
         make_microduck_adaptive_velocity_env_cfg(transition_probability=0.20)
 

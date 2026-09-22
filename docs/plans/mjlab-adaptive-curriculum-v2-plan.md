@@ -4,8 +4,9 @@ Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
 unproven. Command-conditioned evidence and retention repair operate, including
 persistent exposure across repeated policy rollbacks. The zero→yaw diagnostic
 identified missing command-initiation coverage; a bounded, opt-in transition
-acquisition slice is implemented and has passed focused/native smoke proof. A
-matched training comparison is still required before formal multi-seed runs.
+acquisition slice has completed one matched 4500→5000 comparison, but the
+candidate still fails native gate and CPU transfer. Formal multi-seed runs stay
+blocked.
 Date: 2026-09-22
 Related:
 
@@ -57,14 +58,25 @@ minimum moves 0.79519→0.0: the new candidate remains upright but yaw averages
 0.42439 and CPU/XML transfer 0.0. Both CoM axes remain at stage 0. Candidate
 progress, retained-policy quality and CPU transfer remain separate verdicts.
 
+The transition comparison is recorded at
+`/tmp/microduck-adaptive-transition-s17-5000/campaign-result.json`. Its native
+candidate lower-tail score is 0.73638, native held-out candidate score is
+0.59512, and retained-policy held-out score is 0.46801. The candidate held-out
+failures are yaw (0.59512) and turn-right (0.75738); the retained policy fails
+yaw and turn-left. Candidate and retained CPU/XML transfer both have lower-tail
+0.0. The campaign used source SHA `20e31f2` from the shared working tree, so it
+is evidence for behavior but not an immutable-provenance final experiment.
+
 `da51889` provides opt-in `--final-com-fraction` (0..0.20), explicit launch and
 checkpoint persistence, and live-setting preservation through automatic policy
 rollback. Explicit load restores saved state. Only adaptive-owned axes use the
 mixture; stock non-accumulation/recomputation and live stage ranges are preserved.
-Native evaluation disables training rehearsal. 183 adaptive/config tests,
+Native evaluation disables training rehearsal. 196 adaptive/config tests,
 native cohort/partial-reset proof, smoke64/5 and normalized smoke ONNX export
-pass. The run used a verified read-only source snapshot; gate and held-out
-reset/DR inputs match the control exactly. No new Ruff findings were introduced.
+pass. The transition checkpoint contract restores saved exposure exactly,
+clears live exposure on explicit legacy loads, and applies a CLI override only
+after full restore; runner tests cover repeated rollback repair. No new Ruff
+findings were introduced.
 
 Decision: this bounded rehearsal setting is insufficient and is not selected
 for the default procedure. Fresh runs still default to zero. The paired native
@@ -73,9 +85,11 @@ failure class. The selected repair is an opt-in `TransitionExposure` controller:
 it exposes yaw and moving-turn buckets to a 1–2 s forward bootstrap, adapts
 probability within `[0, 0.40]`, persists through checkpoint/resume/rollback,
 and is disabled in the frozen evaluator. Focused tests, a CUDA/MJLab/BAM probe,
-and 64-env/5-update smoke pass. The next proof is a matched 4500→5000 update
-comparison at initial probability `0.20` and final-CoM rehearsal `0`; formal
-seeds 17/23/47, fresh held-out/video/deployment acceptance and matched-budget
+and 64-env/5-update smoke pass. The matched 4500→5000 comparison improved the
+candidate's native held-out score over the retained policy but stayed below the
+0.80 gate and showed no CPU/XML transfer. The probe manually forced timer
+completion, so it is not evidence of natural deadline switching. Formal seeds
+17/23/47, fresh held-out/video/deployment acceptance and matched-budget
 comparison remain required.
 
 ## Goal

@@ -306,6 +306,24 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                     "completed_iterations": self.completed_iterations,
                 })
                 self._needs_reset = True
+        requested_transition = getattr(
+            env.cfg, "adaptive_transition_probability_override", None
+        )
+        if requested_transition is not None:
+            previous_probability = (
+                None
+                if self.transition_exposure is None
+                else self.transition_exposure.probability
+            )
+            self._set_transition_probability(float(requested_transition))
+            if previous_probability != float(requested_transition):
+                self.evaluation_events.append({
+                    "kind": "transition_acquisition_override",
+                    "previous_probability": previous_probability,
+                    "transition_probability": float(requested_transition),
+                    "completed_iterations": self.completed_iterations,
+                })
+                self._needs_reset = True
 
     def _set_final_com_fraction(self, fraction: float) -> None:
         """Install rehearsal on live, adaptive-owned axes using stock DR fields."""
@@ -338,6 +356,20 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 term.params.pop("final_fraction", None)
                 term.params.pop("final_ranges", None)
         self.final_com_fraction = float(fraction)
+
+    def _set_transition_probability(self, probability: float) -> None:
+        """Apply a launch override while retaining controller accounting."""
+        transition_exposure = getattr(self, "transition_exposure", None)
+        if transition_exposure is None:
+            if probability == 0.0:
+                return
+            raise ValueError("transition acquisition override requires command exposure")
+        value = float(probability)
+        if not np.isfinite(value) or not 0.0 <= value <= transition_exposure.maximum_probability:
+            raise ValueError("transition acquisition probability must be finite and in [0, 0.40]")
+        transition_exposure.probability = value
+        transition_exposure.last_reason = "launch_override"
+        transition_exposure.apply(_manager_env(self.env))
 
     def set_evaluator(self, evaluator) -> None:
         """Inject a synchronous evaluator (used by production adapters/tests)."""
@@ -791,13 +823,28 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             saved_transition = state.get("transition_exposure")
             if saved_transition is not None:
                 if transition_exposure is None:
-                    raise ValueError("adaptive checkpoint transition exposure mismatch")
-                transition_exposure.load_state_dict(saved_transition)
+                    # A zero-probability state is behaviorally disabled. It
+                    # may be loaded by an older command-exposure config that
+                    # does not construct the optional controller; preserve
+                    # compatibility while still rejecting a live mechanism
+                    # that the destination cannot restore.
+                    saved_probability = float(saved_transition.get("probability", -1.0))
+                    if saved_probability != 0.0:
+                        raise ValueError("adaptive checkpoint transition exposure mismatch")
+                else:
+                    transition_exposure.load_state_dict(saved_transition)
             elif transition_exposure is not None:
-                # Explicitly opting into the mechanism while loading an older
-                # checkpoint starts a fresh exposure state; ordinary resumes
-                # still restore exact transition state when it is present.
-                transition_exposure.last_reason = "legacy_checkpoint_bootstrap"
+                # An explicit load of a legacy checkpoint disables the
+                # mechanism. A launch override, if any, is applied by the
+                # constructor after this full restore; retaining the live
+                # probability here would make load order observable.
+                transition_exposure.load_state_dict({
+                    "version": transition_exposure.version,
+                    "probability": 0.0,
+                    "windows": 0,
+                    "repairs": 0,
+                    "last_reason": "legacy_checkpoint_bootstrap",
+                })
             feedback_state = state.get("command_feedback")
             if feedback_state is not None:
                 tracker = self._ensure_bucket_feedback()

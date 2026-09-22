@@ -129,6 +129,10 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_command_exposure: bool = False
     adaptive_transition_acquisition: bool = False
     adaptive_transition_probability: float = 0.0
+    # A launch-only value is applied after a full checkpoint restore.  Keeping
+    # this separate from the persisted controller state makes explicit CLI
+    # overrides deterministic while ordinary resumes remain exact.
+    adaptive_transition_probability_override: float | None = None
     adaptive_initial_focus: str = "forward"
     adaptive_frontier_order: tuple[str, ...] = ()
     adaptive_frontier_stall_windows: int = 0
@@ -189,7 +193,16 @@ def make_microduck_adaptive_velocity_env_cfg(
         if not 0.0 <= requested_transition <= 0.40:
             raise ValueError("transition acquisition probability must be in [0, 0.40]")
         cfg.adaptive_transition_probability = float(requested_transition)
-        cfg.adaptive_transition_acquisition = bool(requested_transition > 0.0)
+        # Keep the controller constructible at probability zero so a saved
+        # zero-probability state can still be restored exactly.  A zero value
+        # remains behaviorally disabled; the object only owns its counters.
+        cfg.adaptive_transition_acquisition = True
+    if command_exposure:
+        transition_override = os.environ.get("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE")
+        if transition_override is not None:
+            cfg.adaptive_transition_probability_override = float(transition_override)
+            if not 0.0 <= cfg.adaptive_transition_probability_override <= 0.40:
+                raise ValueError("transition acquisition override must be in [0, 0.40]")
     cfg.task_id = {
         "all_static": "Mjlab-Velocity-Flat-Adaptive-Static-MicroDuck",
         "com": "Mjlab-Velocity-Flat-Adaptive-CoM-MicroDuck",

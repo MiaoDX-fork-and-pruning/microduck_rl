@@ -13,6 +13,28 @@ operate. Both CoM axes remain at stage 0 (±3 mm); native six-capability usabili
 and CPU transfer are unproven. Formal training seeds 17/23/47 have not started.
 No training or evaluation process from this slice remains running.
 
+Latest transition-acquisition campaign:
+`/tmp/microduck-adaptive-transition-s17-5000/campaign-result.json`. It resumed
+the cumulative-4500 lateral-drive checkpoint for 500 updates at 4096 envs, with
+initial transition probability 0.20 and final-CoM rehearsal 0. The launcher
+finished smoke, training, native held-out and CPU/XML transfer. This run was
+started from the shared working tree at source SHA `20e31f2`; no source edit
+occurred during training, but the run is not an immutable-source experiment.
+
+| Transition campaign evidence (minimum six-bucket score) | Score | Result |
+| --- | ---: | --- |
+| Candidate, native gate seed 20260815 | 0.73638 | fails lateral, yaw, turn-left, turn-right |
+| Candidate, native held-out seed 20260915 | 0.59512 | fails yaw and turn-right |
+| Retained policy after rollback, native held-out | 0.46801 | fails yaw and turn-left |
+| Candidate, CPU/XML transfer held-out | 0.0 | fails forward, lateral, yaw and both turns |
+| Retained policy, CPU/XML transfer held-out | 0.0 | fails forward, lateral, yaw and both turns |
+
+The candidate is better than the retained policy on held-out native evidence,
+but the gate still rejects it. The retained checkpoint therefore remains a
+rollback artifact, not a usable policy. The transition controller ended at
+probability 0.25 after one yaw/turn retention repair; it did not establish
+that a zero→yaw lead-in naturally completes under a live policy.
+
 Latest completed comparison:
 `/tmp/microduck-adaptive-com-rehearsal-s17-5000/comparison-summary.json`.
 It tests 20% final-CoM rehearsal against the existing no-rehearsal control
@@ -29,20 +51,18 @@ comparison, not a replicated causal study.
 | Retained policy after rollback, held-out | 0.42439 | 0.42439 | yaw and turn-left fail |
 | Retained policy, CPU/XML actuator rehearsal | 0.0 | 0.0 | transfer fails |
 
-New candidate:
-`training/logs/rsl_rl/matched_lateral-drive/2026-09-22_13-54-41_matched-lateral-drive-s17/model_4999.eval.pt`
-under the latest comparison directory. `model_4999.pt` is the restored policy.
-The gate triggered yaw preservation failure and returned to
-`/tmp/microduck-adaptive-evidence-s17-4250-repair/training/logs/rsl_rl/matched_lateral-drive/2026-09-22_12-42-00_matched-lateral-drive-s17/model_4124.eval.adaptive.pt`.
-Keep candidate learning and retained-policy verdicts separate.
+The transition candidate is
+`/tmp/microduck-adaptive-transition-s17-5000/training/logs/rsl_rl/matched_lateral-drive/2026-09-22_16-40-38_matched-lateral-drive-s17/model_4999.eval.pt`.
+`model_4999.pt` is the restored policy. The gate triggered a yaw/turn
+preservation failure and returned to the known-good actor from the cumulative
+4500 run. Keep candidate learning and retained-policy verdicts separate.
 
-The new candidate's held-out yaw score of zero is a **tracking stall**, not a
-fall or nonfinite rollout: command 0.8 rad/s, actual mean 0.10769 rad/s, with
-middle-second means around 0.01–0.03 rad/s. All six cases survive six seconds.
-Gate turn-left improves to 0.85588, but forward/lateral/yaw regress. Held-out
-lateral reaches 0.80495 while yaw/turn-left/turn-right fail. Identical gate and
-held-out reset/DR fields were verified against their control traces in
-`paired-reset-probe.json`. No videos or hardware usability are established.
+The transition candidate's native held-out yaw score is 0.59512 and
+turn-right is 0.75738; all six cases survive six seconds, so the failure is
+tracking rather than a crash or nonfinite rollout. The native candidate gate
+does clear zero and forward, but lateral and both turn directions remain below
+the product threshold. CPU/XML transfer remains a separate failure even when
+the native candidate survives. No video or hardware usability is established.
 
 ## Proven implementation and decision
 
@@ -55,10 +75,11 @@ held-out reset/DR fields were verified against their control traces in
   ordinary resume inherits it, explicit load restores it, and automatic
   preservation rollback retains the live experiment setting. Native evaluation
   disables rehearsal and freezes the requested distribution.
-- 183 adaptive/config tests pass. A native physical probe proves 12/64 final
-  environments, other offsets <=3 mm, 20 non-accumulating partial resets,
-  untouched-environment isolation and finite 61D/14D steps. Smoke64/5 passed
-  before training. The mandatory export path produced smoke ONNX with maximum
+- 196 adaptive/config tests pass. The transition checkpoint contract now
+  restores saved state exactly, clears live state when explicitly loading a
+  legacy checkpoint, and applies a CLI override only after full restore;
+  runner tests cover repeated rollback repair. Smoke64/5 passed before
+  training. The mandatory export path produced smoke ONNX with maximum
   PyTorch/ONNX action error 3.58e-7 over eight input cases.
 - The run used a read-only source snapshot of `da51889`; all 675 recorded file
   hashes were checked after execution. 49,152,000 command samples were classified,
@@ -93,20 +114,19 @@ checkpoints, survives rollback, and is disabled for native evaluation.
 
 Focused tests now pass for probability/config contracts, pre/post command
 restoration, reset `dt=0` timing, partial-reset isolation, exposure state
-serialization, and bounded runner integration. A real CUDA/MJLab/BAM probe in
-`/tmp/microduck-adaptive-transition-native-probe-s17-v2.json` observed 26/64
-initial transitions, zero elapsed time at reset, forward bootstrap after ten
-steps, exact target restoration, and no untouched-environment reset changes.
-The 64-env/5-update transition smoke also passed with 61D actor, 14D action,
-and no NaN termination. No long training budget has been spent on this repair
-yet.
+serialization, and bounded runner integration. The existing CUDA/MJLab/BAM
+probe recorded allocation and reset-isolation data, but manually forced timer
+completion; it does not prove natural deadline switching under a live policy.
+The 64-env/5-update transition smoke passed with 61D actor, 14D action, and no
+NaN termination. The 500-update campaign above is the first long training
+evidence for this repair and it remains below the usability gate.
 
-Next action: run one matched cumulative-4500→5000 transition branch at initial
-probability `0.20`, with final-CoM rehearsal `0`, then compare native gate,
-held-out, retained-policy and CPU transfer evidence against the existing
-control. Do not change product thresholds or the frozen battery. Formal seeds
-17/23/47 remain blocked until this bounded comparison establishes a retained
-six-capability policy.
+Next action: repair the remaining yaw/turn acquisition and native-to-CPU
+transfer gap using a new bounded experiment with immutable source provenance.
+Do not change product thresholds or the frozen battery. Formal seeds 17/23/47
+remain blocked until one retained checkpoint passes all six native gates, then
+passes fresh held-out evidence, video/rollout review, normalized ONNX export and
+CPU deployment rehearsal.
 
 ## Remaining gates and no-touch scope
 

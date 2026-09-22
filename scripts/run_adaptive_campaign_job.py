@@ -70,6 +70,7 @@ def main() -> int:
     if args.resume and args.branch == "fixed":
         parser.error("the canonical fixed runner has no audited resume budget; use an adaptive/static branch")
     task_id, axis_mode = TASKS[args.branch]
+    transition_override_requested = args.transition_probability is not None
     start_iterations = 0
     saved_final_com_fraction = 0.0
     saved_transition_probability = 0.0
@@ -120,6 +121,7 @@ def main() -> int:
     environment = dict(os.environ)
     environment.pop("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", None)
     environment.pop("MICRODUCK_ADAPTIVE_RESULT_FILE", None)
+    environment.pop("MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE", None)
     environment.update({
         "PYTHONUNBUFFERED": "1",
         "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
@@ -133,6 +135,13 @@ def main() -> int:
             "--evaluation-seed {evaluation_seed} --seed-set-id {seed_set_id} --output {output}"
         ),
     })
+    if transition_override_requested:
+        # The initial value lets a fresh run construct the command term.  On a
+        # resume, the runner first restores the checkpoint's exact exposure
+        # state, then applies this explicit CLI override.
+        environment["MICRODUCK_ADAPTIVE_TRANSITION_OVERRIDE"] = str(
+            args.transition_probability
+        )
     config = {**vars(args), "resume": str(args.resume) if args.resume else None, "start_completed_iterations": start_iterations, "output": str(output), "task_id": task_id, "axis_mode": axis_mode, "source_sha": source_sha}
     (output / "campaign-config.json").write_text(json.dumps(config, indent=2) + "\n")
     train = str(Path(sys.executable).parent / "train")

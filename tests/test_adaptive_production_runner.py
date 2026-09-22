@@ -22,7 +22,11 @@ import torch
 from mjlab.envs.mdp import dr
 
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report
-from mjlab_microduck.tasks.adaptive_curriculum import AxisConfig, CapabilityGate
+from mjlab_microduck.tasks.adaptive_curriculum import (
+    AxisConfig,
+    CapabilityGate,
+    TransitionExposure,
+)
 from mjlab_microduck.tasks.adaptive_runner import (
     AdaptiveMicroduckOnPolicyRunner,
     CommandCapabilityEvaluator,
@@ -633,6 +637,118 @@ def _attach_exposure(runner):
     return term
 
 
+def _attach_transition(runner, probability: float):
+    old_term = None
+    manager = getattr(runner.env, "command_manager", None)
+    if manager is not None:
+        try:
+            old_term = manager.get_term("twist")
+        except (AttributeError, KeyError):
+            old_term = None
+    term = SimpleNamespace(
+        cfg=SimpleNamespace(
+            transition_probability=probability,
+            bucket_probabilities=(
+                getattr(getattr(old_term, "cfg", None), "bucket_probabilities", ())
+            ),
+        )
+    )
+    runner.transition_exposure = TransitionExposure(probability)
+    runner.env.command_manager = SimpleNamespace(get_term=lambda _: term)
+    runner.transition_exposure.apply(runner.env)
+    return term
+
+
+def test_transition_checkpoint_load_is_exact_and_legacy_load_disables_live_state(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    term = _attach_transition(runner, 0.30)
+    runner.transition_exposure.windows = 7
+    runner.transition_exposure.repairs = 2
+    runner.transition_exposure.last_reason = "test"
+    checkpoint = tmp_path / "transition-state.pt"
+    runner.save(str(checkpoint))
+
+    runner.transition_exposure.probability = 0.05
+    runner.transition_exposure.windows = 99
+    runner.transition_exposure.apply(runner.env)
+    runner.load(str(checkpoint))
+    assert runner.transition_exposure.state_dict() == {
+        "version": 1,
+        "probability": 0.30,
+        "windows": 7,
+        "repairs": 2,
+        "last_reason": "test",
+    }
+    assert term.cfg.transition_probability == pytest.approx(0.30)
+
+    # An old checkpoint has no transition state. Explicit load must clear a
+    # live opt-in; a launch override is applied separately by the constructor.
+    legacy = tmp_path / "legacy.pt"
+    runner.transition_exposure = None
+    runner.save(str(legacy))
+    runner.transition_exposure = TransitionExposure(0.40)
+    runner.transition_exposure.apply(runner.env)
+    runner.load(str(legacy))
+    assert runner.transition_exposure.probability == 0.0
+    assert runner.transition_exposure.windows == 0
+    assert runner.transition_exposure.last_reason == "legacy_checkpoint_bootstrap"
+    assert term.cfg.transition_probability == 0.0
+
+
+def test_zero_transition_checkpoint_loads_into_legacy_command_exposure_runner(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    _attach_transition(source, 0.0)
+    checkpoint = tmp_path / "disabled-transition.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    destination.load(str(checkpoint))
+    assert destination.transition_exposure is None
+
+
+def test_repeated_rollback_preserves_and_repairs_transition_exposure(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    _attach_exposure(runner)
+    term = _attach_transition(runner, 0.20)
+    runner.completed_iterations = 10
+    known_candidate = tmp_path / "model_9.pt"
+    known_candidate.write_bytes(b"known candidate")
+    runner.evaluator = SimpleNamespace(evaluate=lambda **kw: _report(known_candidate))
+    runner._evaluate_window(str(known_candidate))
+    known_good = Path(runner.last_known_good_checkpoint)
+    # A fully mastered yaw window releases one 0.025 slice.
+    assert runner.transition_exposure.probability == pytest.approx(0.175)
+
+    # Mutate live acquisition coverage before a preservation failure. The
+    # rollback must restore policy state, then put this live teacher state back
+    # and add one bounded repair slice for the regressed yaw frontier.
+    runner.transition_exposure.probability = 0.30
+    runner.transition_exposure.apply(runner.env)
+    candidate = tmp_path / "model_10.pt"
+    candidate.write_bytes(b"failing candidate")
+    raw = _raw(low=False)
+    raw["yaw"]["angular_tracking_error_rad_s"] = 0.4
+    runner.evaluator = SimpleNamespace(
+        evaluate=lambda **kw: _report_with_raw(kw["checkpoint_path"], raw)
+    )
+    runner.completed_iterations = 11
+    runner._evaluate_window(str(candidate))
+
+    assert runner.last_known_good_checkpoint == str(known_good)
+    assert runner.transition_exposure.probability == pytest.approx(0.35)
+    assert runner.transition_exposure.repairs == 1
+    assert term.cfg.transition_probability == pytest.approx(0.35)
+
+
 def test_runner_feedback_restores_live_mixture_and_invalid_report_is_noop(monkeypatch, tmp_path):
     _fake_parent_io(monkeypatch)
     runner = _runner()
@@ -784,3 +900,46 @@ def test_launch_override_is_recorded_after_full_checkpoint_resume(monkeypatch, t
         "final_com_fraction": 0.2, "completed_iterations": 0,
     }
     assert new._needs_reset
+
+
+def test_transition_launch_override_is_applied_after_full_checkpoint_resume(
+    monkeypatch, tmp_path
+):
+    _fake_parent_io(monkeypatch)
+    source = _runner(mode="com")
+    source_term = _attach_transition(source, 0.10)
+    checkpoint = tmp_path / "old-transition.pt"
+    source.save(str(checkpoint))
+
+    def init(self, env, cfg, *args, **kwargs):
+        self.env = env
+        self.cfg = cfg
+        self.alg = _FakeAlg()
+        self.current_learning_iteration = 0
+
+    monkeypatch.setattr(
+        "mjlab_microduck.tasks.adaptive_runner.MicroduckOnPolicyRunner.__init__",
+        init,
+    )
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    monkeypatch.delenv("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND", raising=False)
+    env = _Env(mode="com")
+    env.cfg.adaptive_evaluation_interval = 0
+    env.cfg.adaptive_transition_acquisition = True
+    env.cfg.adaptive_transition_probability = 0.10
+    env.cfg.adaptive_transition_probability_override = 0.30
+    env_term = SimpleNamespace(cfg=SimpleNamespace(transition_probability=0.10))
+    env.command_manager = SimpleNamespace(get_term=lambda _: env_term)
+    new = AdaptiveMicroduckOnPolicyRunner(
+        env, source.cfg, log_dir=str(tmp_path)
+    )
+
+    assert new.transition_exposure.probability == pytest.approx(0.30)
+    assert env_term.cfg.transition_probability == pytest.approx(0.30)
+    assert new.evaluation_events[-1] == {
+        "kind": "transition_acquisition_override",
+        "previous_probability": 0.10,
+        "transition_probability": 0.30,
+        "completed_iterations": 0,
+    }
+    assert source_term.cfg.transition_probability == pytest.approx(0.10)
