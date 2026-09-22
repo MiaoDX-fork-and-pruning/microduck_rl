@@ -33,13 +33,15 @@ acquisition; the optional advisor and stronger teachers remain deferred.
 Feedback averages signed tracking error over 0.5 s before L1 magnitude, keeps a
 20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The latest
 `0c0b50e` diagnostic exempts pure-yaw commands from the remaining planar L1
-term while retaining idle and turn-forward alignment. At cumulative 1000,
-held-out native yaw MAE improved to 0.2118 rad/s from about 0.73 in the prior
-500-update lateral-drive evidence, while zero drift remained 0.0641 m; all six
-buckets still fail. Evidence:
-`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1000/campaign-result.json`.
-Continue this exact checkpoint to cumulative 1500 so the final staged tracking
-width is tested before opening another reward or physics branch.
+term while retaining idle and turn-forward alignment. At cumulative 1500,
+held-out native yaw MAE reached `0.16237 rad/s` from `0.21180` at 1000, while
+lateral stayed at `0.10197 m/s` and zero drift regressed to `0.09445 m`; only
+forward passes the six-bucket gate. The final checkpoint was saved at the
+`1500 × 24` boundary, before the `std=0.12` tracking stage had a training
+update. Evidence:
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1500/campaign-result.json`.
+A bounded continuation to cumulative 2000 is the last pacing diagnostic before
+opening a new command-conditioned acquisition/zero-recovery experiment.
 
 A separate 500-update strictification diagnostic tested lighter motion costs,
 stronger tracking and 25% pure lateral sampling. Its native traces show mean
@@ -68,9 +70,12 @@ updates it reached 0.13029 m/s mean lateral velocity but 0.09859 m/s native
 lateral MAE, with 0.11170 m/s lateral standard deviation; forward MAE was
 0.02795 m/s, yaw MAE 0.80762 rad/s, and zero drift 0.04139 m. All six native
 and CPU product buckets still fail, although four native windows held without
-rollback. The next bounded proof is a cumulative-1000 continuation from its
-exact checkpoint, using the existing staged tracking schedule before another
-reward or physics branch.
+rollback. The cumulative-1000 and cumulative-1500 continuations then confirmed
+that the pure-yaw exemption improves yaw acquisition but does not solve lateral,
+turn, or zero recovery. A final bounded continuation to cumulative 2000 is
+reserved for testing the already-approved `std=0.12` pacing boundary; a failure
+there requires a new command-conditioned acquisition contract rather than more
+blind coefficient changes.
 
 ## Goal
 
