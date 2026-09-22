@@ -10,29 +10,31 @@ does not cancel necessary changes, training, or behavioral checks.
 
 The pure-yaw linear-sway exemption is committed as `0c0b50e`. Focused tests
 (`55 passed`), compileall, and smoke64/5 passed with the canonical curriculum,
-61D/14D ABI, and BAM M6 intact. A fresh seed17 lateral-drive run completed 500
-updates at 4096 envs; manifests are under
-`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/`.
+61D/14D ABI, and BAM M6 intact. Seed17 was resumed from that run to cumulative
+1000 updates at 4096 envs; manifests are under
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1000/`.
 
-The adaptive controller retained the zero bucket and completed four valid hold
-windows without rollback or nonfinite values. At 500 updates it was still
-lateral-focused (`28%` lateral exposure); no difficulty stage was advanced.
-The run is a bounded reward diagnostic, not a usable-policy result.
+The adaptive controller retained the zero bucket and completed eight valid hold
+windows without rollback or nonfinite values. It switched from lateral focus to
+yaw at cumulative 750 (`13%` yaw exposure), reaching `19.56%` yaw exposure by
+1000; no difficulty stage was advanced. The run is still a bounded diagnostic,
+not a usable-policy result.
 
 ## Last proven evidence
 
-| Native held-out metric | Yaw-linear-exempt 500 | Product requirement |
+| Native held-out metric | Yaw-linear-exempt 1000 | Product requirement |
 | --- | ---: | ---: |
-| Zero endpoint drift (m) | 0.06889 | <=0.012 |
-| Forward MAE (m/s) | 0.01952 | <=0.024 |
-| Lateral MAE (m/s) | 0.09693 | <=0.024 |
-| Yaw MAE (rad/s) | 0.53351 | <=0.12 |
-| Left/right turn MAE (rad/s) | 0.31074 / 0.38136 | <=0.12 |
+| Zero endpoint drift (m) | 0.06409 | <=0.012 |
+| Forward MAE (m/s) | 0.02060 | <=0.024 |
+| Lateral MAE (m/s) | 0.10240 | <=0.024 |
+| Yaw MAE (rad/s) | 0.21180 | <=0.12 |
+| Left/right turn MAE (rad/s) | 0.23721 / 0.25387 | <=0.12 |
 
 Only forward passes. All six native cases survive their 6 s rollouts. The
 native held-out report is at
-`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/heldout/capability.json`.
-CPU/ONNX passes only zero and reports yaw MAE `0.61870 rad/s`; it remains
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1000/heldout/capability.json`.
+CPU/ONNX passes only zero and reports yaw MAE
+`0.60834 rad/s`; it remains
 separate transfer evidence using XML position actuators.
 
 Compared with the earlier 500-update lateral-drive evidence, removing the
@@ -59,12 +61,12 @@ from the product gate and zero recovery regressed. The old replay values in
 the pre-`1780d58` implementation and must not be quoted as current reward
 semantics.
 
-Continue the exact `model_499.pt` checkpoint to cumulative 1000 updates with
-the same source and gate settings. This tests whether the measured yaw gain
-survives adaptive focus rotation and whether zero recovery returns; it does not
-change thresholds or open a multi-seed campaign. Stop if zero/forward/lateral
-preservation fails, training becomes nonfinite, or the 1000-update held-out
-report shows no decision-changing yaw/turn improvement.
+Continue the exact cumulative-1000 `model_999.pt` checkpoint to cumulative 1500
+updates with the same source and gate settings. This tests whether the yaw gain
+survives the final canonical tracking stage (`std=0.12`) and whether zero,
+forward, and lateral preservation can be recovered. It does not change
+thresholds or open a multi-seed campaign. Stop if training becomes nonfinite or
+the 1500-update held-out report shows no decision-changing yaw/turn improvement.
 
 The completed manifests are `training-result.json`, `campaign-result.json`,
 `heldout/capability.json`, and `cpu-transfer/capability.json` under the campaign

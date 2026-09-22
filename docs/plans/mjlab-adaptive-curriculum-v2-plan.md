@@ -33,13 +33,13 @@ acquisition; the optional advisor and stronger teachers remain deferred.
 Feedback averages signed tracking error over 0.5 s before L1 magnitude, keeps a
 20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The latest
 `0c0b50e` diagnostic exempts pure-yaw commands from the remaining planar L1
-term while retaining idle and turn-forward alignment. At cumulative 500,
-held-out native yaw MAE improved to 0.5335 rad/s from about 0.73 in the prior
-500-update lateral-drive evidence, while zero drift regressed to 0.0689 m;
-all six buckets still fail. Evidence:
-`/tmp/microduck-adaptive-yaw-linear-exempt-s17-500/campaign-result.json`.
-Continue this exact checkpoint to cumulative 1000 before opening another
-reward or physics branch.
+term while retaining idle and turn-forward alignment. At cumulative 1000,
+held-out native yaw MAE improved to 0.2118 rad/s from about 0.73 in the prior
+500-update lateral-drive evidence, while zero drift remained 0.0641 m; all six
+buckets still fail. Evidence:
+`/tmp/microduck-adaptive-yaw-linear-exempt-s17-1000/campaign-result.json`.
+Continue this exact checkpoint to cumulative 1500 so the final staged tracking
+width is tested before opening another reward or physics branch.
 
 A separate 500-update strictification diagnostic tested lighter motion costs,
 stronger tracking and 25% pure lateral sampling. Its native traces show mean
