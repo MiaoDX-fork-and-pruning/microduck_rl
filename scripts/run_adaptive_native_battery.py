@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Evaluate a checkpoint through the training MJLab/BAM observation/actuator path.
 
-Reports use the existing continuous CapabilityReport v2 scoring unchanged.
-Command interventions and manual terminal handling belong only to this evaluator.
+The product tracking metric is a signed 0.5 s EMA of the command-aligned
+velocity error.  The trace also keeps the samplewise MAE as a stability
+diagnostic and hard cap; this lets a normal alternating gait pass without
+letting violent oscillation average away.
 """
 from __future__ import annotations
 
@@ -17,7 +19,14 @@ from types import MethodType
 import numpy as np
 
 from mjlab_microduck.evaluation.capability import (
-    DEFAULT_THRESHOLDS, build_capability_report, canonical_sha256,
+    DEFAULT_INSTANTANEOUS_CAPS,
+    DEFAULT_TRACKING_METRIC,
+    DEFAULT_TRACKING_TAU_S,
+    DEFAULT_THRESHOLDS,
+    TRACKING_METRIC_SIGNED_EMA,
+    build_capability_report,
+    canonical_sha256,
+    tracking_error_metrics,
 )
 
 # Frozen CPU battery commands, including moving turns (not turn-in-place).
@@ -60,8 +69,16 @@ def freeze_commands(env, command):
         term._update_command()
 
 
-def raw_from_trace(trace, *, bucket, expected_steps, dt):
-    """Score pre-reset terminal evidence, with the same per-axis error as CPU."""
+def raw_from_trace(
+    trace,
+    *,
+    bucket,
+    expected_steps,
+    dt,
+    tracking_metric=DEFAULT_TRACKING_METRIC,
+    tracking_tau_s=DEFAULT_TRACKING_TAU_S,
+):
+    """Score pre-reset terminal evidence with the training-side error metric."""
     obs, action = trace["observation"], trace["action"]
     n = len(action)
     if n < 1 or obs.shape != (n, 61) or action.shape != (n, 14):
@@ -83,9 +100,29 @@ def raw_from_trace(trace, *, bucket, expected_steps, dt):
         raw["zero_drift_m"] = float(np.linalg.norm(trace["root_position"][-1, :2] - trace["initial_root_position"][:2]))
     elif bucket in ("forward", "lateral"):
         axis = 0 if bucket == "forward" else 1
-        raw["tracking_error_m_s"] = float(np.abs(trace["command"][:, axis] - trace["linear_velocity_b"][:, axis]).mean())
+        samplewise, signed_ema = tracking_error_metrics(
+            trace["linear_velocity_b"][:, axis],
+            trace["command"][:, axis],
+            dt=dt,
+            tau_s=tracking_tau_s,
+        )
+        raw["tracking_error_m_s"] = float(
+            signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+        )
+        if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+            raw["tracking_error_samplewise_m_s"] = float(samplewise)
     else:
-        raw["angular_tracking_error_rad_s"] = float(np.abs(trace["command"][:, 2] - trace["angular_velocity_b"][:, 2]).mean())
+        samplewise, signed_ema = tracking_error_metrics(
+            trace["angular_velocity_b"][:, 2],
+            trace["command"][:, 2],
+            dt=dt,
+            tau_s=tracking_tau_s,
+        )
+        raw["angular_tracking_error_rad_s"] = float(
+            signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+        )
+        if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+            raw["angular_tracking_error_samplewise_rad_s"] = float(samplewise)
     return raw
 
 
@@ -93,7 +130,8 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
                steps: int, device: str, onnx: Path | None = None,
                seed_set_id: str = "adaptive-native-gate-20260920",
                axis_mode: str = "all_static", source_sha: str = "unknown",
-               distribution: str = "final") -> dict:
+               distribution: str = "final",
+               zero_mode: str = "nominal") -> dict:
     import torch
     import mjlab_microduck.tasks  # noqa: F401
     from bam.mjlab import BamActuator
@@ -101,7 +139,12 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
     from mjlab.rl import RslRlVecEnvWrapper
     from mjlab.tasks.registry import load_env_cfg, load_rl_cfg, load_runner_cls
 
-    if steps < 1 or not seed_set_id.strip() or distribution not in ("initial", "final"):
+    if (
+        steps < 1
+        or not seed_set_id.strip()
+        or distribution not in ("initial", "final")
+        or zero_mode not in ("nominal", "push")
+    ):
         raise ValueError("invalid evaluation steps, seed set or distribution")
     checkpoint = checkpoint.resolve()
     output.mkdir(parents=True, exist_ok=True)
@@ -118,6 +161,12 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
         cfg.seed = seed
         cfg.scene.num_envs = 1
         cfg.auto_reset = False
+        # The zero product bucket measures nominal idle stability.  A push
+        # recovery probe is available as a separate diagnostic, but mixing it
+        # into the idle gate would score an unobservable post-kick world-frame
+        # offset as command-following failure.
+        if bucket == "zero" and zero_mode == "nominal":
+            cfg.events.pop("push_robot", None)
         if hasattr(cfg, "adaptive_evaluation_interval"):
             cfg.adaptive_evaluation_interval = 0
         # Evaluation uses an explicit frozen DR distribution. The training
@@ -213,7 +262,14 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
                 if bool(done[0]):
                     break
             trace = {**initial, **{name: np.asarray(values) for name, values in rows.items()}}
-            raw_metrics[bucket] = raw_from_trace(trace, bucket=bucket, expected_steps=steps, dt=raw_env.step_dt)
+            raw_metrics[bucket] = raw_from_trace(
+                trace,
+                bucket=bucket,
+                expected_steps=steps,
+                dt=raw_env.step_dt,
+                tracking_metric=TRACKING_METRIC_SIGNED_EMA,
+                tracking_tau_s=DEFAULT_TRACKING_TAU_S,
+            )
             trace_path = output / f"{bucket}.npz"
             np.savez_compressed(trace_path, **trace)
             parity = None
@@ -234,7 +290,10 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
         finally:
             raw_env.close()
     config = {"name": "native_mjlab_bam_v2", "steps": steps, "commands": BUCKETS,
-              "thresholds": DEFAULT_THRESHOLDS, "environment_profile": "training",
+              "thresholds": DEFAULT_THRESHOLDS, "tracking_metric": TRACKING_METRIC_SIGNED_EMA,
+              "tracking_metric_tau_s": DEFAULT_TRACKING_TAU_S,
+              "instantaneous_caps": dict(DEFAULT_INSTANTANEOUS_CAPS),
+              "zero_mode": zero_mode, "environment_profile": "training",
               "bucket_isolation": "fresh_environment",
               "distribution": distribution, "reference_env_step": reference_step,
               "auto_reset": False, "num_envs": 1, "device": device,
@@ -271,6 +330,7 @@ def main() -> int:
     p.add_argument("--axis-mode", default="all_static", choices=("all_static", "com", "head_com", "composed"))
     p.add_argument("--source-sha", default="unknown")
     p.add_argument("--distribution", choices=("initial", "final"), default="final")
+    p.add_argument("--zero-mode", choices=("nominal", "push"), default="nominal")
     payload = run_native(**vars(p.parse_args()))
     print(json.dumps(payload["aggregate"], indent=2))
     return 0  # A valid negative capability report is a successful evaluation.

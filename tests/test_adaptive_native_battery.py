@@ -47,7 +47,9 @@ def _fixture(tmp_path, *, steps=300, terminal=False):
     checkpoint = tmp_path / "model.pt"
     checkpoint.write_bytes(b"real checkpoint fixture")
     config = {"name": "native_mjlab_bam_v2", "environment_profile": "training", "steps": 300,
-              "commands": native.BUCKETS, "step_dt": 0.02, "bucket_isolation": "fresh_environment"}
+              "commands": native.BUCKETS, "step_dt": 0.02, "bucket_isolation": "fresh_environment",
+              "tracking_metric": "signed_ema_v1", "tracking_metric_tau_s": 0.5,
+              "zero_mode": "nominal"}
     raw, cases, seed_cases = {}, [], []
     for offset, bucket in enumerate(native.BUCKETS):
         trace = _trace(bucket, steps, terminal)

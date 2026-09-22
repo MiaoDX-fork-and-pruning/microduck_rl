@@ -10,7 +10,15 @@ import xml.etree.ElementTree as ET
 
 import numpy as np
 
-from mjlab_microduck.evaluation.capability import BUCKETS, CapabilityReport, canonical_sha256
+from mjlab_microduck.evaluation.capability import (
+    BUCKETS,
+    CapabilityReport,
+    DEFAULT_TRACKING_TAU_S,
+    TRACKING_METRIC_SAMPLEWISE,
+    TRACKING_METRIC_SIGNED_EMA,
+    canonical_sha256,
+    tracking_error_metrics,
+)
 
 REQUIRED_ITERS = (500, 1000, 2000, 3999)
 REQUIRED_BRANCHES = ("fixed", "static")
@@ -40,7 +48,15 @@ def _read(path: Path) -> dict:
     return payload
 
 
-def _trace_raw(trace: np.lib.npyio.NpzFile, bucket: str, requested_steps: int, dt: float) -> dict[str, float]:
+def _trace_raw(
+    trace: np.lib.npyio.NpzFile,
+    bucket: str,
+    requested_steps: int,
+    dt: float,
+    *,
+    tracking_metric: str = TRACKING_METRIC_SAMPLEWISE,
+    tracking_tau_s: float = DEFAULT_TRACKING_TAU_S,
+) -> dict[str, float]:
     """Recompute gate inputs from the trace instead of trusting report summaries."""
     n = len(trace["action"])
     terminated = np.asarray(trace["terminated"], dtype=bool)
@@ -70,19 +86,47 @@ def _trace_raw(trace: np.lib.npyio.NpzFile, bucket: str, requested_steps: int, d
         angular = np.asarray(trace["angular_velocity_b"])
         if command.shape != (n, 13) or velocity.shape != (n, 3) or angular.shape != (n, 3):
             raise ValueError("native command/state trace shape mismatch")
+        if tracking_metric not in (TRACKING_METRIC_SAMPLEWISE, TRACKING_METRIC_SIGNED_EMA):
+            raise ValueError("unsupported native tracking metric")
         if bucket in ("forward", "lateral"):
             axis = 0 if bucket == "forward" else 1
-            raw["tracking_error_m_s"] = float(np.abs(command[:, axis] - velocity[:, axis]).mean())
+            samplewise, signed_ema = tracking_error_metrics(
+                velocity[:, axis], command[:, axis], dt=dt, tau_s=tracking_tau_s
+            )
+            raw["tracking_error_m_s"] = float(
+                signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+            )
+            if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+                raw["tracking_error_samplewise_m_s"] = float(samplewise)
         else:
-            raw["angular_tracking_error_rad_s"] = float(np.abs(command[:, 2] - angular[:, 2]).mean())
+            samplewise, signed_ema = tracking_error_metrics(
+                angular[:, 2], command[:, 2], dt=dt, tau_s=tracking_tau_s
+            )
+            raw["angular_tracking_error_rad_s"] = float(
+                signed_ema if tracking_metric == TRACKING_METRIC_SIGNED_EMA else samplewise
+            )
+            if tracking_metric == TRACKING_METRIC_SIGNED_EMA:
+                raw["angular_tracking_error_samplewise_rad_s"] = float(samplewise)
     return raw
 
 
 def _assert_raw_matches(payload: dict, bucket: str, trace: np.lib.npyio.NpzFile, requested_steps: int) -> None:
-    dt = payload["evaluator_config"].get("step_dt", 0.02)
+    config = payload["evaluator_config"]
+    dt = config.get("step_dt", 0.02)
     if not isinstance(dt, (int, float)) or not np.isfinite(dt) or dt <= 0:
         raise ValueError("invalid native step_dt")
-    expected = _trace_raw(trace, bucket, requested_steps, dt)
+    tracking_metric = config.get("tracking_metric", TRACKING_METRIC_SAMPLEWISE)
+    tracking_tau_s = config.get("tracking_metric_tau_s", DEFAULT_TRACKING_TAU_S)
+    if not isinstance(tracking_tau_s, (int, float)) or not np.isfinite(tracking_tau_s) or tracking_tau_s <= 0:
+        raise ValueError("invalid native tracking metric tau")
+    expected = _trace_raw(
+        trace,
+        bucket,
+        requested_steps,
+        dt,
+        tracking_metric=tracking_metric,
+        tracking_tau_s=float(tracking_tau_s),
+    )
     reported = payload["buckets"][bucket]["raw"]
     for key, value in expected.items():
         if key not in reported or not np.isclose(float(reported[key]), value, rtol=1e-5, atol=1e-6):
@@ -109,6 +153,12 @@ def validate_native(path: Path, *, expected_task: str | None = None, require_par
         raise ValueError("native evaluation must use the training environment profile")
     if config.get("bucket_isolation") != "fresh_environment":
         raise ValueError("native buckets require fresh_environment isolation")
+    if config.get("tracking_metric") != TRACKING_METRIC_SIGNED_EMA:
+        raise ValueError("native evaluator must use signed_ema_v1 tracking")
+    if config.get("tracking_metric_tau_s") != DEFAULT_TRACKING_TAU_S:
+        raise ValueError("native evaluator tracking tau must be 0.5 s")
+    if config.get("zero_mode") != "nominal":
+        raise ValueError("product native gate requires nominal zero without pushes")
     if canonical_sha256(config.get("commands")) != canonical_sha256(CANONICAL_COMMANDS):
         raise ValueError("native evaluator commands differ from canonical product commands")
     if expected_task is not None and metadata.get("task_id") != expected_task:
