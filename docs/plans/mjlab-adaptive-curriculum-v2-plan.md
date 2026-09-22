@@ -10,7 +10,10 @@ A bounded pure-yaw-only relief treatment (`610fbc5`) completed smoke64/5 and
 250 updates. It preserved survival in the failing full-push case but lost yaw
 acquisition (zero gate/native/CPU yaw scores), so it is not promoted. A fixed-actor
 noise diagnostic exposes deterministic startup failure masked by stochastic
-rollouts. The next bounded comparison tests low-entropy consolidation; formal
+rollouts. A matched low-entropy consolidation comparison now retains an improved
+6750 actor: five of six buckets pass in one final-native diagnostic, CPU yaw and
+lateral improve, and the known sensor/push failures improve. Native cohort and
+CPU acceptance still fail. A bounded 6750→7000 continuation is running; formal
 training seeds 17/23/47 remain gated.
 Date: 2026-09-23
 Related:
@@ -45,7 +48,48 @@ normalization thresholds .12 m/s and .6 rad/s and separate samplewise stability
 caps. Scores are normalized capability, not success probability. Keep the .80
 pass threshold, 20% exact-zero anchor, nominal exposure and directional floors.
 
-### Current retained policy and measured limits
+### Current retained consolidation policy
+
+Authoritative evidence:
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
+Two branches resume the exact global-relief 6500 adaptive snapshot on immutable
+`610fbc5`, seed 17, 4096 envs, with 250 updates each. Both smoke64/5 checks pass;
+saved agent configs differ **only** in `algorithm.entropy_coef` (.01 vs .0).
+Actual argv, wrapper/source hashes, report/trace hashes and all 680 source files
+are verified. This is a local single-training-seed comparison, not superiority
+or final acceptance evidence.
+
+The .01 control loses left/right preservation and rolls back to the starting
+actor. The .0 treatment retains the new 6750 actor; all 13 actor state tensors
+match the accepted candidate/known-good snapshot and differ from the start.
+Learned mean action std is .101 (start .280; rejected control .291).
+
+Scores (zero/forward/lateral/yaw/left/right): stage gate cohort
+.961/.782/.783/.790/.838/.777; final-native diagnostic seed 20260915
+.936/.875/.812/.857/.815/.797; CPU .966/.892/.861/.531/.698/.788.
+Native/CPU yaw means are .817/1.104 rad/s for a .8 command. CPU overspeed is
+smaller than the previous 1.390, but remains a blocker. Every-bucket .80 mastery
+is still absent. CoM axes remain at ±3 mm.
+
+The seed-20260916 full-push case now survives (lateral .739 vs .298), but recovery
+tracking is below mastery. The encoder-sensitive seed-20260919 yaw improves
+.146→.864, mean .360→.836 rad/s, without weakening sensor DR. Both comparisons
+match six recorded reset fields and the initial raw actor observation. Twelve
+native/ONNX action parity cases pass (max error 7.16e-7); export correctness does
+not establish transfer. These seeds remain diagnostic, not fresh held-out proof.
+
+Continuation contract: one further 250-update window from this exact 6750
+checkpoint, seed 17, 4096 envs, inherited global relief and adaptive command
+teacher (now focused on lateral), unchanged stage gate and CPU/final evaluators.
+Pass `--agent.algorithm.entropy-coef 0.0` explicitly: the current checkpoint does
+not persist/inherit that standard PPO setting. No entropy controller or default
+promotion is included. Require retained improvement in remaining native deficits
+and CPU tracking; rollback or stagnant/worse native and CPU behavior stops
+unchanged budget extension and routes to a transfer comparison.
+Output: `/tmp/microduck-adaptive-entropy-continuation-s17-250`, session `43041`.
+It uses the same immutable source plus a hashed launch wrapper and smoke64/5.
+
+### Pre-consolidation reference and measured limits
 
 Authoritative evidence:
 `/tmp/microduck-adaptive-action-rate-s17-500/experiment-summary.json`.
@@ -208,10 +252,11 @@ hash, run smoke64/5 first, and verify saved `params/agent.yaml`. No automatic
 entropy controller or default change is justified before behavioral proof.
 Improvement must be measured on the retained actor and accompanied by actual
 std reduction; failure rejects this bounded consolidation treatment. Both arms
-are running sequentially at `/tmp/microduck-adaptive-entropy-consolidation-s17-v2`
-(session `31003`), with identical resume boundaries and immutable source. The
-control smoke64/5 passed and its saved entropy setting was verified. The old
-uninterrupted .01 extension is contextual evidence, not the matched control. Full
+completed at `/tmp/microduck-adaptive-entropy-consolidation-s17-v2`
+(session `31003` exited 0), with identical resume boundaries and immutable source.
+Both smoke64/5 checks and saved entropy settings were verified. The result is
+the retained improvement described above. The old uninterrupted .01 extension
+is contextual evidence, not the matched control. Full
 six-bucket mastery, fresh held-out seeds and all remaining acceptance still apply.
 
 ## Goal

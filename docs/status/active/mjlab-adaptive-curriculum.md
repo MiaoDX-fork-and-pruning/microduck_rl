@@ -3,134 +3,127 @@
 Status: **ACTIVE** — no usable policy accepted. Updated: 2026-09-23.
 Task control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
-The user authorized sustained necessary changes, training and verification through
-`intuitive-flow`; the latest status request does not cancel execution.
+The user authorized sustained necessary changes, training and checks through
+`intuitive-flow`; the status request does not cancel execution.
 Project-status writer: not assigned; project-status delta: none.
 
-## Current state
+## Current retained policy
 
-Phase 0/1 automation is implemented; Phase 2A usable-policy acquisition remains
-open. Both CoM axes remain at stage 0 (±3 mm). No acceptance threshold has changed:
-**every capability bucket must score ≥ .80**; scores are not success rates.
+Phase 0/1 automation works; Phase 2A usable-policy acquisition remains open.
+A matched low-entropy consolidation experiment retains a new **6750 actor**.
+Every capability bucket must score **≥ .80**; scores below are not success rates.
+Both adaptive CoM axes remain at stage 0 (±3 mm).
 
-The latest pure-yaw-only smoothing-relief campaign completed 6250→6500 updates,
-seed 17, 4096 envs. The candidate was retained without rollback (all 13 actor
-state tensors equal the candidate/known-good snapshot), but fails usable-policy
-acceptance. It is not promoted and must not be extended unchanged.
-
-| Pure-yaw relief evaluation | Zero | Forward | Lateral | Yaw | Left | Right |
+| Retained entropy-zero 6750 actor | Zero | Forward | Lateral | Yaw | Left | Right |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Stage gate, worst of 20260815–17 | .975 | .718 | .802 | .000 | .749 | .719 |
-| Final native diagnostic, 20260915 | .949 | .868 | .812 | .000 | .649 | .788 |
-| CPU rehearsal, 20260915 | .973 | .859 | .789 | .000 | .838 | .841 |
+| Stage gate, worst of 20260815–17 | .961 | .782 | .783 | .790 | .838 | .777 |
+| Final-native diagnostic, 20260915 | .936 | .875 | .812 | .857 | .815 | .797 |
+| CPU rehearsal, 20260915 | .966 | .892 | .861 | .531 | .698 | .788 |
 
-Yaw fails in all three gate members. Native/CPU average yaw rates are .103/.046
-rad/s for a .8 command: under-speed/idle. The same full-push stage case that
-felled global relief now survives (lateral .796 vs .298; no-relief .790), but
-still falls below .80. Six reset fields and the initial actor observation match
-the no-relief control. All six ONNX action comparisons pass, max error 6.56e-7.
+Native final has five passing buckets; cohort and CPU acceptance still fail.
+CPU yaw mean is 1.104 rad/s for a .8 command, improved from 1.390 but still fast.
+Native final mean is .817. No usable-policy, hardware or superiority claim.
 
-Authoritative latest evidence:
-`/tmp/microduck-adaptive-pure-yaw-s17-250/experiment-summary.json`.
-Checkpoint: its `training/.../2026-09-23_06-29-27_matched-lateral-drive-s17/model_6499.pt`.
-SHA: `fc061a0587d25784bb118e9174aec0b6d71445f1d26839cc33132ffb6ed01cd7`.
-All 680 immutable source files match the manifest. Session `29482` completed.
+Authoritative evidence:
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
+Checkpoint:
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/entropy0-250/training/logs/rsl_rl/matched_lateral-drive/2026-09-23_07-08-07_matched-lateral-drive-s17/model_6749.pt`.
+SHA: `95d8fd11b8b7a5acc44669584981f87dbb2b8d8c48460bb6cb51e91bad49be2e`.
+All 13 actor-state tensors equal the candidate/known-good snapshot and differ
+from the start. The .01 matched control loses left/right preservation and rolls
+back to the original 6500 actor. Both consume 250 updates from the exact same
+6500 adaptive snapshot, seed 17, 4096 envs. Saved agent configs differ only in
+`algorithm.entropy_coef` (.01 vs .0). Both smoke64/5 checks pass. Mean action std:
+start .280, rejected control .291, retained treatment .101. Session `31003` ended.
 
-## Previous retained global-relief actor
+The known full-push case (stage seed 20260916) now survives, lateral .739 vs .298;
+tracking recovery is still below mastery. Encoder-sensitive seed 20260919 yaw
+improves .146→.864, mean .360→.836 rad/s, with product sensor DR unchanged.
+Each comparison matches six recorded reset fields and the initial observation.
+Twelve ONNX action-parity cases pass (max error 7.16e-7). Those paths are linked
+from the authoritative summary. Previously consumed seeds remain diagnostic.
 
-The global-relief campaign consumed 6250→6750 updates; its 6750 candidate was
-rejected and the final `model_6749.pt` retains the 6500 actor. All actor tensors
-were checked. Evidence:
-`/tmp/microduck-adaptive-action-rate-s17-500/experiment-summary.json`.
-
-| Retained global 6500 evaluation | Zero | Forward | Lateral | Yaw | Left | Right |
-| --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Stage gate, worst of 20260815–17 | .938 | .735 | .796 | .669 | .830 | .812 |
-| Final native diagnostic, 20260915 | .923 | .879 | .797 | .837 | .737 | .820 |
-| Stage diagnostic, worst of 20260915–24 | .914 | .696 | .298 | .146 | .707 | .767 |
-| CPU rehearsal, 20260915 | .940 | .903 | .727 | .000 | .696 | .849 |
-
-No diagnostic seed passes all six. CPU yaw is overspeed (1.390 rad/s vs .8),
-not the latest policy's idle failure. All 60 cohort native/ONNX parity cases
-pass (max error 1.67e-6). Export parity does not establish physics transfer.
-The matched no-relief 6250→6500 control scores yaw .353; global relief .669.
-Do not describe the entire 500-update relief campaign as a 250-update comparison.
-
-Sensor ablation: seed 20260919 yaw .146→.807 without encoder bias, mean rate
-.360→.830; identity IMU alone leaves .115. Seed 20260915 improves with identity
-IMU. All 72 traces verified. Lateral still falls under all four sensor variants.
-`/tmp/microduck-relief-6500-sensor-bias/analysis-summary.json`.
-Push ablation locates that lateral fall after a (+.284, −.295) m/s push at 3.9 s;
-half/no push survives (.801/.807). Actual qvel writes supply valid push evidence;
-the earlier cached root-link velocity delta was invalid.
-`/tmp/microduck-relief-6500-push-sensitivity/analysis-summary.json`.
-Neither diagnostic authorizes weaker product DR or pushes.
-
-## Current decision and next experiment
+## Running now and next decision
 
 Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
-New classification: stochastic training can mask deterministic yaw startup
-failure. This changes the next experiment from reward-scope tuning to late
-consolidation; no blind exposure-only or unchanged relief extension.
+Classification changed: stochastic rollout performance masked deterministic
+startup failure; low-entropy consolidation improves both startup and transfer,
+while remaining native tracking deficits and CPU speed bias prevent acceptance.
 
-`/tmp/microduck-yaw-exploration-dependence-v2/analysis-summary.json` covers six
-64-env fixed-actor rollouts. For pure-yaw relief, deterministic / first-second
-noise / continuous noise produce mean final-two-second rates .202/.609/.805.
-Idle counts are 45/17/1 out of 64; one pulse rollout falls. Of the 45 originally
-idle cases, 30 move ≥ .4 rad/s after the pulse. Global relief's corresponding
-means are .819/.845/.816. All eleven recorded reset/observation fields match and
-six trace hashes pass. The noise samples match, but batched Warp contact paths
-are not bitwise replays. Auto-reset can also change RNG after first failure;
-only each initial episode's survival is counted. These are diagnostic tail
-statistics, not capability passes. No deployment noise is proposed.
+A **single further 250-update window, 6750→7000**, is running in session `43041`.
+Poll that handle; do not restart on timeout. Root output:
+`/tmp/microduck-adaptive-entropy-continuation-s17-250` (arm `continuation-250`).
+Launch wrapper: `/tmp/run_microduck_entropy_continuation.py`.
+Training seed 17, 4096 envs, same source and gate seeds/distribution, inherited
+global relief and adaptive command teacher (now focused on lateral). The wrapper
+passed smoke64/5 with entropy zero verified, records real argv, checks saved
+agent entropy, and automatically performs retained native-final and CPU
+evaluations. Training was observed at update 6825/7000, action std about .09.
 
-Next bounded hypothesis: lower entropy during consolidation reduces reliance
-on stochastic rollouts while retaining the global actor's acquired yaw.
-Resume the **exact global 6500 adaptive snapshot**, not the retained actor's
-6750-budget filename; seed 17, 4096 envs, 250 updates, inherited global relief,
-same gate seeds/distribution, standard PPO entropy coefficient .01→0.0. Use the
-immutable `610fbc5` source and an explicit hashed launch wrapper; smoke64/5
-before training. Record real argv and verify `params/agent.yaml`. Two freshly
-resumed arms (.01 control and .0 treatment) each consume 250 updates on the same
-source; the old uninterrupted extension is contextual evidence only. Inspect
-candidate versus retained actor, learned std, native rates, CPU rates and recovery
-before any controller/default promotion. The matched campaign is running in
-session `31003`; poll it, do not restart on timeout. Output:
-`/tmp/microduck-adaptive-entropy-consolidation-s17-v2`. The control smoke64/5
-passed with its entropy coefficient verified in the saved config. The wrapper
-records each actual argv and runs the treatment after the control completes.
-The first launch stopped after successful smoke because its YAML reader did not
-accept Python tuple tags; the v2 reader adds only that safe constructor. No long
-training ran in the first launch.
+**Entropy zero is an explicit standard PPO CLI override, not inherited from
+adaptive checkpoint metadata.** Ordinary default resumes would restore .01.
+Every continuation must pass `--agent.algorithm.entropy-coef 0.0` and verify the
+saved config. Do not claim an automatic entropy controller exists or change the
+default before behavioral proof.
 
-## Proven implementation and verification boundaries
+Success for this bounded follow-up: retain improvement in remaining native
+buckets and CPU tracking. Rollback or stagnant/worse native and CPU results
+stops unchanged budget extension; investigate transfer mismatch next. When it
+ends, verify `model_6999.eval.pt` versus the retained checkpoint/known-good actor,
+consumed budget, source hashes, actual angular rates and all report/trace hashes.
+The previous summarizer hardcodes 6749 and is not the continuation summarizer.
+Fresh held-out seeds and the full acceptance below remain mandatory.
 
-`610fbc5` adds checkpointed `pure_yaw` scope to bounded action-rate relief.
-Only pure-yaw commands get effective weight −.2; other commands keep canonical
-costs. Trigger/release use yaw only; legacy/global scope stays supported.
-97 focused tests plus 13 campaign tests after one added regression (98 distinct),
-focused Ruff and diff checks passed. Real 64-env/5-update smoke passed; separate
-live weighted-cost/finite-ABI/unchanged-action proof:
-`/tmp/microduck-pure-yaw-610fbc5-live-proof/runtime-proof.json`.
-Source: `/tmp/microduck-adaptive-pure-yaw-source-610fbc5`; manifest file SHA
-`5c2e75579942e6f46d1e8c94a6d6fb6f72de0c3eca11049553e54141948d5d58`.
+## Evidence behind the current treatment
+
+Pure-yaw-only smoothing relief was rejected as sufficient: after 6250→6500,
+yaw scores are zero in all three gate members, native final and CPU. Full push
+survives but yaw learning is lost. Do not promote or extend that treatment.
+`/tmp/microduck-adaptive-pure-yaw-s17-250/experiment-summary.json`.
+
+Fixed-actor noise diagnostic:
+`/tmp/microduck-yaw-exploration-dependence-v2/analysis-summary.json`.
+For that pure-yaw actor, deterministic / first-second noise / continuous noise
+produce 45/17/1 idle tails out of 64; mean last-two-second rates .202/.609/.805.
+Thirty previously idle cases move after the pulse; one pulse case falls. Eleven
+initial fields match and all six trace hashes pass. These are diagnostic tail
+rates, not capability passes. Batched Warp contact paths are not bitwise replays,
+and auto-resets can change later RNG after a first failure. No deployment noise.
+Plot: `.../yaw-noise-dependence.png` (PDF also available).
+
+Original global-relief evidence:
+`/tmp/microduck-adaptive-action-rate-s17-500/experiment-summary.json`.
+That campaign consumed 6250→6750 but retained 6500 after rollback. Its 10-seed
+stage diagnostic passed no all-six case; yaw/lateral each passed 3/10. Sensor
+and push ablations located independent yaw-calibration and lateral-recovery
+failures; see the canonical plan for those artifact links. Do not repeat old
+exposure-only, sensor-resampling-only or unchanged global-relief budgets.
+
+## Implementation and proof boundaries
+
+Source: `/tmp/microduck-adaptive-pure-yaw-source-610fbc5`, `git archive 610fbc5`
+plus the existing CPU seed overlay. All 680 files are verified unchanged.
+Manifest file SHA: `5c2e75579942e6f46d1e8c94a6d6fb6f72de0c3eca11049553e54141948d5d58`.
 Source label: `610fbc5-cpu-seed-overlay-5ae829076760`.
+`610fbc5` added opt-in checkpointed pure-yaw relief; default scope remains global.
+98 distinct focused tests, focused Ruff/diff checks, real smoke64/5 and separate
+live weighted-cost/61D/14D/unfiltered-action proof passed before these runs.
+This turn changes only task docs and explicit temporary experiment wrappers.
 Earlier infrastructure: 269 relevant tests and fresh locked non-editable install/
-config/14-actuator model compile pass. Fresh-env GPU and remote execution remain
-unproven. Full `mdp.py` Ruff has 17 pre-existing findings. CPU link-frame fix is
-`931e3c9`; old principal-inertia-frame scores are superseded.
+config/model compile pass. Fresh-env GPU and remote execution remain unproven.
+Full `mdp.py` Ruff has 17 pre-existing findings. CPU link-frame fix is `931e3c9`;
+old principal-inertia-frame scores are superseded.
 
 ## Remaining acceptance and boundaries
 
-Required: retained six-bucket final-range native mastery, fresh held-out seeds,
-rollout/video inspection, normalized ONNX and CPU rehearsal, autonomous training
-seeds 17/23/47, canonical final-range fine-tuning and matched-budget fixed/axis
-comparisons. No usable-policy, hardware or adaptive-superiority claim exists.
-No external blocker prevents the next experiment; goal remains active.
+Required: six-bucket retained native mastery at final ranges, fresh held-out
+seeds, rollout/video inspection, normalized ONNX and CPU rehearsal, autonomous
+training seeds 17/23/47, canonical final-range fine-tuning and matched-budget
+fixed/axis comparisons. Goal is active; no external blocker prevents progress.
 
-Preserve canonical Velocity, 61D/14D ABI, BAM M6, unfiltered actions, reward signs,
+Preserve canonical Velocity, 61D/14D, BAM M6, unfiltered actions, reward signs,
 .80 gates, exact-zero/nominal anchors and the existing CPU seed patch in
 `scripts/run_specialist_action_battery.py`. IsaacLab, `uv.lock`, generated files
 and unrelated processes are outside scope. Advisor, stronger teachers,
-generalist and hardware deployment remain parked. Use the validated local venv
-and unique `/tmp` working directories; worktree `logs/rsl_rl` is unwritable.
+generalist and hardware deployment remain parked. Use the local venv and unique
+`/tmp` work directories; worktree `logs/rsl_rl` is unwritable.
