@@ -1,12 +1,11 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 infrastructure complete; Phase 2A native usability remains
-unproven. Runner consolidation, native MJLab/BAM evaluation, signed-EMA gate
-calibration, bounded command-exposure feedback, and retention repair are
-implemented. `b3db958` preserves live exposure across rollback; a two-window
-native validation is in progress. The policy still fails the six-bucket gate
-across native reset/DR seeds.
-See the active status capsule for current proof.
+unproven. Command-conditioned evidence and retention repair operate, including
+persistent exposure across repeated policy rollbacks. The cumulative-5000
+candidate passes 5/6 held-out buckets but fails four buckets on the gate seed;
+no formal multi-seed campaign is ready. The active status capsule owns the
+current proof, candidate/retained-policy distinction and next experiment.
 Date: 2026-09-22
 Related:
 
@@ -35,52 +34,38 @@ acquisition; the optional advisor and stronger teachers remain deferred.
 
 Feedback averages signed tracking error over 0.5 s before L1 magnitude, keeps a
 20% exact-zero anchor, and uses a 0.80 focus mastery threshold. The calibrated
-product metric keeps linear/angular tracking thresholds at `0.12 m/s` and
-`0.6 rad/s`, with separate samplewise stability caps. The cumulative-3500
-`lateral-drive` continuation from seed17 completed its planned budget, but
-native held-out seed `20260915` still failed turn-left and additional native
-seeds `20260921` and `20260922` failed yaw or linear buckets. Eight
-preservation failures triggered explicit rollback; both adaptive CoM axes
-remained at stage 0. Evidence:
-`/tmp/microduck-adaptive-corrected-s17-3500/campaign-result.json`.
-This is a valid orchestration result and a negative usability result, not a
-reason to open the formal multi-seed matrix.
+product metric retains linear/angular normalization thresholds of `0.12 m/s`
+and `0.6 rad/s`, separate samplewise stability caps, and the existing pass
+boundary. Canonical Velocity remains unchanged.
 
-A separate 500-update strictification diagnostic tested lighter motion costs,
-stronger tracking and 25% pure lateral sampling. Its native traces show mean
-lateral velocity only 0.0028 m/s against a 0.12 m/s command; forward also
-stalls. It survives all six cases but passes none. Evidence:
-`/tmp/microduck-strictification-s17/native-499/capability.json`; this working
-tree diagnostic has no held-out/transfer acceptance claim. Do not promote it
-to the feedback recipe or continue its stricter stage without acquisition
-evidence. Next isolate command-conditioned motion and reward mass before
-another bounded training intervention. Samplewise MAE and product thresholds
-remain fixed; any metric-semantic repair needs a separate calibration argument.
+The command-conditioned contract records seven classes of samples and weighted
+reward mass. Retention repair (`b2dc088`) redirects bounded sampling toward
+regressed commands. The follow-up fix (`b3db958`) preserves live teacher
+exposure at an automated preservation failure while restoring policy, optimizer,
+gate, ranges and RNG from the known-good checkpoint. Explicit checkpoint load
+and rollback still restore saved state. Immutable-checkpoint regression cases
+(`873db35`) fail on the old implementation and pass continuously and across
+restart. Native windows demonstrate repair counts increasing through 3, 4 and 5.
 
-The bounded acquisition-feedback slice combined 0.5 s command-aligned feedback,
-staged tracking width, and an initial lateral focus. It improved forward MAE at
-500 updates but did not establish lateral acquisition. The checkpointed,
-lateral-first diagnostic removed the frontier-order confounder, and the
-`lateral-drive` continuation added a yaw-specific acquisition signal. The
-pure-yaw exemption improved yaw on some windows, but the cumulative-1000,
-cumulative-1500, and cumulative-3500 native reports still show unstable
-lateral/yaw/turn retention. The next bounded experiment must therefore measure
-command-conditioned exposure and reward mass directly before changing another
-reward coefficient.
+The current bounded campaign is
+`/tmp/microduck-adaptive-evidence-s17-5000-cadence/`. It trained for 500 updates
+at 4096 envs with a 500-update evaluation interval, after smoke64/5. Its
+candidate's gate lower-tail is `0.70988`, triggering preservation failure and
+rollback. Independent evaluation of that rejected candidate on the held-out
+seed gives `0.79519`: only lateral fails (signed-EMA error `0.0245773 m/s`;
+the unchanged 0.80 pass boundary requires at most `0.024 m/s`). The restored
+policy's held-out lower-tail remains `0.42439`; both CoM axes stay at stage 0.
+The compact artifact is `retention-summary.json`. Candidate learning, retained
+policy quality, and CPU transfer remain separate verdicts.
 
-The final native traces support that diagnosis: held-out mean velocity bias is
-small (`-0.015 / -0.0025 m/s` forward/lateral and `+0.014 rad/s` yaw), while
-samplewise ripple remains large (`0.0217 / 0.1070 m/s` and `0.2227 rad/s`).
-The extra reset/DR seeds move the failing bucket between yaw and linear
-commands. The command-conditioned contract is now implemented and exercised in
-`/tmp/microduck-adaptive-evidence-s17-3750-r2/`: two native windows recorded
-seven-class exposure and weighted reward mass with zero unclassified samples,
-while the held-out lower-tail remained `0.75130`. The pre-fix 4250-update
-continuation under `/tmp/microduck-adaptive-evidence-s17-4250-repair/` ended at
-lower-tail `0.42439` and exposed repeated rollback state reversion. The
-controller fix is committed as `b3db958`; its bounded validation is under
-`/tmp/microduck-adaptive-evidence-s17-4500-retention/`. Do not begin the
-formal multi-seed matrix until that validation changes the retention decision.
+The paired initial/final-distribution probe under
+`/tmp/microduck-adaptive-stage0-diagnostic-s17-4500/` also fails both profiles
+(`0.78202` / `0.67967`) for the retained policy. It does not establish that
+stage 0 is mastered or justify lowering the product gate. The next experiment
+must use raw command traces, sampled DR and reward mass to isolate acquisition
+or retention interference. Another unchanged continuation or coefficient-only
+search is insufficient. Optional advisors and stronger teachers remain parked;
+formal seeds 17/23/47 and matched-budget comparison follow acquisition.
 
 ## Goal
 
