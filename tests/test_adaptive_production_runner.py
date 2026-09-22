@@ -19,6 +19,7 @@ from types import SimpleNamespace
 import numpy as np
 import pytest
 import torch
+from mjlab.envs.mdp import dr
 
 from mjlab_microduck.evaluation.capability import BUCKETS, build_capability_report
 from mjlab_microduck.tasks.adaptive_curriculum import AxisConfig, CapabilityGate
@@ -34,8 +35,8 @@ from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import (
 class _TermManager:
     def __init__(self) -> None:
         self.cfgs = {
-            "randomize_com": SimpleNamespace(params={"ranges": (-0.003, 0.003)}),
-            "randomize_head_com": SimpleNamespace(params={"ranges": (-0.003, 0.003)}),
+            "randomize_com": SimpleNamespace(func=dr.body_ipos, params={"ranges": (-0.003, 0.003)}),
+            "randomize_head_com": SimpleNamespace(func=dr.body_ipos, params={"ranges": (-0.003, 0.003)}),
         }
 
     def get_term_cfg(self, name: str):
@@ -689,8 +690,9 @@ def test_low_score_preservation_failure_restores_sampling_without_rewinding_budg
 
 
 @pytest.mark.parametrize("resume_after_first", [False, True])
+@pytest.mark.parametrize("final_com_fraction", [0.0, 0.20])
 def test_repeated_preservation_failures_accumulate_live_exposure_repairs(
-    monkeypatch, tmp_path, resume_after_first
+    monkeypatch, tmp_path, resume_after_first, final_com_fraction
 ):
     _fake_parent_io(monkeypatch)
     runner = _runner()
@@ -702,6 +704,10 @@ def test_repeated_preservation_failures_accumulate_live_exposure_repairs(
     runner._evaluate_window(str(checkpoint))
     known_good = Path(runner.last_known_good_checkpoint)
     known_good_bytes = known_good.read_bytes()
+    # The rollback target predates the rehearsal experiment. Auto-rollback
+    # must preserve the current distribution across restart, while an explicit
+    # load of that target below must restore its old distribution exactly.
+    runner._set_final_com_fraction(final_com_fraction)
     expected_policy = copy.deepcopy(runner.alg.state)
     expected_gate = runner.capability_gate.state_dict()
     yaw_probability = runner.command_exposure.probabilities["yaw"]
@@ -721,6 +727,10 @@ def test_repeated_preservation_failures_accumulate_live_exposure_repairs(
         runner._evaluate_window(str(candidate))
         state = runner.command_exposure.state_dict()
         assert runner.last_gate_outcome == "preservation_failure"
+        assert runner.final_com_fraction == final_com_fraction
+        for name in ("randomize_com", "randomize_head_com"):
+            params = runner.env.event_manager.get_term_cfg(name).params
+            assert params.get("final_fraction", 0.0) == final_com_fraction
         assert runner.last_known_good_checkpoint == str(known_good)
         assert known_good.read_bytes() == known_good_bytes
         torch.testing.assert_close(runner.alg.state, expected_policy)
@@ -741,3 +751,36 @@ def test_repeated_preservation_failures_accumulate_live_exposure_repairs(
             _attach_exposure(runner)
             runner.load(str(candidate.with_suffix(".adaptive.pt")))
             assert runner.command_exposure.state_dict() == state
+            assert runner.final_com_fraction == final_com_fraction
+    runner.load(str(known_good))
+    assert runner.final_com_fraction == 0.0
+    for name in ("randomize_com", "randomize_head_com"):
+        term = runner.env.event_manager.get_term_cfg(name)
+        assert term.func is dr.body_ipos
+        assert "final_fraction" not in term.params
+
+
+def test_launch_override_is_recorded_after_full_checkpoint_resume(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    runner = _runner()
+    checkpoint = tmp_path / "old.pt"
+    runner.save(str(checkpoint))
+
+    def init(self, env, cfg, *args, **kwargs):
+        self.env = env
+        self.cfg = cfg
+        self.alg = _FakeAlg()
+        self.current_learning_iteration = 0
+
+    monkeypatch.setattr("mjlab_microduck.tasks.adaptive_runner.MicroduckOnPolicyRunner.__init__", init)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_EVALUATOR_COMMAND", "unused")
+    env = _Env()
+    env.cfg.adaptive_final_com_fraction = 0.2
+    new = AdaptiveMicroduckOnPolicyRunner(env, runner.cfg, log_dir=str(tmp_path))
+    assert new.final_com_fraction == 0.2
+    assert new.evaluation_events[-1] == {
+        "kind": "com_rehearsal_override", "previous_fraction": 0.0,
+        "final_com_fraction": 0.2, "completed_iterations": 0,
+    }
+    assert new._needs_reset

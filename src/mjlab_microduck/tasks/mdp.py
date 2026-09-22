@@ -16,7 +16,7 @@ from mjlab.tasks.velocity.mdp.velocity_command import UniformVelocityCommand, Un
 from mjlab.tasks.velocity.mdp import observations as _velocity_obs
 from mjlab.managers.command_manager import CommandTerm
 from mjlab.managers import CommandTermCfg
-from mjlab.managers.event_manager import requires_model_fields
+from mjlab.managers.event_manager import RecomputeLevel, requires_model_fields
 from mjlab.utils.lab_api.math import matrix_from_quat, wrap_to_pi, quat_apply, quat_from_angle_axis
 from rsl_rl.algorithms.ppo import PPO as _PPO
 
@@ -3141,6 +3141,36 @@ def apply_mouth_payload_force(
 # ==============================================================================
 # Domain Randomization Events
 # ==============================================================================
+
+
+@requires_model_fields("body_ipos", recompute=RecomputeLevel.set_const)
+def randomize_com_with_rehearsal(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    ranges: tuple[float, float],
+    final_ranges: tuple[float, float],
+    final_fraction: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    operation: str = "add",
+):
+    """Rehearse final CoM on a stable, bounded subset of training environments.
+
+    The first floor(num_envs * final_fraction) IDs share the final distribution
+    for trunk and head. Other IDs use the live adaptive ``ranges``. Both
+    disjoint subsets use stock DR's compile-time defaults, including on partial
+    resets; offsets never accumulate. The stock recomputation contract above
+    is necessary for the changed CoM to affect the dynamics.
+    """
+    from mjlab.envs.mdp import dr
+
+    if not 0.0 <= final_fraction <= 0.20:
+        raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int)
+    final_mask = env_ids < int(env.num_envs * final_fraction)
+    for ids, bounds in ((env_ids[~final_mask], ranges), (env_ids[final_mask], final_ranges)):
+        if ids.numel():
+            dr.body_ipos(env, ids, ranges=bounds, asset_cfg=asset_cfg, operation=operation)
 
 
 def randomize_delayed_actuator_gains(

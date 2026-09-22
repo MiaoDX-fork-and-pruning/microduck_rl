@@ -133,6 +133,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     adaptive_frontier_stall_improvement: float = 0.05
     adaptive_linear_feedback_weight: float = FEEDBACK_LINEAR_L1_WEIGHT
     adaptive_yaw_feedback_weight: float = FEEDBACK_YAW_L1_WEIGHT
+    # None inherits the checkpoint (or zero on a fresh run). An explicit value
+    # starts a recorded experiment override after resume; at most 20% is final.
+    adaptive_final_com_fraction: float | None = None
     adaptive_evaluation_interval: int = 0
     adaptive_evaluation_seed: int = 20260916
     adaptive_evaluator_schema_version: int = 2
@@ -186,6 +189,11 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
+    final_com_fraction = os.environ.get("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION")
+    if final_com_fraction is not None:
+        cfg.adaptive_final_com_fraction = float(final_com_fraction)
+        if not 0.0 <= cfg.adaptive_final_com_fraction <= 0.20:
+            raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:

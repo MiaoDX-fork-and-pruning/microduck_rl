@@ -247,6 +247,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.completed_iterations = 0
         self.resume_checkpoint: str | None = None
         self.bucket_feedback: BucketFeedbackTracker | None = None
+        self.final_com_fraction = 0.0
         initial_focus = getattr(env.cfg, "adaptive_initial_focus", "forward")
         frontier_order = getattr(env.cfg, "adaptive_frontier_order", ()) or None
         self.command_exposure = (
@@ -279,8 +280,52 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         # The launcher passes an exact path, without MJLab's regex run lookup.
         # Evaluators/exporters have no training log_dir and never resume here.
         resume = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
+        requested_fraction = getattr(env.cfg, "adaptive_final_com_fraction", None)
         if resume and log_dir is not None:
             self.load(resume, map_location=device)
+        if requested_fraction is not None:
+            previous_fraction = self.final_com_fraction
+            self._set_final_com_fraction(requested_fraction)
+            if previous_fraction != self.final_com_fraction:
+                self.evaluation_events.append({
+                    "kind": "com_rehearsal_override",
+                    "previous_fraction": previous_fraction,
+                    "final_com_fraction": self.final_com_fraction,
+                    "completed_iterations": self.completed_iterations,
+                })
+                self._needs_reset = True
+
+    def _set_final_com_fraction(self, fraction: float) -> None:
+        """Install rehearsal on live, adaptive-owned axes using stock DR fields."""
+        from mjlab.envs.mdp import dr
+
+        from .mdp import randomize_com_with_rehearsal
+
+        if not 0.0 <= fraction <= 0.20:
+            raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
+        gate = self.capability_gate
+        axes = gate.axis_order if gate is not None else ()
+        if fraction and not axes:
+            raise ValueError("final CoM rehearsal requires an adaptive CoM axis")
+        # Stock events have already expanded these same fields at construction.
+        # Only their reset function and cohort params change; live stage ranges
+        # remain owned by apply_stage_to_env.
+        for axis in ADAPTIVE_AXIS_CONFIGS:
+            if axis.name not in axes:
+                continue
+            name = {"com_range": "randomize_com", "head_com_range": "randomize_head_com"}[axis.name]
+            term = _manager_env(self.env).event_manager.get_term_cfg(name)
+            if fraction:
+                if term.func not in (dr.body_ipos, randomize_com_with_rehearsal):
+                    raise ValueError(f"unsupported CoM rehearsal event: {name}")
+                term.func = randomize_com_with_rehearsal
+                width = axis.stages[-1]
+                term.params.update(final_fraction=fraction, final_ranges=(-width, width))
+            elif getattr(term, "func", None) is randomize_com_with_rehearsal:
+                term.func = dr.body_ipos
+                term.params.pop("final_fraction", None)
+                term.params.pop("final_ranges", None)
+        self.final_com_fraction = float(fraction)
 
     def set_evaluator(self, evaluator) -> None:
         """Inject a synchronous evaluator (used by production adapters/tests)."""
@@ -608,8 +653,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             # exposure from the old known-good checkpoint.
             exposure = getattr(self, "command_exposure", None)
             exposure_state = None if exposure is None else exposure.state_dict()
+            final_com_fraction = getattr(self, "final_com_fraction", 0.0)
             if self.last_known_good_checkpoint:
                 self.rollback(self.last_known_good_checkpoint)
+            # This is the live training distribution, like exposure. Old
+            # rollback targets must not silently switch off a new experiment.
+            self._set_final_com_fraction(final_com_fraction)
+            event["final_com_fraction"] = final_com_fraction
             exposure = getattr(self, "command_exposure", None)
             if exposure is not None and exposure_state is not None:
                 exposure.load_state_dict(exposure_state)
@@ -655,6 +705,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "num_envs": getattr(self.env, "num_envs", None),
             "stage_values": {} if gate is None else {name: gate.stage_value(name) for name in gate.axis_order},
             "command_exposure": None if exposure is None else exposure.state_dict(),
+            "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
             else self.bucket_feedback.state_dict(),
@@ -744,6 +795,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 apply_stage_to_env(manager_env, name, gate.stage_value(name))
         if exposure is not None:
             exposure.apply(manager_env)
+        self._set_final_com_fraction(float((state or {}).get("final_com_fraction", 0.0)))
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
         self.resume_checkpoint = str(Path(path).resolve())

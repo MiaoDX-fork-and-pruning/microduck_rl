@@ -15,10 +15,12 @@ campaign = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(campaign)
 
 
-def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None):
+def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None, fraction=None):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
              "evaluation_events": events or [{"kind": "hold"}]}
+    if fraction is not None:
+        state["final_com_fraction"] = fraction
     torch.save({"iter": completed - 1, "infos": {"adaptive_curriculum": state}}, checkpoint)
     result = {"version": 1, "status": "completed", "task_id": task,
               "completed_iterations": completed, "start_completed_iterations": start,
@@ -42,20 +44,30 @@ def test_completion_uses_manifest_path_and_rejects_tampered_artifact(tmp_path):
         campaign.read_training_result(result, **args)
 
 
-def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(monkeypatch, tmp_path):
+@pytest.mark.parametrize("saved_fraction,requested_fraction,expected_fraction", [
+    (None, None, 0.0), (0.2, None, 0.2), (None, 0.2, 0.2), (0.2, 0.0, 0.0),
+])
+def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(
+    monkeypatch, tmp_path, saved_fraction, requested_fraction, expected_fraction
+):
     task, _ = campaign.TASKS["feedback"]
     checkpoint = tmp_path / "checkpoint with spaces.pt"
-    _write_result(tmp_path / "prior-result.json", checkpoint, start=0, completed=5, task=task)
+    _write_result(tmp_path / "prior-result.json", checkpoint, start=0, completed=5, task=task, fraction=saved_fraction)
     output = tmp_path / "continuation"
     monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "reviewed-source")
     monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", "/unrelated/inherited.pt")
-    monkeypatch.setattr(sys, "argv", ["campaign", "--branch", "feedback", "--seed", "17",
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.1")
+    argv = ["campaign", "--branch", "feedback", "--seed", "17",
         "--output", str(output), "--iterations", "7", "--num-envs", "64",
-        "--gate-interval", "1", "--resume", str(checkpoint)])
+        "--gate-interval", "1", "--resume", str(checkpoint)]
+    if requested_fraction is not None:
+        argv += ["--final-com-fraction", str(requested_fraction)]
+    monkeypatch.setattr(sys, "argv", argv)
     calls = []
 
     def run(command, **kwargs):
         calls.append((command, kwargs))
+        assert kwargs["env"]["MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION"] == str(expected_fraction)
         if Path(command[0]).name == "train":
             phase = Path(kwargs["cwd"]).name
             env = kwargs["env"]
@@ -67,7 +79,7 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(monkeypatch,
                 assert env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] == str(checkpoint)
                 assert command[command.index("--agent.max-iterations") + 1] == "2"
                 final = output / "training" / "explicit-final.pt"
-                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task)
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), final, task=task, fraction=expected_fraction)
         else:
             report = Path(command[command.index("--output") + 1])
             report.parent.mkdir(parents=True)
@@ -82,3 +94,4 @@ def test_resumed_job_smokes_fresh_then_trains_only_remaining_budget(monkeypatch,
     assert result["segment_training_transitions"] == 2 * 24 * 64
     assert result["heldout_aggregate"]["passed"] is False
     assert result["cpu_transfer_aggregate"]["passed"] is False
+    assert result["final_com_fraction"] == expected_fraction

@@ -79,12 +79,35 @@ initial-distribution lower-tail is `0.78202` and final-distribution lower-tail
 is `0.67967`; both fail. This does not support changing the gate solely on the
 claim that stage 0 was already mastered.
 
-Next use the candidate's gate/held-out raw traces and per-bucket reward mass
-to distinguish command tracking under DR from retention interference. Pick a
-bounded acquisition or consolidation mechanism with an explicit comparison
-before spending another training budget. Do not launch another unchanged
-continuation or a coefficient-only search. Preserve evaluation seed separation
-and keep the held-out evidence independent of live gate decisions.
+Current experiment contract (implemented; training comparison pending):
+
+- Context budget: medium, to resolve the live DR event and checkpoint ownership.
+- Hypothesis: final-CoM rehearsal improves acquisition/retention across reset/DR
+  conditions while most environments continue under adaptive difficulty. The
+  observed seed difference does not establish CoM as its cause.
+- Controlled change: 20% of environment IDs use final trunk/head CoM ranges;
+  the rest keep the live stage. Resume the same cumulative-4500 checkpoint as
+  the existing no-rehearsal 5000-update control, with 4096 envs, 500 updates,
+  identical command exposure, gate cadence and gate/held-out seeds.
+- Proof: non-accumulating partial-reset and checkpoint tests, a native physical
+  cohort probe, smoke64/5, then candidate and retained six-bucket comparison.
+  Artifacts: `/tmp/microduck-adaptive-com-rehearsal-s17-5000/`.
+- Decision delta: if worst-bucket capability and retention improve without an
+  anchor regression, retain this mechanism for replication. If not, reject this
+  bounded setting as sufficient and revisit the failure classification before
+  another training budget. A product pass still requires every bucket >=0.80.
+- No-touch scope: canonical Velocity, rewards/PPO, product metric/thresholds,
+  held-out decision separation, IsaacLab and other dirty files.
+
+The opt-in `--final-com-fraction 0.2` is recorded in launch manifests and
+checkpoints. Ordinary resume inherits it; explicit load restores saved state;
+automatic preservation rollback keeps the live rehearsal setting even when its
+target predates the experiment. It wraps only adaptive-owned CoM events and
+retains stock field expansion/recomputation. Native evaluation disables it.
+183 adaptive/config tests pass. The real native `physical-probe.json` proves
+12/64 final environments, remaining offsets <=3 mm, no accumulation across
+20 partial resets, untouched-environment isolation and finite 61D/14D steps.
+The campaign launcher must still pass smoke64/5 before its training segment.
 
 ## Remaining gates and no-touch scope
 
@@ -114,3 +137,6 @@ Ruff; unrelated full-file `mdp.py` findings remain outside this slice.
 runs smoke64/5, preserves consumed-update accounting and writes explicit
 training/campaign manifests. `status: evaluated` denotes completed evidence,
 not a passing policy. Prefer an immutable source snapshot for future launches.
+Optional `--final-com-fraction <0..0.20>` selects final-CoM rehearsal on owned
+axes. Omit to inherit the exact resume checkpoint's setting (zero for legacy
+checkpoints); an explicit value records a new experiment override.

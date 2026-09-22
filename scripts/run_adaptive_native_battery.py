@@ -169,6 +169,9 @@ def run_native(checkpoint: Path, output: Path, *, task: str, seed: int,
             cfg.events.pop("push_robot", None)
         if hasattr(cfg, "adaptive_evaluation_interval"):
             cfg.adaptive_evaluation_interval = 0
+            # Actor-only load must evaluate exactly the requested distribution,
+            # independent of the launch environment or checkpoint rehearsal.
+            cfg.adaptive_final_com_fraction = 0.0
         # Evaluation uses an explicit frozen DR distribution. The training
         # curriculum is otherwise evaluated at ``reference_step`` during reset
         # and can silently overwrite the ranges before the first sample.

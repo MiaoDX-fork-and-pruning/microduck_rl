@@ -24,6 +24,28 @@ native = _load("run_adaptive_native_battery")
 manifest = _load("assemble_adaptive_phase2a_manifest")
 
 
+@pytest.mark.parametrize("distribution,widths", [("initial", (0.003, 0.003)), ("final", (0.015, 0.010))])
+def test_native_construction_disables_training_rehearsal(monkeypatch, tmp_path, distribution, widths):
+    from mjlab.envs.mdp import dr
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.2")
+
+    class CapturedConfiguration(Exception):
+        pass
+
+    def construct(*, cfg, device):
+        assert cfg.adaptive_final_com_fraction == 0.0
+        for name, width in zip(("randomize_com", "randomize_head_com"), widths, strict=True):
+            assert cfg.events[name].func is dr.body_ipos
+            assert cfg.events[name].params["ranges"] == (-width, width)
+        raise CapturedConfiguration
+
+    monkeypatch.setattr("mjlab.envs.ManagerBasedRlEnv", construct)
+    with pytest.raises(CapturedConfiguration):
+        native.run_native(tmp_path / "actor.pt", tmp_path / "evidence", task="Mjlab-Velocity-Flat-Adaptive-LateralDrive-MicroDuck",
+                          seed=17, steps=300, device="cpu", distribution=distribution)
+
+
 def _trace(bucket, steps=300, terminal=False):
     command = np.tile((*native.BUCKETS[bucket], *([0.] * 10)), (steps, 1))
     observation = np.zeros((steps, 61))

@@ -67,6 +67,19 @@ or retention interference. Another unchanged continuation or coefficient-only
 search is insufficient. Optional advisors and stronger teachers remain parked;
 formal seeds 17/23/47 and matched-budget comparison follow acquisition.
 
+The next bounded comparison adds opt-in final-CoM rehearsal: 20% of environment
+IDs sample final trunk/head CoM ranges while the remainder follow adaptive
+stages. It repeats the existing cumulative-4500→5000 segment from the same
+checkpoint, command exposure, evaluation seeds and 500-update gate cadence.
+This tests a distribution-coverage hypothesis; the seed differences do not
+establish CoM as their cause. The runner checkpoints this setting and preserves
+it through automatic policy rollback; explicit load remains exact. The launcher
+records `--final-com-fraction` and inherits it on ordinary resume. Evaluation
+always disables training rehearsal and freezes its requested distribution.
+183 adaptive/config tests and a native cohort/partial-reset probe pass; smoke
+and the training comparison are pending. Current proof and decision rules stay
+in the existing active capsule.
+
 ## Goal
 
 Build an automated MJLab training system that can adjust bounded difficulty
