@@ -90,11 +90,18 @@ Resume the **exact global 6500 adaptive snapshot**, not the retained actor's
 6750-budget filename; seed 17, 4096 envs, 250 updates, inherited global relief,
 same gate seeds/distribution, standard PPO entropy coefficient .01→0.0. Use the
 immutable `610fbc5` source and an explicit hashed launch wrapper; smoke64/5
-before training. Record real argv and verify `params/agent.yaml`. Compare with
-the existing .01 extension; source/version differences must remain labelled.
-Inspect candidate versus retained actor, learned std, native rates, CPU rates
-and recovery before any controller/default promotion. No new run is launched
-at this checkpoint; exact output/session must be recorded when started.
+before training. Record real argv and verify `params/agent.yaml`. Two freshly
+resumed arms (.01 control and .0 treatment) each consume 250 updates on the same
+source; the old uninterrupted extension is contextual evidence only. Inspect
+candidate versus retained actor, learned std, native rates, CPU rates and recovery
+before any controller/default promotion. The matched campaign is running in
+session `31003`; poll it, do not restart on timeout. Output:
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v2`. The control smoke64/5
+passed with its entropy coefficient verified in the saved config. The wrapper
+records each actual argv and runs the treatment after the control completes.
+The first launch stopped after successful smoke because its YAML reader did not
+accept Python tuple tags; the v2 reader adds only that safe constructor. No long
+training ran in the first launch.
 
 ## Proven implementation and verification boundaries
 

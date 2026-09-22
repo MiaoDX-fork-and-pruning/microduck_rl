@@ -199,7 +199,7 @@ replays: initially tiny differences grow even with equal noise samples.
 Hypothesis: reducing the entropy incentive during late consolidation makes PPO
 optimize behavior closer to deterministic inference and can retain the global
 actor's acquired yaw without its late recovery/transfer regressions. Test the
-standard `--agent.algorithm.entropy-coef 0.0` against the existing .01 extension,
+standard `--agent.algorithm.entropy-coef 0.0` against a fresh .01 control,
 starting from the exact global-relief 6500 known-good adaptive snapshot, not the
 final 6750-budget filename. Use seed 17, 4096 envs, 250 updates, inherited
 global relief, unchanged gate cohort/distribution and final/CPU diagnostics.
@@ -207,7 +207,11 @@ The launch wrapper must record the actual argv, entropy override and source
 hash, run smoke64/5 first, and verify saved `params/agent.yaml`. No automatic
 entropy controller or default change is justified before behavioral proof.
 Improvement must be measured on the retained actor and accompanied by actual
-std reduction; failure rejects this bounded consolidation treatment. Full
+std reduction; failure rejects this bounded consolidation treatment. Both arms
+are running sequentially at `/tmp/microduck-adaptive-entropy-consolidation-s17-v2`
+(session `31003`), with identical resume boundaries and immutable source. The
+control smoke64/5 passed and its saved entropy setting was verified. The old
+uninterrupted .01 extension is contextual evidence, not the matched control. Full
 six-bucket mastery, fresh held-out seeds and all remaining acceptance still apply.
 
 ## Goal
