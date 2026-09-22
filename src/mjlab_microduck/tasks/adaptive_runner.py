@@ -841,7 +841,8 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             exposure.apply(manager_env)
         if transition_exposure is not None:
             transition_exposure.apply(manager_env)
-        self._set_final_com_fraction(float((state or {}).get("final_com_fraction", 0.0)))
+        saved_fraction = (state or {}).get("final_com_fraction", 0.0)
+        self._set_final_com_fraction(0.0 if saved_fraction is None else float(saved_fraction))
         if infos and infos.get("adaptive_rng_state"):
             self._restore_rng_state(infos["adaptive_rng_state"])
         self.resume_checkpoint = str(Path(path).resolve())

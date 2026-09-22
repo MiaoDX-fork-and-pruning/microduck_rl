@@ -82,7 +82,8 @@ def main() -> int:
         if not state or state.get("task_id") != task_id:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
         start_iterations = int(state["completed_iterations"])
-        saved_final_com_fraction = float(state.get("final_com_fraction", 0.0))
+        saved_fraction = state.get("final_com_fraction", 0.0)
+        saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
         transition_state = state.get("transition_exposure") or {}
         saved_transition_probability = float(transition_state.get("probability", 0.0))
         if state.get("num_envs") != args.num_envs:

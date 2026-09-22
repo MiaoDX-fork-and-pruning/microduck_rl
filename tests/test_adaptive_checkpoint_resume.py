@@ -154,3 +154,14 @@ def test_load_rejects_incompatible_axis_state_without_partial_apply(tmp_path, fa
     with pytest.raises(ValueError, match="axis mode/allowlist"):
         runner.load(str(checkpoint))
     assert runner.capability_gate.state_dict() == before
+
+
+def test_load_treats_legacy_null_com_rehearsal_as_disabled(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "legacy-null-com.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["infos"]["adaptive_curriculum"]["final_com_fraction"] = None
+    torch.save(payload, checkpoint)
+    runner.load(str(checkpoint))
+    assert runner.final_com_fraction == 0.0
