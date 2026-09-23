@@ -55,6 +55,22 @@ XML-PD product rehearsal is still unvalidated. No external blocker.
   buckets regress; both fail the joint intervention criterion.
   `/tmp/microduck-cpu-bam-response-s23-v1/verification.json`, 3 reports/18
   traces, independently rederived scores/actions/targets and exact XML replay.
+- Symmetry mirror-loss is rejected. In the matched seed23 native window,
+  control scores were .943/.844/.800/.794/.799/.763 and treatment scores were
+  .960/.830/.750/.812/.828/.815; the lower tail fell .763→.750 while the
+  treatment's mean symmetry loss stayed .0121–.0126. Audit:
+  `/tmp/microduck-turn-symmetry-ab-s23-v1/verification.json`.
+- Hip-yaw limit proximity is also rejected. The adaptive `lateral_drive`
+  treatment used margin .15 rad and weight −.5. Native control/treatment
+  scores were .949/.841/.798/.803/.714/.769 and .949/.863/.819/.799/.834/.744;
+  the lower-tail gain .030747 missed the required .05, and the CPU lower tail
+  regressed .559→.427. The term was withdrawn from the recipe; the audit is
+  retained at `/tmp/microduck-hip-yaw-limit-ab-s23-v2/verification.json`.
+- Resume compatibility is repaired in `f470942` and `f31af04`: checkpoints
+  with an older `command_feedback.term_names` schema retain common terms,
+  add new terms only when the saved window is empty, and fail closed on a
+  non-empty incompatible history. This prevents a resumed controller from
+  silently mixing incomparable reward statistics.
 
 Do not extend these unchanged recipes or scan more runtime scales. Earlier
 seed17 references and negative reward/smoothing experiments are in the plan.
@@ -99,13 +115,24 @@ their falls from causal evidence. Raw artifacts remain available.
 
 ## Next bounded work
 
-Make the CPU rehearsal's contact semantics explicit and preserve separate
-original-runtime and native-matched diagnostic verdicts. Do not silently replace
-the product gate with the passing agreement result. Return acquisition work to
-native moving-turn mastery: steady 1–5 s yaw means are +.708/−.729 for ±.8
-commands in this paired diagnostic, with further post-push degradation.
-Measure the unmodified actor's turn rollouts before choosing another training
-intervention. Do not repeat runtime scale scans or unchanged training extensions.
+The CPU rehearsal keeps separate original-runtime and native-matched verdicts;
+the contact-aligned agreement result does not replace the product gate. Do not
+repeat symmetry, hip-yaw limit, action-scale, sensor-refresh, BAM-scale, or
+unchanged continuation routes. The next contract targets the confirmed
+directional native gap: positive-yaw moving turns undertrack in both paired
+seeds (+.700 and +.718 rad/s over 1–5 s), while sign-reversed controls are
+closer (−.726 and −.815).
+
+Before any long run, record a bounded positive-yaw acquisition hypothesis,
+paired same-checkpoint control, fixed native gate cohort, unchanged six-bucket
+thresholds, and a rollback rule. Run smoke64/5 first, then one matched window
+with only the declared yaw-acquisition change. Retain a candidate only if the
+positive-yaw bucket improves by at least .05, every previously mastered bucket
+stays within its preservation tolerance, and the CPU rehearsal does not regress
+its lower tail; otherwise restore the baseline and stop. This is an experiment
+contract, not an acceptance result. All seeds remain diagnostic until fresh
+held-out native evidence, normalizer-baked ONNX, CPU rehearsal, and video review
+pass the product gate.
 
 ## Native turn and visual profile — verified
 

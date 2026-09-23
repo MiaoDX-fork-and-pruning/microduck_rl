@@ -14,6 +14,15 @@ Native moving-turn mastery and the original XML-PD product rehearsal remain
 open; the contact-aligned diagnostic is not product acceptance.
 Final-range mastery, fresh held-out evidence, automated training seeds 17/23/47
 and matched-budget comparisons remain unproven.
+The latest bounded interventions are also negative. Symmetry mirror-loss lowered
+the seed23 lower tail (.763→.750) despite a small symmetry loss, and hip-yaw
+limit proximity improved the native lower tail by only .030747 while regressing
+the CPU lower tail (.559→.427); both failed their joint retention criteria and
+the hip-yaw term was withdrawn. Resume compatibility for evolving
+`command_feedback.term_names` was repaired in `f470942`/`f31af04`, preserving
+common terms and rejecting non-empty incompatible history. The next experiment
+must target the measured positive-yaw undertracking direction with a new,
+bounded falsifiable contract; no unchanged route is authorized.
 Date: 2026-09-23
 Related:
 
@@ -611,6 +620,23 @@ ONNX parity below 9e-7. Positive-yaw turns undertrack in both paired seeds
 (+0.700 and +0.718 rad/s over 1–5 s), while negative yaw is closer (−0.815 and
 −0.726). This is directional native acquisition evidence, not a CPU contact
 artifact; all seeds remain diagnostic and no acceptance gate is relaxed.
+
+### Current directional experiment contract
+
+The next acquisition attempt is scoped to the confirmed positive-yaw native
+gap. The paired traces undertrack +0.8 moving turns at +.700 and +.718 rad/s
+over 1–5 s, while sign-reversed controls reach −.726 and −.815. Before compute,
+the branch must record one hypothesis about positive-yaw acquisition, the exact
+same-checkpoint control, fixed native gate cohort, unchanged six-bucket .80
+thresholds, and the rollback decision. The run starts with smoke64/5 and then
+uses one matched training window with only the declared yaw-acquisition change.
+
+Retention requires positive-yaw improvement ≥ .05, preservation of every
+previously mastered bucket within the existing tolerance, and no CPU lower-tail
+regression. A failed or ambiguous comparison restores the baseline and ends the
+experiment. This bounded comparison is diagnostic evidence only; it cannot
+advance Phase 2 until fresh held-out native mastery, baked-normalizer ONNX,
+CPU rehearsal, and full video review satisfy the product gate.
 
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
