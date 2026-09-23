@@ -160,18 +160,16 @@ closer (−.726 and −.815).
 
 The positive-yaw acquisition hypothesis has now been tested and rejected by the
 turn-exposure A/B above. Do not repeat that transfer or extend it unchanged.
-The next bounded contract is canonical final-range fine-tuning: resume one
-explicit checkpoint, migrate the adaptive-owned CoM axes to their canonical
-final values, disable further adaptive gate/consolidation decisions, preserve
-the PPO optimizer/RNG and all non-owned canonical schedules, and record the
-mode in checkpoint metadata. It must run smoke64/5 first and use a fixed
-fine-tuning budget plus the same native final cohort before any longer campaign.
-An unchanged resume of a terminal consolidation checkpoint is invalid for this
-purpose. Retain the fine-tuned actor only if the fresh native lower tail and
-all six buckets improve or stay within the declared preservation tolerance;
-otherwise restore the pre-fine-tune reference. All seeds remain diagnostic
-until fresh held-out native evidence, normalizer-baked ONNX, CPU rehearsal, and
-video review pass the product gate.
+The canonical final-range fine-tuning contract was executed once and rejected:
+the fresh cohort lower tail fell `.7103→.6960`, with yaw beyond the preservation
+tolerance. Do not extend that unchanged window. The next bounded experiment is
+axis isolation from the same update-1250 checkpoint: 250 updates with only
+`com_range` at final, and a matched 250 updates with only `head_com_range` at
+final. The contract is recorded at
+`/tmp/microduck-final-axis-isolation-s23-v1/experiment-contract.json`; each arm
+must pass smoke64/5 and the same fresh native cohort. All seeds remain
+diagnostic until fresh held-out native evidence and video review pass the
+product gate.
 
 ## Native turn and visual profile — verified
 
@@ -225,6 +223,6 @@ roots; worktree training logs are unwritable. Do not restart historical agents.
 
 Remaining acceptance: all-six final native mastery, fresh consumed held-out
 seeds, full rollout/video review, baked-normalizer ONNX/CPU rehearsal, the same
-automated procedure across training seeds 17/23/47, final-range fine-tuning,
-matched-budget fixed/axis comparisons. Reused seeds remain diagnostic.
+automated procedure across training seeds 17/23/47, and matched-budget
+fixed/axis comparisons. Reused seeds remain diagnostic.
 Advisor, stronger teachers, generalist and hardware deployment remain parked.

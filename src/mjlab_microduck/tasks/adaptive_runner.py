@@ -398,6 +398,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         self.final_range_finetune = bool(
             getattr(env.cfg, "adaptive_final_range_finetune", False)
         )
+        self.final_range_axes = tuple(
+            getattr(env.cfg, "adaptive_final_range_axes", ())
+        ) if self.final_range_finetune else ()
+        if self.final_range_finetune and (
+            not self.final_range_axes
+            or any(name not in axis_names for name in self.final_range_axes)
+            or len(set(self.final_range_axes)) != len(self.final_range_axes)
+        ):
+            raise ValueError("final-range axes must be a nonempty owned subset")
         if self.final_range_finetune and self.evaluation_interval != 0:
             raise ValueError("final-range fine-tuning requires evaluation_interval=0")
         if self.final_range_finetune and getattr(env.cfg, "adaptive_entropy_consolidation", False):
@@ -591,7 +600,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         if self.capability_gate is None:
             raise ValueError("final-range fine-tuning requires an adaptive gate")
         step = int(self.completed_iterations) * int(self.cfg["num_steps_per_env"])
-        self.capability_gate.freeze_at_final(step=step)
+        final_axes = tuple(
+            getattr(self, "final_range_axes", self.capability_gate.axis_order)
+        )
+        self.capability_gate.freeze_at_final(step=step, axis_names=final_axes)
         manager_env = _manager_env(self.env)
         for axis_name in self.capability_gate.axis_order:
             apply_stage_to_env(
@@ -1206,6 +1218,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "sensor_reset_fraction": sensor_reset_fraction,
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
             "final_range_finetune": bool(getattr(self, "final_range_finetune", False)),
+            "final_range_axes": list(getattr(self, "final_range_axes", ())),
             "training_mode": (
                 "final_range_finetune"
                 if getattr(self, "final_range_finetune", False)
@@ -1276,6 +1289,11 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             )
             if saved_mode != expected_mode:
                 raise ValueError("adaptive checkpoint training mode is invalid")
+            saved_final_axes = tuple(state.get("final_range_axes", ()))
+            if saved_final_range_finetune and saved_final_axes and (
+                tuple(self.final_range_axes) != saved_final_axes
+            ):
+                raise ValueError("adaptive checkpoint final-range axes mismatch")
             if "entropy_coef" in state:
                 entropy_coef = _entropy_coefficient(state["entropy_coef"])
             saved_consolidation = state.get("entropy_consolidation")

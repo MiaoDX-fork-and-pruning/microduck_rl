@@ -913,8 +913,10 @@ class CapabilityGate:
             state.ema_score = None
             state.last_transition_step = step
 
-    def freeze_at_final(self, *, step: int) -> None:
-        """Freeze every owned axis at its canonical final stage.
+    def freeze_at_final(
+        self, *, step: int, axis_names: Sequence[str] | None = None
+    ) -> None:
+        """Freeze selected owned axes at canonical final stages.
 
         Final-range fine-tuning is a separate, explicit post-acquisition mode.
         The gate remains serializable for audit, but its live stage counters are
@@ -923,9 +925,13 @@ class CapabilityGate:
         """
         if type(step) is not int or step < 0:
             raise ValueError("final fine-tuning step must be a nonnegative integer")
+        selected = self.axis_order if axis_names is None else tuple(axis_names)
+        if not selected or any(name not in self.axes for name in selected):
+            raise ValueError("final fine-tuning axes must be a nonempty owned subset")
         for name, axis in self.axes.items():
             state = self.states[name]
-            state.current_stage = len(axis.stages) - 1
+            if name in selected:
+                state.current_stage = len(axis.stages) - 1
             state.last_transition_step = step
             state.pass_count = 0
             state.fail_count = 0

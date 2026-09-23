@@ -76,6 +76,21 @@ def test_freeze_at_final_moves_all_axes_without_erasing_audit_history() -> None:
     assert all(state.last_transition_step == 240 for state in gate.states.values())
 
 
+def test_freeze_at_final_can_isolate_one_owned_axis() -> None:
+    gate = CapabilityGate(
+        (
+            AxisConfig("com", (0.003, 0.015), 0.8, 0.6),
+            AxisConfig("head", (0.003, 0.010), 0.8, 0.6),
+        ),
+        critical_buckets=("zero", "forward", "yaw"),
+    )
+    gate.freeze_at_final(step=24, axis_names=("com",))
+    assert gate.stage_value("com") == 0.015
+    assert gate.stage_value("head") == 0.003
+    with pytest.raises(ValueError, match="nonempty owned subset"):
+        gate.freeze_at_final(step=24, axis_names=("other",))
+
+
 def test_missing_or_nonfinite_bucket_is_rejected() -> None:
     gate = _gate()
     with pytest.raises(KeyError):

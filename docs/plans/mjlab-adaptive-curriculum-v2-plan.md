@@ -686,6 +686,13 @@ seed-17/23/47 reproduction remain gated on a candidate that passes fresh native
 preservation and all-six `.80` mastery. Result:
 `/tmp/microduck-final-range-finetune-s23-v2/verification.json`.
 
+The next bounded comparison isolates the two owned axes from the same
+update-1250 checkpoint: one 250-update arm moves only `com_range` to final and
+one matched arm moves only `head_com_range` to final. Both retain the source
+axis stage, use the same seed23/4096 budget and fresh final cohort, and stop
+without extension if preservation fails. Contract:
+`/tmp/microduck-final-axis-isolation-s23-v1/experiment-contract.json`.
+
 ### Pre-consolidation reference and measured limits
 
 Authoritative evidence:

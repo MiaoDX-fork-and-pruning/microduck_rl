@@ -75,6 +75,10 @@ def main() -> int:
         help="Resume an adaptive checkpoint, freeze owned CoM axes at final ranges, and run a fixed post-acquisition window",
     )
     parser.add_argument(
+        "--final-range-axes", default=None,
+        help="Comma-separated owned axes for final-range isolation (default: all owned axes)",
+    )
+    parser.add_argument(
         "--gate-cohort-size", type=int, default=3,
         help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
     )
@@ -116,6 +120,7 @@ def main() -> int:
     saved_action_rate_relief_scope = "all"
     saved_transition_probability = 0.0
     saved_transition_mode = "forward"
+    saved_final_range_axes = None
     transition_mode_override_requested = args.transition_mode is not None
     if args.resume:
         import torch
@@ -127,6 +132,7 @@ def main() -> int:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
         if state.get("final_range_finetune", False) and not args.final_range_finetune:
             parser.error("final-range fine-tuning checkpoint requires --final-range-finetune")
+        saved_final_range_axes = tuple(state.get("final_range_axes", ())) or None
         start_iterations = int(state["completed_iterations"])
         args.entropy_consolidation = args.entropy_consolidation or state.get("entropy_consolidation") is not None
         saved_gate_distribution = state.get("evaluation_distribution", "final")
@@ -160,6 +166,23 @@ def main() -> int:
         args.final_com_fraction = 0.0
         args.gate_distribution = "final"
         args.rebaseline_gate = True
+        enabled_final_axes = {
+            "com": ("com_range",),
+            "head_com": ("head_com_range",),
+            "composed": ("com_range", "head_com_range"),
+        }.get(axis_mode, ())
+        if args.final_range_axes is None:
+            args.final_range_axes = saved_final_range_axes or enabled_final_axes
+        else:
+            args.final_range_axes = tuple(
+                name.strip() for name in args.final_range_axes.split(",") if name.strip()
+            )
+        if not args.final_range_axes or any(
+            name not in enabled_final_axes for name in args.final_range_axes
+        ) or len(set(args.final_range_axes)) != len(args.final_range_axes):
+            parser.error("final-range axes must be a nonempty owned subset without duplicates")
+    elif args.final_range_axes is not None:
+        parser.error("--final-range-axes requires --final-range-finetune")
     if args.gate_distribution not in ("final", "stage"):
         parser.error("checkpoint evaluation distribution must be final or stage")
     if args.resume and args.gate_distribution != saved_gate_distribution and not args.rebaseline_gate:
@@ -226,6 +249,9 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION": args.gate_distribution,
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION": "1" if args.rebaseline_gate else "0",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE": "1" if args.final_range_finetune else "0",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES": (
+            ",".join(args.final_range_axes) if args.final_range_finetune else ""
+        ),
         "MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION": (
             "1" if args.resume and args.gate_cohort_size > 1 else "0"
         ),
@@ -298,6 +324,8 @@ def main() -> int:
             raise ValueError("training result lost the configured gate distribution")
         if bool(adaptive_state.get("final_range_finetune", False)) != args.final_range_finetune:
             raise ValueError("training result lost the configured training mode")
+        if args.final_range_finetune and tuple(adaptive_state.get("final_range_axes", ())) != tuple(args.final_range_axes):
+            raise ValueError("training result lost the configured final-range axes")
         transition_state = adaptive_state.get("transition_exposure")
         if args.transition_probability > 0.0:
             if not isinstance(transition_state, dict):
@@ -329,6 +357,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

@@ -175,6 +175,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # Explicit post-acquisition mode. A full trainer resume moves adaptive-owned
     # CoM axes to their canonical final stages and disables gate decisions.
     adaptive_final_range_finetune: bool = False
+    # Optional axis-isolation treatment for final-range fine-tuning. Empty means
+    # all axes owned by the selected adaptive mode.
+    adaptive_final_range_axes: tuple[str, ...] = ()
     # A bounded reward relief used by the lateral-drive adaptive recipe when
     # the yaw frontier is still unacquired.  The runner owns its state and
     # persists it in the adaptive checkpoint; the canonical action-rate
@@ -300,6 +303,22 @@ def make_microduck_adaptive_velocity_env_cfg(
     # ordinary mode and let the launcher/runner reject a static fine-tune.
     if axis_mode == "all_static":
         cfg.adaptive_final_range_finetune = False
+        cfg.adaptive_final_range_axes = ()
+    elif cfg.adaptive_final_range_finetune:
+        raw_final_axes = os.environ.get("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES")
+        enabled_axes = resolve_enabled_axes(axis_mode)
+        requested_axes = enabled_axes if raw_final_axes is None else tuple(
+            name.strip() for name in raw_final_axes.split(",") if name.strip()
+        )
+        if not requested_axes or any(name not in enabled_axes for name in requested_axes):
+            raise ValueError("final-range axes must be a nonempty subset of adaptive axes")
+        if len(set(requested_axes)) != len(requested_axes):
+            raise ValueError("final-range axes must not contain duplicates")
+        cfg.adaptive_final_range_axes = tuple(
+            name for name in enabled_axes if name in requested_axes
+        )
+    else:
+        cfg.adaptive_final_range_axes = ()
     cfg.adaptive_evaluator_config_sha256 = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_CONFIG_SHA256", "")
     cfg.adaptive_evaluation_interval = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "0"))
     cfg.adaptive_evaluation_seed = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_SEED", "20260916"))

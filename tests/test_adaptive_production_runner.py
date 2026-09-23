@@ -953,6 +953,26 @@ def test_final_range_finetune_loads_terminal_consolidation_as_new_window(monkeyp
     assert destination.evaluation_events[-1]["kind"] == "final_range_finetune_source"
 
 
+def test_final_range_finetune_can_isolate_one_axis(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.completed_iterations = 7
+    source.current_learning_iteration = 6
+    checkpoint = tmp_path / "axis-source.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.final_range_axes = ("com_range",)
+    destination.evaluation_interval = 0
+    destination.final_com_fraction = 0.0
+    destination.entropy_consolidation = None
+    destination.load(str(checkpoint))
+
+    assert destination.capability_gate.stage_value("com_range") == 0.005
+    assert destination.capability_gate.stage_value("head_com_range") == 0.003
+
+
 def test_ordinary_adaptive_resume_rejects_final_range_checkpoint(monkeypatch, tmp_path):
     _fake_parent_io(monkeypatch)
     source = _runner()

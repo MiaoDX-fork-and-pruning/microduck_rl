@@ -99,6 +99,18 @@ def test_final_range_environment_does_not_break_static_task_registration(monkeyp
     assert cfg.adaptive_final_range_finetune is False
 
 
+@pytest.mark.parametrize(
+    ("raw_axes", "expected"),
+    [("com_range", ("com_range",)), ("head_com_range", ("head_com_range",)),
+     ("head_com_range,com_range", ("com_range", "head_com_range"))],
+)
+def test_final_range_axis_isolation_parses_owned_subset(monkeypatch, raw_axes, expected) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES", raw_axes)
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+    assert cfg.adaptive_final_range_axes == expected
+
+
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
     names = {
         AdaptiveMicroduckStaticRlCfg.experiment_name,
