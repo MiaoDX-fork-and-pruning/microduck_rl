@@ -35,6 +35,16 @@ failed stage left score .667→.823, while forward/right get worse. Identity IMU
 alone gives left .735; both nominal give .759. This supports calibration
 sensitivity with interactions, not a sufficient calibration-removal repair.
 
+The early-sensor-reset arm is the strongest acquisition result so far. Applying
+50% sensor calibration resets from initialization and retaining the same
+automatic consolidation window improved the stage minimum .6617→.7399 (+.0781),
+so the controller retained the candidate. Its final native diagnostic was
+.962/.837/.790/.855/.748/.801, but CPU was
+.980/.854/.780/.456/.728/.863. Relative to the original retained actor, native
+minimum gain was only +.0407 and CPU minimum fell by .3206. The CPU pure-yaw
+mean was 1.161 rad/s versus .917 for the retained actor. This is diagnostic
+evidence of better acquisition with worse transfer, not a usable policy.
+
 ## Completed sensor coverage comparison
 
 All zero/half/full-reset arms completed and audited:
@@ -68,26 +78,57 @@ roots are in its contract. The full-coverage rejected candidate has no separate
 CPU diagnostic; final CPU reports assess its restored 1000 actor. Invalid starts
 and observer recovery remain documented in the canonical plan and artifacts.
 
-## Live acquisition timing proof
+## Negative timing comparison and command-coverage proof
 
-Poll session `95494`. Root: `/tmp/microduck-seed23-acquisition-comparison-v1`;
-wrapper `/tmp/run_microduck_seed23_acquisition_v1.py`, observer
-`/tmp/train_microduck_seed23_acquisition_v1.py`; prepared auditor
-`/tmp/verify_microduck_seed23_acquisition_v1.py`.
+Continued acquisition completed and audited (sessions 95494/1091):
+`/tmp/microduck-seed23-acquisition-comparison-v1/{experiment-summary,verification}.json`.
+Original entropy .01 and exposure, zero sensor-reset coverage, same 1000 trainer,
+250 updates. Native stage scores .945/.753/.696/.776/.739/.682; CPU
+.972/.927/.758/.842/.860/.903. Native minimum is .02077 below the matched
+consolidation candidate, CPU minimum .01831 below the original retained actor.
+The ordinary preservation gate kept this actor, but the treatment is unsupported.
+Eight reports/30 traces, initial trainer/RNG/physics/exposure and all penalties
+verify. Do not change consolidation readiness or extend acquisition unchanged.
 
-Hypothesis: immediate consolidation interrupted ongoing acquisition. The original
-750→1000 minimum rose .424→.699 before the switch. The new arm continues from
-the identical 1000 actor/critic/optimizer/RNG/physical state, with original entropy
-.01, original adaptive exposure and zero sensor-reset coverage. It tests the phase
-switch package, not entropy alone: consolidation also redirects exposure to left.
+The half-reset rejected candidate has six exact 300-frame CPU video replays at
+`/tmp/microduck-seed23-reset50-cpu-visual-v1/{summary,review}.json`.
+Sampled-frame review shows upright idle and stepping/turning; maximum tilt 4.13°.
+Yaw oscillation remains; lateral has three sampled trunk/leg self-contact pairs
+(max penetration .258 mm). This is sampled-frame/trace evidence, not continuous
+video or hardware acceptance. The original rejection is unchanged.
 
-Fresh smoke64/5 passed; run exactly 250 updates at seed23/4096 envs with unchanged
-stage cohort 20260815–17 and reused final diagnostic 20260915. Imports are isolated
-to the frozen snapshot. Require a retained candidate, native minimum gain ≥.05
-over the matched zero-reset consolidation candidate and no CPU minimum regression
-versus the original retained actor. A supported result motivates progress-aware
-readiness; failure does not justify extending this treatment unchanged. No
-production readiness change yet, and no seed47 before usable behavior.
+A 100000-command sampler probe shows only .593%/.393% of all samples near the
+low-speed left/right command combinations (±20% around .08 m/s and .8 rad/s):
+`/tmp/microduck-seed23-command-amplitude-coverage-v1.json`. Broad bucket allocation
+alone does not ensure exposure to these command magnitudes. Hypothesis: explicitly
+rehearsing a neighborhood improves precision under the unchanged product DR.
+
+The new arm uses the same 1000 trainer/RNG/physics, half sensor-reset coverage,
+automatic consolidation and 250 updates as the completed half-coverage control.
+Half of nonzero directional samples use ±20% neighborhoods around deployment
+command magnitudes; the other samples, nominal pool, zero anchor and signs stay
+intact. Independent sampler RNG does not displace the original RNG stream.
+Fresh smoke64/5 passed; source imports remain isolated. Require retention plus
+≥.05 native minimum improvement over the half-reset candidate without CPU
+minimum regression, or all six stage and CPU scores ≥.80. Failure does not
+justify unchanged extension. No production command-sampler change yet.
+
+The command-rehearsal arm completed and was rejected:
+`/tmp/microduck-seed23-command-rehearsal-v1/verification.json`. It preserved
+the same trainer and half-reset setup while placing half of directional samples
+near deployment magnitudes. Native minimum gain over the half-reset control was
+−.04555 and CPU minimum gain was −.04299; the left-turn score remained about
+.701. Do not extend this exposure unchanged.
+
+The fixed early-reset candidate then received a diagnostic CPU action-scale scan
+at `/tmp/microduck-early-sensor-reset-s23-v2/action-scale-scan-v1/verification.json`.
+The fixed ONNX was replayed at scales .75/.85/.95/1.0/1.1 across all six
+buckets, with 30 finite 61D/14D traces and no runtime or training mutation.
+The best lower-tail score was only .5748 at 1.10; yaw improved to .575 but
+turn-left fell to .627. No uniform action scale reaches .80, so scaling the
+whole action cannot repair transfer. The current blocker is now
+`cpu_action_amplitude_and_actuator_transfer_mismatch`; the next training
+experiment must match actuator behavior or learn a transfer-robust policy.
 
 ## Verified artifacts and caveats
 
@@ -130,9 +171,9 @@ Require all-six native mastery at final ranges, fresh consumed held-out seeds,
 rollout/video inspection, normalizer-baked ONNX/CPU rehearsal, the same procedure
 across training seeds 17/23/47, canonical final-range fine-tuning and matched-budget
 fixed/axis comparisons. Sampled frames and reused seeds are diagnostic evidence.
-Blocker fingerprint: `acquisition_timing_and_reset_conditioned_precision`;
-no external blocker. Sensor coverage alone did not satisfy retention; the live
-comparison tests continued acquisition before changing controller readiness.
+Blocker fingerprint: `cpu_action_amplitude_and_actuator_transfer_mismatch`;
+no external blocker. Sensor coverage alone, delayed consolidation and explicit
+command-amplitude rehearsal failed the bounded comparisons.
 
 Preserve canonical Velocity, BAM M6, product DR bounds, unfiltered actions,
 61D/14D, reward signs, .80 gates, zero/nominal anchors and the preexisting CPU seed

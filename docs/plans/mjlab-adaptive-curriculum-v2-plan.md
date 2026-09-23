@@ -10,8 +10,11 @@ The opt-in automatic consolidation V5 trial completed and retained an improved
 actor: all six pass on one final-native diagnostic seed, but the three-seed
 native cohort and CPU rehearsal still fail. Seed23 acquired behavior from scratch
 and automatically rejected its first consolidation at 1250. Matched zero/half/full
-sensor-reset coverage also failed retention; a bounded comparison now tests
-continued acquisition before changing consolidation readiness. Final-range mastery
+sensor-reset coverage also failed retention, and continued acquisition was worse.
+Early sensor-reset from initialization improved native acquisition and was
+retained, but its CPU transfer regressed. Command rehearsal near low-speed
+deployment commands was then rejected. A fixed-policy action-scale scan found
+no uniform CPU scale that repairs the six-bucket transfer. Final-range mastery
 across seeds and autonomous training seeds 17/23/47 remain unproven.
 Date: 2026-09-23
 Related:
@@ -322,8 +325,8 @@ specialist reproducibility document remain unchanged after documentation review.
 V5 is the current automatic candidate; the manual 6750 actor remains a comparison
 reference. Its push/sensor and CPU diagnostics, plus the negative yaw-precision
 comparison below, are complete. Seed23's first from-scratch run and its calibration
-diagnosis and sensor-reset comparisons are complete; the current proof tests
-acquisition timing. Terminal attempts must not extend unchanged. From-scratch
+diagnosis, sensor-reset and acquisition-timing comparisons are complete; the
+current proof tests low-speed command coverage. Terminal attempts must not extend unchanged. From-scratch
 acquisition, fresh held-out evidence,
 multi-training-seed replication, CPU usability and final CoM mastery remain open.
 Controller remains opt-in; no product threshold/default change is justified.
@@ -434,18 +437,61 @@ V4 reused completed control/half coverage via exact contract paths. Its CPU
 report evaluates the restored actor; no separate full-coverage candidate CPU
 claim is made. Coverage alone did not pass native retention in these trials.
 
-A bounded continuation now tests acquisition timing:
-`/tmp/microduck-seed23-acquisition-comparison-v1/experiment-contract.json`, session
-95494. The original minimum improved .424→.699 from 750→1000 before immediate
-consolidation. Restore the identical 1000 trainer/RNG/physical state, retain
-entropy .01 and original adaptive exposure, and train 250 updates after fresh
-smoke64/5. Use the same source, seed23/4096 envs, zero reset coverage, stage cohort
-20260815–17 and reused diagnostic 20260915. The treatment tests the phase switch
-as a package, because consolidation also redirects command exposure to left.
-Require a retained candidate, native minimum gain ≥.05 over the matched zero-reset
-consolidation candidate, and no CPU minimum regression versus the retained baseline.
-A supported result motivates progress-aware readiness; failure does not authorize
-unchanged extension. Production readiness, product gates and seed47 stay unchanged.
+The early-reset-from-initialization arm completed and was retained:
+`/tmp/microduck-early-sensor-reset-s23-v2/verification.json`. It applied 50%
+sensor calibration reset coverage from update 0, then used the same automatic
+consolidation window. The stage candidate improved the weakest score
+.6617→.7399 (+.0781), satisfying the controller's retention rule. Final native
+diagnostic scores were .962/.837/.790/.855/.748/.801, while CPU scores were
+.980/.854/.780/.456/.728/.863. Native minimum gain over the original retained
+actor was only +.0407 and CPU minimum gain was −.3206; CPU pure-yaw mean was
+1.161 rad/s versus .917 for the original actor. This supports early acquisition
+diversity as a native training signal, but rejects it as a usable product recipe
+until actuator-transfer robustness is addressed.
+
+The acquisition-timing comparison completed and audited:
+`/tmp/microduck-seed23-acquisition-comparison-v1/{experiment-summary,verification}.json`.
+Same 1000 trainer/RNG/physics, 250 updates with original entropy .01/exposure,
+zero reset coverage, seed23/4096 envs and unchanged evaluation seeds. Native
+stage scores .945/.753/.696/.776/.739/.682; CPU .972/.927/.758/.842/.860/.903.
+The ordinary preservation gate kept the candidate, but native minimum is .02077
+below the matched consolidation candidate and CPU minimum .01831 below the
+retained baseline. This does not support changing readiness or extending the
+continued-acquisition treatment. Eight reports/30 traces, exact initial trainer/
+RNG/physics/exposure and nonpositive penalties verify; no production change.
+
+Six 300-frame CPU replays of the rejected half-reset candidate exactly reproduce
+its traces: `/tmp/microduck-seed23-reset50-cpu-visual-v1/{summary,review}.json`.
+Sampled frames show upright idle and stepping/turning; full traces show no fall
+and maximum tilt 4.13°. Angular-rate oscillation remains. Lateral has three
+sampled trunk/leg self-contact pairs, maximum penetration .258 mm. This is
+sampled-frame evidence; continuous-video and hardware acceptance are not claimed.
+
+The command-magnitude comparison completed and was rejected:
+`/tmp/microduck-seed23-command-rehearsal-v1/verification.json`, session 98777.
+A 100000-sample probe finds only .593%/.393% of all samples within ±20% of the
+low-speed left/right command combinations. The treatment keeps the same 1000
+trainer/RNG/physics, half sensor-reset coverage, automatic consolidation and
+250-update budget. Half of directional samples rehearse ±20% around deployment
+command magnitudes, retaining signs, unselected samples, nominal and zero pools.
+An independent sampler RNG preserves the original random stream; live assertions
+verify selection, bounds and untouched commands. Fresh smoke64/5 passed.
+
+Require controller retention and ≥.05 native minimum gain over the half-reset
+candidate without CPU minimum regression, or all six stage/CPU scores ≥.80.
+The native minimum gain was −.04555 and CPU minimum gain was −.04299; left-turn
+remained about .701. Failure rejects this unchanged exposure recipe and does not
+justify a production sampler change. Product DR, rewards, .80 gates and
+inference stayed fixed; reused seeds remain diagnostic.
+
+The retained early-reset ONNX was then tested with a fixed-policy CPU action-scale
+scan: `/tmp/microduck-early-sensor-reset-s23-v2/action-scale-scan-v1/verification.json`.
+Scales .75/.85/.95/1.0/1.1 produced 30 finite 61D/14D traces. The best
+lower-tail score was .5748 at 1.10; yaw reached .575 but turn-left fell to .627.
+No scale reached .80 across all six buckets, so uniform action scaling is not a
+repair and must not become a runtime default. The blocker is now
+`cpu_action_amplitude_and_actuator_transfer_mismatch`; the next bounded
+intervention must match actuator behavior or train for transfer robustness.
 
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
@@ -515,7 +561,7 @@ and earlier experiment summaries.
 
 ### Pre-consolidation sensor diagnosis
 
-Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
+Blocker: `cpu_action_amplitude_and_actuator_transfer_mismatch`.
 Relief helped yaw but did not resolve startup/DR robustness or CPU transfer;
 blindly extending global relief or direct-yaw/turn-proxy exposure is not the next
 experiment. The old 6250 actor's additive-white-noise ablation did not rescue
@@ -950,8 +996,11 @@ before any matched-budget compute is requested.
    repairs curriculum ownership, proves seed consumption, and establishes the
    native MJLab/BAM usability signal before new campaign compute.
 
-Phase 2A (experiment repair and native usability diagnosis) is the next active
-work item. Phase 2 (matched-budget multi-seed experiments) follows only after
-its gate passes. Phase 3 (constrained Codex advisor) and Phase 4 (stronger
-active teachers) remain parked until the deterministic baseline produces
-informative, native-evaluated evidence.
+Phase 2A (experiment repair and native usability diagnosis) remains the next
+active work item. The early-reset arm now supplies a retained native-acquisition
+signal, while the action-scale scan rules out a simple CPU target-amplitude fix.
+The next bounded work must address actuator/CPU transfer before another
+multi-seed campaign. Phase 2 (matched-budget multi-seed experiments) follows
+only after its gate passes. Phase 3 (constrained Codex advisor) and Phase 4
+(stronger active teachers) remain parked until the deterministic baseline
+produces informative, native-evaluated evidence.
