@@ -6,9 +6,12 @@ cohort minimum is .7399 and CPU minimum is .4556; both still fail .80. Matched
 late sensor coverage, delayed consolidation and command-magnitude rehearsal did
 not yield an accepted recipe. Uniform and hip-yaw action scaling, sensor refresh
 and nominal CPU BAM replacement all failed their joint transfer gates. These
-results establish sensitivity, not an actuator root cause. The current diagnostic
-pairs the frozen candidate's native model, live physical parameters, reset and
-actuator timing with CPU integration before choosing a training intervention.
+results establish sensitivity, not an actuator root cause. Complete model/DR/
+reset/delay pairing now localizes the main paired CPU regression to foot/plane
+contact generation. Replacing only that contact calculation closes all six
+native/CPU score gaps to ≤.02217, passing the declared .03 agreement bound.
+Native moving-turn mastery and the original XML-PD product rehearsal remain
+open; the contact-aligned diagnostic is not product acceptance.
 Final-range mastery, fresh held-out evidence, automated training seeds 17/23/47
 and matched-budget comparisons remain unproven.
 Date: 2026-09-23
@@ -517,14 +520,77 @@ rad/s respectively. The diagnostic fixes the dependency's joint-versus-DOF
 friction-constraint indexing locally; it does not change the installed package.
 This comparison does not replicate native scene, DR, observation or delay.
 
-Blocker fingerprint: `native_mastery_and_unexplained_cpu_transfer`. No usable
-policy or proven actuator root cause follows. Next proof captures the complete
-compiled native model, every expanded live model field and actual delay sequence,
-then compares CPU dynamics with paired reset/input contracts. The partial live
-parameter capture at `/tmp/microduck-native-physics-capture-early-s23-v1` replays
-native capability scores, but is not sufficient for an exact-model claim. A
-CPU wrapper import failure occurred before simulation and supplies no result.
-All reused seeds remain diagnostic; no production source changed in this slice.
+The partial live-parameter capture at
+`/tmp/microduck-native-physics-capture-early-s23-v1` replays native capability
+scores but cannot support exact-model parity. The partial CPU v2 verifier's
+delivered-target claim was corrected: its arrays precede encoder-bias subtraction
+and verify requested targets only. The original verification file is retained
+as `verification.superseded-target-claim.json`. The CPU v1 import failure has no
+behavioral result. External-native-observation open-loop v1/v2 replays are
+explicitly invalidated for causal inference (wrong timestep/BAM cadence and
+reset/termination defects); their falls are not evidence of policy failure.
+
+### Complete native/CPU contact diagnosis
+
+Capture: `/tmp/microduck-complete-native-s23-v2`. For each reused diagnostic seed
+20260915–20260920 it saves the compiled model, every expanded live field (13),
+reset/calibration, initial previous motor torque and all 1200 physics substeps'
+requested/delayed targets, sampled lags, applied torques and states. Reset has
+already inserted one zero target into the delay history; the older first-policy-
+target startup clamping approximation was incorrect.
+
+The native actor sees current unbiased root/link and joint state; ordinary
+observation computation still consumes its RNG. Product physics/DR/delays remain
+active. CPU uses the same complete model, fields, reset and lag sequence, BAM
+updated every 5 ms, and the same current actor view. First observations match
+within 7.2e-15; initial BAM force/friction errors are below 1e-7. Recorded push
+increments are applied without forcing trajectories. Scores:
+
+| Paired diagnostic | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Native | .96742 | .84734 | .82243 | .81978 | .73985 | .76863 |
+| CPU original contacts | .95017 | .82833 | .74120 | .31496 | .74189 | .69148 |
+| CPU native foot/plane contacts | .96718 | .84813 | .82006 | .81439 | .71768 | .76612 |
+
+`/tmp/microduck-complete-cpu-s23-v1/verification.json` independently verifies
+12 traces, scores, ONNX actions, actual delayed targets, model/field hashes and
+all 682 source files. It exactly reproduces 7200 CPU one-step comparisons from
+recorded native inputs, removing closed-loop drift and BAM recomputation.
+
+Contact-state comparison: `/tmp/microduck-contact-pair-s23-v1/summary.json`.
+Warp exactly reproduces recorded native next states at substeps 0/7/8/9/638.
+CPU agrees before contact, but at substep 8 (40 ms) generates two foot contacts
+where Warp generates eight; at substep 638 it generates one versus four.
+CPU 100 versus 10 Newton iterations gives identical results; Warp sequential
+line search changes qvel by at most .000102 at these states.
+
+Replacing only the contact manifold, retaining CPU integration and forces,
+reduces maximum qvel errors at 8/9/638 from .38745/.21135/.66790 to
+.000102/3.12e-7/4.28e-7:
+`/tmp/microduck-contact-injection-s23-v1/summary.json`.
+The installed Warp `plane_convex` chooses up to four separated support points;
+MuJoCo 3.10's plane-mesh path searches the deepest point's immediate graph
+neighbors. The difference matters for these sole meshes.
+
+The closed-loop intervention computes fresh Warp foot/plane contacts on CPU
+from the live CPU pose, retaining other CPU contacts, the solver, BAM and all
+other paired settings. It uses neither recorded contacts nor native trajectory
+forcing. All six score gaps are ≤.02217 and yaw mean .73741 versus native
+.73938 rad/s, passing the declared .03 score / .05 rad/s agreement criterion.
+Independent audit: `/tmp/microduck-contact-closedloop-s23-v2/verification.json`.
+It validates fresh contact geometry against native snapshots, every saved ONNX
+action, scores, delivered targets and immutable inputs. The earlier v1 wrapper
+failed on contact-frame array shape and produced no completed battery.
+
+Blocker fingerprint is now `native_mastery_and_product_rehearsal_contract`.
+The paired CPU regression has a demonstrated contact-generation cause; this
+does not establish hardware correctness or validate the original XML-PD runtime.
+Keep original-runtime and native-matched rehearsal verdicts separate. Do not
+replace product acceptance with simulator agreement or continue scale scans.
+Native steady 1–5 s moving-turn yaw is +.708/−.729 for ±.8 commands, with
+further post-push degradation. Next acquisition work measures the unmodified
+native actor's turn rollouts before a bounded training intervention. No production
+source or dependency changed in this slice; all seeds remain diagnostic.
 
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
@@ -594,7 +660,7 @@ and earlier experiment summaries.
 
 ### Pre-consolidation sensor diagnosis
 
-Historical diagnosis; current blocker: `native_mastery_and_unexplained_cpu_transfer`.
+Historical diagnosis; current blocker: `native_mastery_and_product_rehearsal_contract`.
 Relief helped yaw but did not resolve startup/DR robustness or CPU transfer;
 blindly extending global relief or direct-yaw/turn-proxy exposure is not the next
 experiment. The old 6250 actor's additive-white-noise ablation did not rescue
@@ -898,10 +964,11 @@ those confounders before spending another matched-budget campaign.
 
 Do not submit another 15-job campaign until the native evaluator has a valid
 seed-consumption proof and the checkpoint ladder identifies whether the failure
-is native learning, export/observation parity, or CPU actuator transfer. The
-sensor-reset run now supplies seed-consumption evidence but does not identify
-the CPU/native causal split; the next bounded work must complete that A/B
-diagnosis before another full campaign. A
+is native learning, export/observation parity, or CPU transfer. The sensor-reset
+run supplies seed-consumption evidence; the complete paired comparison now
+identifies foot/plane contact generation as the main paired CPU regression.
+Native mastery and the original product rehearsal still fail. Resolve those
+behavioral gates before another full campaign. A
 policy is **usable** only when its native six-bucket report passes the product
 gate; adaptive superiority is a separate later claim.
 
@@ -1032,8 +1099,10 @@ before any matched-budget compute is requested.
 Phase 2A (experiment repair and native usability diagnosis) remains the next
 active work item. The early-reset arm now supplies a retained native-acquisition
 signal. Scale, sensor-refresh and CPU BAM probes failed joint improvement;
-complete-model/physics/timing comparison is next. Native mastery is also still
-below .80. Resolve the behavioral gates before another multi-seed campaign. Phase 2 (matched-budget multi-seed experiments) follows
+complete-model/physics/timing comparison and contact replacement now establish
+the paired CPU contact-generation cause. Native mastery is still below .80,
+and the original product rehearsal remains unvalidated. Resolve the behavioral
+gates before another multi-seed campaign. Phase 2 (matched-budget multi-seed experiments) follows
 only after its gate passes. Phase 3 (constrained Codex advisor) and Phase 4
 (stronger active teachers) remain parked until the deterministic baseline
 produces informative, native-evaluated evidence.

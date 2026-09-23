@@ -27,8 +27,9 @@ Against the original retained seed23 actor the native-minimum gain is only
 +.04072 and CPU-minimum loss is −.32062. CPU yaw mean is 1.109321 rad/s over
 six seconds; 1.161378 is the last-five-second mean. Neither verdict passes .80.
 
-Blocker: `native_mastery_and_unexplained_cpu_transfer`. CPU actuator/scale
-sensitivity is established; actuator root cause is **not**. No external blocker.
+Blocker: `native_mastery_and_product_rehearsal_contract`. Foot/plane contact
+generation explains the fully paired native/CPU regression below; the original
+XML-PD product rehearsal is still unvalidated. No external blocker.
 
 ## Completed proof and rejected routes
 
@@ -60,23 +61,51 @@ seed17 references and negative reward/smoothing experiments are in the plan.
 Sampled half-reset video frames show upright stepping, but are neither full
 video review nor hardware proof.
 
-## Next bounded proof
+## Paired contact diagnosis — verified
 
-Capture the complete compiled native model, **all** expanded live model fields,
-reset state and actual actuator delays. Compare paired CPU dynamics/actor
-rollouts to distinguish model/parameter/timing mismatch from policy robustness.
-Preserve product settings; no reward changes based on unlocalized sensitivity.
+Complete capture: `/tmp/microduck-complete-native-s23-v2`. It records the compiled
+model, all 13 expanded fields, reset/calibration, prior motor torque and every
+5 ms target/lag/force/state. Reset already inserts one zero target into delay
+history; first-policy-target clamping was an incorrect earlier approximation.
 
-Partial capture `/tmp/microduck-native-physics-capture-early-s23-v1` completed
-and reproduces native scores. It saves selected DR fields only, so cannot support
-an exact-physics claim. The old CPU wrapper adaptation failed at import before
-simulation; `/tmp/microduck-cpu-physical-transfer-early-s23-v1.log` is not a
-behavioral result. No training or evaluation sessions remain running from this
-slice. Use the complete capture for the next paired proof; do not rerun scans.
+| Current unbiased actor view; paired BAM/DR/reset/delay | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Native | .96742 | .84734 | .82243 | .81978 | .73985 | .76863 |
+| CPU original contacts | .95017 | .82833 | .74120 | .31496 | .74189 | .69148 |
+| CPU native foot/plane contacts | .96718 | .84813 | .82006 | .81439 | .71768 | .76612 |
 
-Stop condition: bounded comparison changes the implementation/training decision,
-or an actual external dependency prevents required proof. A negative result
-must not be labeled acceptance or silently lead to another unchanged extension.
+At first impact (substep 8, 40 ms), CPU has 2 contacts and Warp 8. At substep
+638 they have 1 and 4. Warp replays all five selected native states exactly.
+CPU 100 versus 10 solver iterations is identical. Replacing only contacts
+reduces three contact-state maximum qvel errors .38745/.21135/.66790 to
+.000102/3.12e-7/4.28e-7. This identifies contact generation as a causal difference.
+
+Fresh contacts computed from the **live CPU pose** also close the six closed-loop
+score gaps to ≤.02217; yaw mean .73741 versus native .73938 rad/s. The declared
+≤.03 score / ≤.05 rad/s agreement gate passes. Both sides still fail mastery;
+this diagnostic does not validate XML-PD deployment or hardware.
+
+Audits: `/tmp/microduck-complete-cpu-s23-v1/verification.json` (12 traces and
+7200 independently replayed CPU substeps), and
+`/tmp/microduck-contact-closedloop-s23-v2/verification.json` (fresh contact
+geometry, six scores, every ONNX action and actual delayed target). All 682
+frozen source hashes pass. No training/evaluation sessions remain running.
+
+The partial physical replay's `all_delivered_targets_verified` claim is corrected
+to requested-target-only; it recorded targets before encoder-bias subtraction.
+Both `/tmp/microduck-cpu-external-native-obs-s23-v{1,2}` have `INVALIDATION.json`:
+open-loop replay, wrong timestep/BAM cadence and reset/termination defects exclude
+their falls from causal evidence. Raw artifacts remain available.
+
+## Next bounded work
+
+Make the CPU rehearsal's contact semantics explicit and preserve separate
+original-runtime and native-matched diagnostic verdicts. Do not silently replace
+the product gate with the passing agreement result. Return acquisition work to
+native moving-turn mastery: steady 1–5 s yaw means are +.708/−.729 for ±.8
+commands in this paired diagnostic, with further post-push degradation.
+Measure the unmodified actor's turn rollouts before choosing another training
+intervention. Do not repeat runtime scale scans or unchanged training extensions.
 
 ## Fixed lineage and boundaries
 
