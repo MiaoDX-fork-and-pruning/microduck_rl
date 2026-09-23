@@ -11,7 +11,7 @@ import os
 from pathlib import Path
 
 from mjlab.envs import ManagerBasedRlEnvCfg
-from mjlab.managers import CurriculumTermCfg, EventTermCfg, RewardTermCfg, SceneEntityCfg
+from mjlab.managers import CurriculumTermCfg, EventTermCfg, RewardTermCfg
 
 from .microduck_velocity_env_cfg import MicroduckRlCfg, make_microduck_velocity_env_cfg
 from . import mdp as microduck_mdp
@@ -138,13 +138,6 @@ LATERAL_DRIVE_LINEAR_L1_WEIGHT = 2.0
 # so the controller increased yaw exposure without giving PPO a yaw-specific
 # acquisition gradient.
 LATERAL_DRIVE_YAW_L1_WEIGHT = 1.0
-# The native lateral trace reaches the hip-yaw hard-limit proximity band on
-# roughly a third of steps.  Keep this intervention narrow: it is an
-# adaptive-only diagnostic term on the two hip-yaw servos, not a change to the
-# canonical velocity recipe.  ``joint_pos_limit_proximity`` returns a
-# positive cost, so the reward weight must be negative.
-LATERAL_DRIVE_HIP_YAW_LIMIT_WEIGHT = -0.5
-LATERAL_DRIVE_HIP_YAW_LIMIT_MARGIN_RAD = 0.15
 
 
 DIAGNOSTIC_NAMES = {
@@ -435,16 +428,6 @@ def make_microduck_adaptive_velocity_env_cfg(
                     cfg.adaptive_action_rate_relief_scope = scope
                     if scope == "pure_yaw":
                         cfg.rewards["action_rate_l2"].func = microduck_mdp.adaptive_action_rate_l2
-                    cfg.rewards["hip_yaw_limit_proximity"] = RewardTermCfg(
-                        func=microduck_mdp.joint_pos_limit_proximity,
-                        weight=LATERAL_DRIVE_HIP_YAW_LIMIT_WEIGHT,
-                        params={
-                            "asset_cfg": SceneEntityCfg(
-                                "robot", joint_names=(r".*hip_yaw.*",)
-                            ),
-                            "margin": LATERAL_DRIVE_HIP_YAW_LIMIT_MARGIN_RAD,
-                        },
-                    )
             elif diagnostic_mode == "strictification":
                 # A bounded adapted-to-strict bootstrap. The command sampler
                 # stays on the normal velocity path so the live curriculum can

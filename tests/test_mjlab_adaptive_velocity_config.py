@@ -204,12 +204,6 @@ def test_lateral_drive_increases_only_lateral_feedback_mass() -> None:
     assert cfg.adaptive_action_rate_relief is True
     assert cfg.adaptive_action_rate_relief_weight == -0.2
     assert cfg.adaptive_action_rate_relief_windows == 4
-    assert "hip_yaw_limit_proximity" in cfg.rewards
-    hip_yaw_limit = cfg.rewards["hip_yaw_limit_proximity"]
-    assert hip_yaw_limit.weight == -0.5
-    assert hip_yaw_limit.params["margin"] == 0.15
-    assert hip_yaw_limit.params["asset_cfg"].joint_names == (r".*hip_yaw.*",)
-    assert "hip_yaw_limit_proximity" not in base.rewards
     assert set(cfg.curriculum) == set(base.curriculum) - {"standing_envs"} | {"tracking_std"}
     assert {name: cfg.curriculum[name] for name in base.curriculum if name != "standing_envs"} == {
         name: base.curriculum[name] for name in base.curriculum if name != "standing_envs"
@@ -224,19 +218,6 @@ def test_action_rate_relief_is_opt_in_to_lateral_drive_recipe() -> None:
     assert make_microduck_adaptive_velocity_env_cfg(
         axis_mode="composed", diagnostic_mode="acquisition_feedback"
     ).adaptive_action_rate_relief is False
-
-
-def test_hip_yaw_limit_term_is_adaptive_lateral_only() -> None:
-    from mjlab_microduck.tasks import mdp
-
-    feedback = make_microduck_adaptive_velocity_env_cfg(
-        axis_mode="composed", diagnostic_mode="acquisition_feedback"
-    )
-    lateral = make_microduck_adaptive_velocity_env_cfg(
-        axis_mode="composed", diagnostic_mode="lateral_drive"
-    )
-    assert "hip_yaw_limit_proximity" not in feedback.rewards
-    assert lateral.rewards["hip_yaw_limit_proximity"].func is mdp.joint_pos_limit_proximity
 
 
 @pytest.mark.parametrize("saved_scope", [None, "pure_yaw"])
