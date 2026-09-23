@@ -401,24 +401,42 @@ calibration sensitivity and interactions, not a sufficient removal repair.
 Initial diagnostic audits mishandled the CPU ONNX hash and added `onnx_action`
 column; separate auditors validate the already completed data without reruns.
 
-The current bounded comparison is
-`/tmp/microduck-seed23-sensor-reset-comparison-v2`, session `84304`. Both arms restore
-the exact pre-consolidation 1000 trainer/RNG/physical state; treatment alone sets
-sensor-reset coverage to .5 within existing product bounds. Both run fresh smoke,
-automatic consolidation, 4096 envs, seed23, gate 250/cohort 20260815–17 and the same
-reused final diagnostic. Request 1500 permits an automatic stop at 1250. Imports
-explicitly use the immutable snapshot. Derived inputs initialize a fresh opt-in
-controller for frozen bootstrap evaluation and change branch-local rollback/audit
-metadata plus the treatment fraction; original checkpoints stay
-unchanged. V1 retained a waiting controller and was stopped by the live guard
-before PPO; its `invalid-start.json` is excluded from learning evidence. The live
-driver verifies actual sensor resampling and dynamic deadlines.
+The matched zero/half coverage comparison completed at
+`/tmp/microduck-seed23-sensor-reset-comparison-v3`; `verification.json` passes.
+Both arms restored the exact pre-consolidation 1000 trainer/RNG/physical state,
+ran smoke64/5 and 250 automatic-consolidation updates with seed23/4096 envs,
+stage cohort 20260815–17 and unchanged reward/inference/product DR bounds. Control
+candidate minimum .702 and half-coverage minimum .745 both fail the required
++.05 gain over baseline .699, so both restore the 1000 actor. The latter's actual
+gain is +.04555, not a pass. Per arm, 12 reports/48 unique traces, source/lineage,
+bootstrap equality and all penalty logs verify. The live observer records 20109
+sensor refreshes across 37315 reset-environment visits, with ceiling rounding
+for small batches.
 
-Support requires retention plus native minimum gain ≥ .05 over matched control
-without CPU-minimum regression, or all-six stage/CPU mastery. A failed comparison
-rejects this treatment. It is not full acceptance or an unchanged terminal
-extension. Complete lineage/source/trace audits before interpreting it; do not
-launch seed47 before usable behavior. The active capsule owns current handles.
+Because rollback returns the same actor, frozen candidate diagnostics were run
+separately: `/tmp/microduck-seed23-reset-candidate-diagnostics-v1/summary.json`.
+Control CPU is .974/.916/.782/.843/.817/.773; half coverage is
+.968/.888/.868/.853/.819/.880, all six passing on the reused diagnostic seed.
+Half-coverage final-native lateral is **.7998718476**, strictly below .80; the
+other five pass. The three-seed stage minimum remains .745. All 24 traces and
+matched initial physical/observation fields verify. Neither rejection is changed.
+
+The current full-coverage arm is
+`/tmp/microduck-seed23-sensor-reset-comparison-v4`, session `98081`. It uses the
+same 1000 trainer/RNG/physical start, fresh smoke64/5, seed23/4096 envs and 250-update
+automatic consolidation, refreshing calibration on every reset. Request 1500
+permits the controller to stop at 1250. Completed control (`v2/control`) and half
+coverage (`v3/reset50`) are reused via exact paths in the contract. Source imports
+are isolated to the frozen snapshot. Require the unchanged controller's retention
+and native/CPU proof; full acceptance and seed47 remain later gates.
+
+Derived inputs initialize a fresh opt-in controller for frozen bootstrap and
+change only branch-local rollback/audit metadata plus the coverage fraction.
+Original checkpoints stay unchanged. V1 preserved a waiting controller and its
+live guard stopped before PPO; V2's treatment smoke completed but its observer
+missed the registry-cached event function. Their invalid-start/monitor records
+remain excluded. The corrected observer reads actual `_reset_idx` changes without
+replacing event logic. The active capsule owns current handles and audit commands.
 
 ### Pre-consolidation reference and measured limits
 

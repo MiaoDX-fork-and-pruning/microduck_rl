@@ -35,34 +35,53 @@ failed stage left score .667→.823, while forward/right get worse. Identity IMU
 alone gives left .735; both nominal give .759. This supports calibration
 sensitivity with interactions, not a sufficient calibration-removal repair.
 
-## Live comparison — next proof
+## Current comparison and live proof
 
-Poll session `84304`; do not restart on observation timeout. Root:
-`/tmp/microduck-seed23-sensor-reset-comparison-v2`. Wrapper:
-`/tmp/run_microduck_seed23_sensor_reset_v2.py`; driver:
-`/tmp/train_microduck_seed23_sensor_reset_v1.py`.
+The matched zero/half-reset comparison is complete:
+`/tmp/microduck-seed23-sensor-reset-comparison-v3/verification.json`.
+Both arms consumed 250 updates and rejected, restoring the same 1000 trainer.
+Their retained-model comparison is therefore unchanged. Candidate stage scores:
 
-Both arms start the exact seed23 pre-consolidation 1000 trainer/RNG/physical
-state and run fresh smoke64/5 before 4096-env training. Control retains startup
-calibration; treatment refreshes calibration on half of reset environments within
-the existing product bounds. Both use automatic consolidation, gate 250, stage
-cohort 20260815–17, seed23 and diagnostic 20260915. Request 1500 permits the controller
-to stop at 1250. Imports explicitly use the immutable source snapshot.
+| Reset coverage | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Control | .976 | .825 | .782 | .775 | .702 | .715 |
+| Half of resets | .963 | .764 | .771 | .823 | .783 | .745 |
 
-Derived inputs initialize a fresh opt-in controller for frozen bootstrap evaluation,
-change branch-local rollback/audit metadata and set treatment
-`sensor_reset_fraction=.5`. V1 preserved a waiting controller, so its live guard
-stopped before any PPO update; `invalid-start.json` records that excluded start.
-The earlier completed run remains unchanged. This is a separately contracted
-comparison, not an unchanged extension of a terminal attempt. The driver observes actual encoder-bias changes on reset, finite 61D/14D,
-live entropy/exposure and terminal deadlines; it has no inherited 6750/7000 exit
-assertion. Inspect `experiment-contract.json`, per-arm `live.jsonl`,
-`training-result.json` and `campaign-result.json`; finish artifact/lineage audit
-before interpreting the comparison. Do not launch seed47 before usable behavior.
+Half coverage improved the baseline minimum .699→.745 (+.04555), below the
+predeclared +.05 requirement. Each arm's 12 reports/48 unique traces, initial trainer/
+RNG/physical equality, bootstrap equality and nonpositive penalties verify.
+The treatment observed 20109 calibration refreshes across 37315 reset-environment
+visits (5873 reset calls, including initialization; small batches round upward).
 
-Support requires retained treatment and a native minimum gain ≥.05 over matched
-control without CPU-minimum regression, or all-six stage/CPU mastery. A failed
-comparison rejects this treatment. Product acceptance remains broader below.
+Frozen rejected-candidate diagnostics completed in session 2896:
+`/tmp/microduck-seed23-reset-candidate-diagnostics-v1/summary.json`.
+Control CPU scores .974/.916/.782/.843/.817/.773; half coverage
+.968/.888/.868/.853/.819/.880, all six passing on this reused diagnostic seed.
+The half-coverage final-native minimum is **.7998718476** (lateral), still a fail;
+its remaining native scores exceed .80. All 24 diagnostic traces and matched initial
+physical/observation fields verify. Both rejection decisions remain unchanged.
+
+**Live:** poll session `98081`. Root:
+`/tmp/microduck-seed23-sensor-reset-comparison-v4`. Wrapper:
+`/tmp/run_microduck_seed23_sensor_reset_v4.py`; driver:
+`/tmp/train_microduck_seed23_sensor_reset_v2.py`; audit:
+`/tmp/verify_microduck_seed23_sensor_reset_v4.py`.
+
+The new arm refreshes calibration on every reset within existing product bounds.
+It uses the exact same pre-consolidation 1000 trainer/RNG/physical state, seed23,
+4096 envs, automatic consolidation and stage cohort 20260815–17. It runs fresh
+smoke64/5, then requests 1500 with the expected controller stop at 1250. Completed
+control (`v2/control`) and half coverage (`v3/reset50`) are reused, not retrained;
+exact absolute roots are in `experiment-contract.json`. Imports use the immutable
+snapshot. Success still requires the unchanged retention/native/CPU gates;
+full product acceptance is separate. Do not launch seed47 before usable behavior.
+
+Derived inputs initialize a fresh opt-in controller for frozen bootstrap, change
+branch-local rollback/audit metadata and set the treatment fraction. V1's waiting
+controller was stopped before PPO (`invalid-start.json`). V2 treatment smoke
+completed, but its observer missed registry-cached event functions
+(`invalid-monitor.json`). The corrected observer reads `_reset_idx` before/after
+without replacing event logic. Original trials/checkpoints remain unchanged.
 
 ## Verified artifacts and caveats
 
@@ -106,8 +125,8 @@ rollout/video inspection, normalizer-baked ONNX/CPU rehearsal, the same procedur
 across training seeds 17/23/47, canonical final-range fine-tuning and matched-budget
 fixed/axis comparisons. Sampled frames and reused seeds are diagnostic evidence.
 Blocker fingerprint: `reset_conditioned_tracking_precision_and_transfer`;
-no external blocker. The next comparison tests calibration coverage during
-consolidation before changing reward weights or broadening the campaign.
+no external blocker. The live comparison tests full calibration refresh during consolidation after
+half coverage improved candidate transfer but failed the native retention rule.
 
 Preserve canonical Velocity, BAM M6, product DR bounds, unfiltered actions,
 61D/14D, reward signs, .80 gates, zero/nominal anchors and the preexisting CPU seed
