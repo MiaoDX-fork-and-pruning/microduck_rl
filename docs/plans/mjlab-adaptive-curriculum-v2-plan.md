@@ -1,21 +1,16 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 automation works; Phase 2A usable-policy acquisition remains
-open. Low-entropy consolidation retained an improved 6750 actor, but native
-cohort and CPU acceptance still fail. The unchanged 7000 continuation and the
-matched stronger-smoothing (−.4) treatment both completed without joint native/
-CPU improvement; neither may be extended unchanged. The manual 6750 remains a comparison
-reference. Resume preserves live PPO entropy and nondefault relief settings.
-The opt-in automatic consolidation V5 trial completed and retained an improved
-actor: all six pass on one final-native diagnostic seed, but the three-seed
-native cohort and CPU rehearsal still fail. Seed23 acquired behavior from scratch
-and automatically rejected its first consolidation at 1250. Matched zero/half/full
-sensor-reset coverage also failed retention, and continued acquisition was worse.
-Early sensor-reset from initialization improved native acquisition and was
-retained, but its CPU transfer regressed. Command rehearsal near low-speed
-deployment commands was then rejected. A fixed-policy action-scale scan found
-no uniform CPU scale that repairs the six-bucket transfer. Final-range mastery
-across seeds and autonomous training seeds 17/23/47 remain unproven.
+open. Seed23's early sensor-reset arm was automatically retained, but the stage
+cohort minimum is .7399 and CPU minimum is .4556; both still fail .80. Matched
+late sensor coverage, delayed consolidation and command-magnitude rehearsal did
+not yield an accepted recipe. Uniform and hip-yaw action scaling, sensor refresh
+and nominal CPU BAM replacement all failed their joint transfer gates. These
+results establish sensitivity, not an actuator root cause. The current diagnostic
+pairs the frozen candidate's native model, live physical parameters, reset and
+actuator timing with CPU integration before choosing a training intervention.
+Final-range mastery, fresh held-out evidence, automated training seeds 17/23/47
+and matched-budget comparisons remain unproven.
 Date: 2026-09-23
 Related:
 
@@ -322,14 +317,13 @@ The summary owns the full checkpoint path and retention proof. Focused Ruff and
 diff checks pass; worktree code/tests match the verified source. README and the
 specialist reproducibility document remain unchanged after documentation review.
 
-V5 is the current automatic candidate; the manual 6750 actor remains a comparison
-reference. Its push/sensor and CPU diagnostics, plus the negative yaw-precision
-comparison below, are complete. Seed23's first from-scratch run and its calibration
-diagnosis, sensor-reset and acquisition-timing comparisons are complete; the
-current proof tests low-speed command coverage. Terminal attempts must not extend unchanged. From-scratch
-acquisition, fresh held-out evidence,
-multi-training-seed replication, CPU usability and final CoM mastery remain open.
-Controller remains opt-in; no product threshold/default change is justified.
+V5 and the manual 6750 actor remain comparison references. Seed23 now provides
+from-scratch acquisition, automatic rejection/rollback and one retained early
+sensor-reset improvement. Sensor timing/coverage and command-magnitude training
+comparisons are complete; the active work is the native/CPU transfer diagnosis
+below. Terminal attempts must not extend unchanged. Native cohort mastery, fresh
+held-out evidence, multi-training-seed replication, CPU usability and final CoM
+mastery remain open. The controller remains opt-in.
 
 ### Fixed V5 robustness and bounded yaw-precision comparison
 
@@ -444,10 +438,11 @@ consolidation window. The stage candidate improved the weakest score
 .6617→.7399 (+.0781), satisfying the controller's retention rule. Final native
 diagnostic scores were .962/.837/.790/.855/.748/.801, while CPU scores were
 .980/.854/.780/.456/.728/.863. Native minimum gain over the original retained
-actor was only +.0407 and CPU minimum gain was −.3206; CPU pure-yaw mean was
-1.161 rad/s versus .917 for the original actor. This supports early acquisition
-diversity as a native training signal, but rejects it as a usable product recipe
-until actuator-transfer robustness is addressed.
+actor was only +.0407 and CPU minimum gain was −.3206. CPU pure-yaw mean over
+the final five seconds was 1.161 rad/s versus .917 for the original actor; the
+early-reset actor's full six-second mean is 1.109321 rad/s. This supports early
+acquisition diversity as a native training signal. Native mastery and CPU
+transfer both remain insufficient; actuator causality is not established.
 
 The acquisition-timing comparison completed and audited:
 `/tmp/microduck-seed23-acquisition-comparison-v1/{experiment-summary,verification}.json`.
@@ -484,14 +479,52 @@ remained about .701. Failure rejects this unchanged exposure recipe and does not
 justify a production sampler change. Product DR, rewards, .80 gates and
 inference stayed fixed; reused seeds remain diagnostic.
 
-The retained early-reset ONNX was then tested with a fixed-policy CPU action-scale
-scan: `/tmp/microduck-early-sensor-reset-s23-v2/action-scale-scan-v1/verification.json`.
-Scales .75/.85/.95/1.0/1.1 produced 30 finite 61D/14D traces. The best
-lower-tail score was .5748 at 1.10; yaw reached .575 but turn-left fell to .627.
-No scale reached .80 across all six buckets, so uniform action scaling is not a
-repair and must not become a runtime default. The blocker is now
-`cpu_action_amplitude_and_actuator_transfer_mismatch`; the next bounded
-intervention must match actuator behavior or train for transfer robustness.
+### Fixed-policy CPU transfer diagnosis
+
+The early-reset ONNX remains fixed. Uniform action scales .75/.85/.95/1.0/1.1
+never pass all six buckets: best minimum .5748 at 1.10, with yaw .575 and left
+.627. Scaling only the hip-yaw joints .5/.75/1/1.25/1.5 also has no passing
+window: at 1.5 yaw reaches .8313 while left falls to .5594. Joint sensitivity
+is not a root-cause identification; neither scaling becomes a runtime default.
+
+`/tmp/microduck-cpu-transfer-causal-s23-v1/verification.json` independently
+recomputes scores and ONNX actions from 66 saved traces (11 variants), checks
+actual delivered targets, matched resets, correct task/source metadata and all
+682 source-file hashes. Both five-scale scans reproduce their original arrays
+exactly. The earlier v1 scan reports recorded requested rather than scaled
+`applied_action` and had imprecise metadata; the causal audit supersedes those
+limitations without treating a retrospective replay as preregistration.
+
+Refreshing CPU sensors with `mj_forward` at the 20 ms control boundary gives
+.97956/.85534/.78273/.44376/.71837/.87261. Yaw changes by −.01187, rejecting
+sensor refresh alone as a sufficient explanation.
+
+Nominal BAM M6 replacement was paired against XML PD in the same CPU scene:
+`/tmp/microduck-cpu-bam-response-s23-v1/verification.json` (3 reports/18 traces).
+The independent audit checks reset/first-observation equality, all 1200
+physics-step delivered targets and torque limits, replays original XML traces
+exactly, and recomputes every saved ONNX action and capability score.
+
+| CPU actuator diagnostic | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| XML PD | .97959 | .85440 | .78006 | .45563 | .72832 | .86311 |
+| BAM M6 | .98257 | .73820 | .86140 | .57954 | .65825 | .68747 |
+| BAM M6, stiff friction | .98040 | .74205 | .86900 | .56243 | .62216 | .65884 |
+
+BAM improves yaw but regresses other buckets beyond the predeclared .02 limit;
+both treatments fail. Full-six-second yaw means are 1.10932/1.01084/1.01754
+rad/s respectively. The diagnostic fixes the dependency's joint-versus-DOF
+friction-constraint indexing locally; it does not change the installed package.
+This comparison does not replicate native scene, DR, observation or delay.
+
+Blocker fingerprint: `native_mastery_and_unexplained_cpu_transfer`. No usable
+policy or proven actuator root cause follows. Next proof captures the complete
+compiled native model, every expanded live model field and actual delay sequence,
+then compares CPU dynamics with paired reset/input contracts. The partial live
+parameter capture at `/tmp/microduck-native-physics-capture-early-s23-v1` replays
+native capability scores, but is not sufficient for an exact-model claim. A
+CPU wrapper import failure occurred before simulation and supplies no result.
+All reused seeds remain diagnostic; no production source changed in this slice.
 
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
@@ -561,7 +594,7 @@ and earlier experiment summaries.
 
 ### Pre-consolidation sensor diagnosis
 
-Blocker: `cpu_action_amplitude_and_actuator_transfer_mismatch`.
+Historical diagnosis; current blocker: `native_mastery_and_unexplained_cpu_transfer`.
 Relief helped yaw but did not resolve startup/DR robustness or CPU transfer;
 blindly extending global relief or direct-yaw/turn-proxy exposure is not the next
 experiment. The old 6250 actor's additive-white-noise ablation did not rescue
@@ -998,9 +1031,9 @@ before any matched-budget compute is requested.
 
 Phase 2A (experiment repair and native usability diagnosis) remains the next
 active work item. The early-reset arm now supplies a retained native-acquisition
-signal, while the action-scale scan rules out a simple CPU target-amplitude fix.
-The next bounded work must address actuator/CPU transfer before another
-multi-seed campaign. Phase 2 (matched-budget multi-seed experiments) follows
+signal. Scale, sensor-refresh and CPU BAM probes failed joint improvement;
+complete-model/physics/timing comparison is next. Native mastery is also still
+below .80. Resolve the behavioral gates before another multi-seed campaign. Phase 2 (matched-budget multi-seed experiments) follows
 only after its gate passes. Phase 3 (constrained Codex advisor) and Phase 4
 (stronger active teachers) remain parked until the deterministic baseline
 produces informative, native-evaluated evidence.
