@@ -107,6 +107,35 @@ commands in this paired diagnostic, with further post-push degradation.
 Measure the unmodified actor's turn rollouts before choosing another training
 intervention. Do not repeat runtime scale scans or unchanged training extensions.
 
+## Native turn and visual profile — verified
+
+The unmodified checkpoint was replayed from the original native traces and
+captured as full 300-frame videos (no resimulation):
+`/tmp/microduck-native-turn-profile-s23-v1/verification.json` and
+`visuals.json`. The videos show an upright, foot-supported biped throughout;
+the failure is tracking quality, not a fall or an obviously parked pose.
+
+| Native diagnostic seed / bucket | 0–1 s yaw | 1–5 s yaw | 5–6 s yaw | Score |
+| --- | ---: | ---: | ---: | ---: |
+| 20260918, yaw +.8 | +.718 | +.809 | +.893 | .855 |
+| 20260919, turn-left +.8 | +.627 | +.700 | +.768 | .748 |
+| 20260920, turn-right −.8 | −.819 | −.815 | −.903 | .801 |
+
+There is no hip-yaw limit occupancy in these turn buckets and the largest
+realized control is below the 1.75 A torque boundary. The lateral bucket is
+different: left/right hip-yaw occupy the hard-limit proximity band for 26%/37%
+of steps and the recorded control reaches the current boundary. The existing
+`joint_pos_limit_proximity` function is not wired into the canonical velocity
+reward stack, so this is a candidate lateral intervention, not an applied fix.
+
+A direction-paired diagnostic reuses both turn reset/calibration seeds and flips
+only the yaw sign. Positive-yaw moving turns undertrack in both paired seeds:
+the original +.8 case averages +.700 rad/s over 1–5 s, while the reversed −.8
+case averages −.726; the original −.8 case averages −.815, while reversed +.8
+averages +.718. Reset fields and the first non-command observation match; ONNX
+parity is below 9e-7. Audit: `/tmp/microduck-native-turn-sign-s23-v2/verification.json`.
+This supports a directional native acquisition gap, not a CPU-contact explanation.
+
 ## Fixed lineage and boundaries
 
 Source: `/tmp/microduck-auto-consolidation-source-d503d63-v5`, 682 files.

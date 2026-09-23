@@ -592,6 +592,26 @@ further post-push degradation. Next acquisition work measures the unmodified
 native actor's turn rollouts before a bounded training intervention. No production
 source or dependency changed in this slice; all seeds remain diagnostic.
 
+### Native turn profile and directional check
+
+The retained actor's full saved native trajectories were rendered and audited at
+`/tmp/microduck-native-turn-profile-s23-v1/verification.json` and
+`visuals.json`. The yaw case averages +.809 rad/s over 1–5 s for a +.8 command;
+the moving-turn cases average +.700 and −.815 for +.8/−.8 commands and score
+.748/.801. They remain upright, have no turn-bucket hip-yaw limit occupancy,
+and stay below the recorded 1.75 A control boundary. The lateral trace reaches
+the hip-yaw hard-limit proximity band on 26%/37% of left/right hip steps and
+reaches the current boundary; `joint_pos_limit_proximity` exists in `mdp.py` but
+is not wired into the canonical velocity reward stack.
+
+The direction-paired diagnostic `/tmp/microduck-native-turn-sign-s23-v2` flips
+only yaw command signs on the two original turn reset/calibration seeds. It
+keeps reset fields and the first non-command observation exact and preserves
+ONNX parity below 9e-7. Positive-yaw turns undertrack in both paired seeds
+(+0.700 and +0.718 rad/s over 1–5 s), while negative yaw is closer (−0.815 and
+−0.726). This is directional native acquisition evidence, not a CPU contact
+artifact; all seeds remain diagnostic and no acceptance gate is relaxed.
+
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
 Original checkpoints stay unchanged. V1 preserved a waiting controller and its
