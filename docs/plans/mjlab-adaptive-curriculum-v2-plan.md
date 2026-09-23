@@ -8,8 +8,10 @@ CPU improvement; neither may be extended unchanged. The manual 6750 remains a co
 reference. Resume preserves live PPO entropy and nondefault relief settings.
 The opt-in automatic consolidation V5 trial completed and retained an improved
 actor: all six pass on one final-native diagnostic seed, but the three-seed
-native cohort and CPU rehearsal still fail. Final-range mastery across seeds and
-autonomous training seeds 17/23/47 remain unproven.
+native cohort and CPU rehearsal still fail. Seed23 acquired behavior from scratch
+and automatically rejected its first consolidation at 1250; calibration sensitivity
+now motivates a matched sensor-reset comparison. Final-range mastery across seeds
+and autonomous training seeds 17/23/47 remain unproven.
 Date: 2026-09-23
 Related:
 
@@ -318,7 +320,8 @@ specialist reproducibility document remain unchanged after documentation review.
 
 V5 is the current automatic candidate; the manual 6750 actor remains a comparison
 reference. Its push/sensor and CPU diagnostics, plus the negative yaw-precision
-comparison below, are complete. The current proof is from-scratch seed23. Terminal attempts
+comparison below, are complete. Seed23's first from-scratch run and its calibration
+diagnosis are complete; the current proof compares sensor-reset coverage. Terminal attempts
 must not extend unchanged. From-scratch acquisition, fresh held-out evidence,
 multi-training-seed replication, CPU usability and final CoM mastery remain open.
 Controller remains opt-in; no product threshold/default change is justified.
@@ -360,25 +363,62 @@ rule. Control final native left is .726 and CPU yaw .519; treatment CPU yaw/righ
 are .579/.545. This rejects reward-weight-only precision repair and stops both
 arms. It does not alter product defaults or the adaptive controller.
 
-The active proof is `/tmp/microduck-adaptive-from-scratch-s23-v4`, session `85159`:
-from-scratch seed23/4096 envs, lateral-drive recipe, stage-distribution native
-cohort 20260815–17 and opt-in consolidation. Smoke64/5 passed. The 7000-update
-budget allows one bounded automatic consolidation window to stop at its deadline.
-At 500 updates the cohort scores are .900/.781/.750/.606/.500/.645; consolidation
-is waiting, entropy .01 and both CoM axes remain stage0 ±.003. Record final native,
-CPU transfer, normalized ONNX and actual update budget. If acquisition never
-reaches the trigger or final scores remain below .80, change acquisition before
-seed47. Final diagnostic seed20260915 is already consumed, not fresh held-out.
+`/tmp/microduck-adaptive-from-scratch-s23-v4` completed 1250 updates from scratch,
+seed23/4096 envs, with smoke64/5 and stage cohort 20260815–17. At 1000 its scores
+were .938/.766/.737/.731/.699/.777, triggering zero-entropy consolidation with
+left-turn focus. At 1250 the candidate scored .977/.789/.789/.813/.667/.818.
+Five scores improved, but the weakest left regressed; the controller rejected
+and restored the 1000 actor/critic/optimizer, entropy .01 and teacher. Actual spent
+budget remains 1250. Both CoM axes remain stage 0 ±.003.
 
-The live driver has an inherited assertion allowing only 6750/7000 completed
-updates, executed after production `learn()` writes its result and checkpoint.
-A legitimate earlier stop must be verified from `training-result.json` and the
-controller deadline, then final evaluations completed separately if needed;
-preserve the wrapper failure and do not restart training. The wrapper does not
-isolate package imports from the worktree: `source-equality-audit.json` verifies
-222 relevant files match the snapshot. Preserve code equality through run exit
-and recheck then. V1–v3 failed before any PPO update and remain excluded from
-learning evidence. The active capsule owns the exact wrapper/driver handles.
+The inherited post-return driver assertion allowed only 6750/7000 updates.
+Session 85159 therefore exited 1 after the valid production checkpoint/result;
+recovery session 2245 validated the actual deadline and completed final native/CPU
+evaluation without retraining. `verification.json` verifies682 source files,
+222 worktree-equal source/script files, 24 reports, 102 unique traces and1250 nonpositive
+penalty records per term. The original wrapper failure remains in
+`evaluation-recovery.json`. Its imports used the worktree, with source equality
+checked before/after; this was not isolation. V1–v3 failed before any PPO update.
+
+| Seed23 retained/candidate diagnostics | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Retained 1000 actor, final native | .944 | .852 | .793 | .818 | .823 | .811 |
+| Retained 1000 actor, CPU | .966 | .913 | .810 | .776 | .833 | .887 |
+| Rejected 1250 candidate, final native | .956 | .813 | .810 | .873 | .844 | .848 |
+| Rejected 1250 candidate, CPU | .993 | .915 | .870 | .847 | .796 | .873 |
+
+Candidate comparison: `/tmp/microduck-seed23-consolidation-candidate-diagnostic-v1/summary.json`.
+All 12 traces and physical resets verify. This uses diagnostic seed 20260915 again;
+the one final-native pass does not override cohort rejection or CPU failure.
+
+Fixed-candidate probe: `/tmp/microduck-seed23-sensor-diagnostic-v1/summary.json`.
+At failed gate seed 20260815, left .667→.823 with zero encoder bias, while forward
+and right regress. Identity IMU alone gives .735; both nominal give .759. All 24
+native/ONNX comparisons pass, physical resets/additive-noise settings match and
+actual sensor realizations verify. The product trace replays exactly. Encoder
+bias affects both observations and position targets, so this is evidence of
+calibration sensitivity and interactions, not a sufficient removal repair.
+Initial diagnostic audits mishandled the CPU ONNX hash and added `onnx_action`
+column; separate auditors validate the already completed data without reruns.
+
+The current bounded comparison is
+`/tmp/microduck-seed23-sensor-reset-comparison-v2`, session `84304`. Both arms restore
+the exact pre-consolidation 1000 trainer/RNG/physical state; treatment alone sets
+sensor-reset coverage to .5 within existing product bounds. Both run fresh smoke,
+automatic consolidation, 4096 envs, seed23, gate 250/cohort 20260815–17 and the same
+reused final diagnostic. Request 1500 permits an automatic stop at 1250. Imports
+explicitly use the immutable snapshot. Derived inputs initialize a fresh opt-in
+controller for frozen bootstrap evaluation and change branch-local rollback/audit
+metadata plus the treatment fraction; original checkpoints stay
+unchanged. V1 retained a waiting controller and was stopped by the live guard
+before PPO; its `invalid-start.json` is excluded from learning evidence. The live
+driver verifies actual sensor resampling and dynamic deadlines.
+
+Support requires retention plus native minimum gain ≥ .05 over matched control
+without CPU-minimum regression, or all-six stage/CPU mastery. A failed comparison
+rejects this treatment. It is not full acceptance or an unchanged terminal
+extension. Complete lineage/source/trace audits before interpreting it; do not
+launch seed47 before usable behavior. The active capsule owns current handles.
 
 ### Pre-consolidation reference and measured limits
 
