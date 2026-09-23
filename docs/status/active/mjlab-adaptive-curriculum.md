@@ -35,53 +35,59 @@ failed stage left score .667→.823, while forward/right get worse. Identity IMU
 alone gives left .735; both nominal give .759. This supports calibration
 sensitivity with interactions, not a sufficient calibration-removal repair.
 
-## Current comparison and live proof
+## Completed sensor coverage comparison
 
-The matched zero/half-reset comparison is complete:
-`/tmp/microduck-seed23-sensor-reset-comparison-v3/verification.json`.
-Both arms consumed 250 updates and rejected, restoring the same 1000 trainer.
-Their retained-model comparison is therefore unchanged. Candidate stage scores:
+All zero/half/full-reset arms completed and audited:
+`/tmp/microduck-seed23-sensor-reset-comparison-v4/verification.json`.
+Each consumed 250 updates and rejected, restoring the same 1000 trainer.
+Their retained-model comparison is unchanged. Candidate stage scores:
 
 | Reset coverage | Zero | Forward | Lateral | Yaw | Left | Right |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
 | Control | .976 | .825 | .782 | .775 | .702 | .715 |
 | Half of resets | .963 | .764 | .771 | .823 | .783 | .745 |
+| Every reset | .967 | .777 | .744 | .756 | .778 | .758 |
 
-Half coverage improved the baseline minimum .699→.745 (+.04555), below the
-predeclared +.05 requirement. Each arm's 12 reports/48 unique traces, initial trainer/
-RNG/physical equality, bootstrap equality and nonpositive penalties verify.
-The treatment observed 20109 calibration refreshes across 37315 reset-environment
-visits (5873 reset calls, including initialization; small batches round upward).
+Half coverage improved the baseline minimum .699→.745 (+.04555); full coverage
+gave .744 (+.04457). Both miss the predeclared +.05 requirement. Each arm's
+12 reports/48 unique traces, initial trainer/RNG/physical equality, bootstrap
+and nonpositive penalties verify. Half coverage refreshed 20109 of 37315
+reset-environment visits (small batches round upward); full coverage refreshed
+all 37313 visits across 5931 calls. Session 98081 and audit 97119 exited 0.
 
-Frozen rejected-candidate diagnostics completed in session 2896:
+Frozen control/half candidate diagnostics:
 `/tmp/microduck-seed23-reset-candidate-diagnostics-v1/summary.json`.
 Control CPU scores .974/.916/.782/.843/.817/.773; half coverage
 .968/.888/.868/.853/.819/.880, all six passing on this reused diagnostic seed.
-The half-coverage final-native minimum is **.7998718476** (lateral), still a fail;
-its remaining native scores exceed .80. All 24 diagnostic traces and matched initial
-physical/observation fields verify. Both rejection decisions remain unchanged.
+Half-coverage final-native lateral is **.7998718476**, still below .80; its
+remaining native scores pass. All 24 diagnostic traces and matched initial
+physical/observation fields verify. Original rejection decisions are unchanged.
 
-**Live:** poll session `98081`. Root:
-`/tmp/microduck-seed23-sensor-reset-comparison-v4`. Wrapper:
-`/tmp/run_microduck_seed23_sensor_reset_v4.py`; driver:
-`/tmp/train_microduck_seed23_sensor_reset_v2.py`; audit:
-`/tmp/verify_microduck_seed23_sensor_reset_v4.py`.
+Control (`v2/control`) and half coverage (`v3/reset50`) were reused in V4; exact
+roots are in its contract. The full-coverage rejected candidate has no separate
+CPU diagnostic; final CPU reports assess its restored 1000 actor. Invalid starts
+and observer recovery remain documented in the canonical plan and artifacts.
 
-The new arm refreshes calibration on every reset within existing product bounds.
-It uses the exact same pre-consolidation 1000 trainer/RNG/physical state, seed23,
-4096 envs, automatic consolidation and stage cohort 20260815–17. It runs fresh
-smoke64/5, then requests 1500 with the expected controller stop at 1250. Completed
-control (`v2/control`) and half coverage (`v3/reset50`) are reused, not retrained;
-exact absolute roots are in `experiment-contract.json`. Imports use the immutable
-snapshot. Success still requires the unchanged retention/native/CPU gates;
-full product acceptance is separate. Do not launch seed47 before usable behavior.
+## Live acquisition timing proof
 
-Derived inputs initialize a fresh opt-in controller for frozen bootstrap, change
-branch-local rollback/audit metadata and set the treatment fraction. V1's waiting
-controller was stopped before PPO (`invalid-start.json`). V2 treatment smoke
-completed, but its observer missed registry-cached event functions
-(`invalid-monitor.json`). The corrected observer reads `_reset_idx` before/after
-without replacing event logic. Original trials/checkpoints remain unchanged.
+Poll session `95494`. Root: `/tmp/microduck-seed23-acquisition-comparison-v1`;
+wrapper `/tmp/run_microduck_seed23_acquisition_v1.py`, observer
+`/tmp/train_microduck_seed23_acquisition_v1.py`; prepared auditor
+`/tmp/verify_microduck_seed23_acquisition_v1.py`.
+
+Hypothesis: immediate consolidation interrupted ongoing acquisition. The original
+750→1000 minimum rose .424→.699 before the switch. The new arm continues from
+the identical 1000 actor/critic/optimizer/RNG/physical state, with original entropy
+.01, original adaptive exposure and zero sensor-reset coverage. It tests the phase
+switch package, not entropy alone: consolidation also redirects exposure to left.
+
+Fresh smoke64/5 passed; run exactly 250 updates at seed23/4096 envs with unchanged
+stage cohort 20260815–17 and reused final diagnostic 20260915. Imports are isolated
+to the frozen snapshot. Require a retained candidate, native minimum gain ≥.05
+over the matched zero-reset consolidation candidate and no CPU minimum regression
+versus the original retained actor. A supported result motivates progress-aware
+readiness; failure does not justify extending this treatment unchanged. No
+production readiness change yet, and no seed47 before usable behavior.
 
 ## Verified artifacts and caveats
 
@@ -124,9 +130,9 @@ Require all-six native mastery at final ranges, fresh consumed held-out seeds,
 rollout/video inspection, normalizer-baked ONNX/CPU rehearsal, the same procedure
 across training seeds 17/23/47, canonical final-range fine-tuning and matched-budget
 fixed/axis comparisons. Sampled frames and reused seeds are diagnostic evidence.
-Blocker fingerprint: `reset_conditioned_tracking_precision_and_transfer`;
-no external blocker. The live comparison tests full calibration refresh during consolidation after
-half coverage improved candidate transfer but failed the native retention rule.
+Blocker fingerprint: `acquisition_timing_and_reset_conditioned_precision`;
+no external blocker. Sensor coverage alone did not satisfy retention; the live
+comparison tests continued acquisition before changing controller readiness.
 
 Preserve canonical Velocity, BAM M6, product DR bounds, unfiltered actions,
 61D/14D, reward signs, .80 gates, zero/nominal anchors and the preexisting CPU seed

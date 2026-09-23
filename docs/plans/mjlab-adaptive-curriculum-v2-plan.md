@@ -9,9 +9,10 @@ reference. Resume preserves live PPO entropy and nondefault relief settings.
 The opt-in automatic consolidation V5 trial completed and retained an improved
 actor: all six pass on one final-native diagnostic seed, but the three-seed
 native cohort and CPU rehearsal still fail. Seed23 acquired behavior from scratch
-and automatically rejected its first consolidation at 1250; calibration sensitivity
-now motivates a matched sensor-reset comparison. Final-range mastery across seeds
-and autonomous training seeds 17/23/47 remain unproven.
+and automatically rejected its first consolidation at 1250. Matched zero/half/full
+sensor-reset coverage also failed retention; a bounded comparison now tests
+continued acquisition before changing consolidation readiness. Final-range mastery
+across seeds and autonomous training seeds 17/23/47 remain unproven.
 Date: 2026-09-23
 Related:
 
@@ -321,8 +322,9 @@ specialist reproducibility document remain unchanged after documentation review.
 V5 is the current automatic candidate; the manual 6750 actor remains a comparison
 reference. Its push/sensor and CPU diagnostics, plus the negative yaw-precision
 comparison below, are complete. Seed23's first from-scratch run and its calibration
-diagnosis are complete; the current proof compares sensor-reset coverage. Terminal attempts
-must not extend unchanged. From-scratch acquisition, fresh held-out evidence,
+diagnosis and sensor-reset comparisons are complete; the current proof tests
+acquisition timing. Terminal attempts must not extend unchanged. From-scratch
+acquisition, fresh held-out evidence,
 multi-training-seed replication, CPU usability and final CoM mastery remain open.
 Controller remains opt-in; no product threshold/default change is justified.
 
@@ -421,16 +423,31 @@ Half-coverage final-native lateral is **.7998718476**, strictly below .80; the
 other five pass. The three-seed stage minimum remains .745. All 24 traces and
 matched initial physical/observation fields verify. Neither rejection is changed.
 
-The current full-coverage arm is
-`/tmp/microduck-seed23-sensor-reset-comparison-v4`, session `98081`. It uses the
-same 1000 trainer/RNG/physical start, fresh smoke64/5, seed23/4096 envs and 250-update
-automatic consolidation, refreshing calibration on every reset. Request 1500
-permits the controller to stop at 1250. Completed control (`v2/control`) and half
-coverage (`v3/reset50`) are reused via exact paths in the contract. Source imports
-are isolated to the frozen snapshot. Require the unchanged controller's retention
-and native/CPU proof; full acceptance and seed47 remain later gates.
+The full-coverage arm completed at
+`/tmp/microduck-seed23-sensor-reset-comparison-v4`; session 98081 and audit 97119
+exited 0. Candidate stage scores are .967/.777/.744/.756/.778/.758; the minimum
+improved .699→.744 (+.04457), below the required +.05. The controller rejected
+and restored the same 1000 trainer. All 37313 reset-environment visits across
+5931 calls refreshed calibration. Source, 12 reports/48 traces, actual 250-update
+budget, bootstrap equality, trainer rollback and nonpositive penalties verify.
+V4 reused completed control/half coverage via exact contract paths. Its CPU
+report evaluates the restored actor; no separate full-coverage candidate CPU
+claim is made. Coverage alone did not pass native retention in these trials.
 
-Derived inputs initialize a fresh opt-in controller for frozen bootstrap and
+A bounded continuation now tests acquisition timing:
+`/tmp/microduck-seed23-acquisition-comparison-v1/experiment-contract.json`, session
+95494. The original minimum improved .424→.699 from 750→1000 before immediate
+consolidation. Restore the identical 1000 trainer/RNG/physical state, retain
+entropy .01 and original adaptive exposure, and train 250 updates after fresh
+smoke64/5. Use the same source, seed23/4096 envs, zero reset coverage, stage cohort
+20260815–17 and reused diagnostic 20260915. The treatment tests the phase switch
+as a package, because consolidation also redirects command exposure to left.
+Require a retained candidate, native minimum gain ≥.05 over the matched zero-reset
+consolidation candidate, and no CPU minimum regression versus the retained baseline.
+A supported result motivates progress-aware readiness; failure does not authorize
+unchanged extension. Production readiness, product gates and seed47 stay unchanged.
+
+The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
 Original checkpoints stay unchanged. V1 preserved a waiting controller and its
 live guard stopped before PPO; V2's treatment smoke completed but its observer
