@@ -317,8 +317,8 @@ diff checks pass; worktree code/tests match the verified source. README and the
 specialist reproducibility document remain unchanged after documentation review.
 
 V5 is the current automatic candidate; the manual 6750 actor remains a comparison
-reference. Next inspect V5 on already diagnosed push/sensor seeds and raw CPU
-tracking before selecting another bounded training treatment. Terminal attempts
+reference. Its push/sensor and CPU diagnostics, plus the negative yaw-precision
+comparison below, are complete. The current proof is from-scratch seed23. Terminal attempts
 must not extend unchanged. From-scratch acquisition, fresh held-out evidence,
 multi-training-seed replication, CPU usability and final CoM mastery remain open.
 Controller remains opt-in; no product threshold/default change is justified.
@@ -340,27 +340,6 @@ sampled frames show upright, foot-supported turning; contact logs contain only
 floor/feet. Instantaneous yaw oscillation and persistent over/underspeed remain.
 This is sampled-frame review, not full temporal or hardware acceptance.
 
-Next experiment is an explicit two-arm, 250-update comparison from V5's exact
-actor/critic/optimizer/RNG and teacher. Control keeps yaw L1 weight 1.0; treatment
-uses 2.0. Entropy stays zero, action-rate relief −.2, linear L1 weight 2.0;
-seed17/4096envs, gate cohort 20260815–17 and reused final/CPU seed20260915 stay
-fixed. Each arm passes fresh smoke64/5 before long training. Immutable source
-snapshots of `2a4f73f` differ only in the yaw weight, with the same pre-existing
-CPU seed overlay. The original terminal V5 checkpoint is untouched. Derived
-starts clear the terminal controller only for this separately contracted
-comparison, preserve its audit record, and set branch-local rollback baselines.
-No trainer tensors or RNG state change before the experiment.
-
-Require candidate retention, ≥.05 improvement in the native cohort minimum and
-CPU minimum over V5, with comparison against the equally trained control.
-A negative result stops this treatment. This is evidence selection for a possible
-automatic precision phase, not such a controller or a product default promotion.
-Root: `/tmp/microduck-yaw-precision-s17-v2`; `experiment-contract.json` owns all
-hashes and parameters. Session `16017` is running; prepared audit is
-`/tmp/verify_microduck_yaw_precision_v2.py`. Preparation v1 stopped before any
-training because its RNG equality helper lacked NumPy array support; the v2
-preparation audit passes and preserves v1 artifacts.
-
 ### Negative yaw-precision comparison and from-scratch seed-23 proof
 
 The bounded precision comparison at `/tmp/microduck-yaw-precision-s17-v2` is
@@ -369,7 +348,11 @@ for 250 updates, with fresh smoke64/5, seed17/4096 environments, entropy0,
 relief−.2 and the same gate/CPU evaluation. Only the treatment changed signed-EMA
 yaw L1 weight 1.0→2.0. Both source manifests contain 682 files and differ only
 in that config line; actor, critic, optimizer and RNG at each start are equal.
-The audit verifies 60 reports/traces, finite arrays and all penalty values ≤0.
+The audit verifies 16 report files, 60 unique traces, finite arrays and all
+penalty values ≤0. Session `16017` exited 0; `verification.json` records the
+completed audit. Derived starts cleared terminal consolidation only for this
+separately contracted comparison and used branch-local rollback baselines;
+the original V5 checkpoint and its audit history are unchanged.
 
 Control native-cohort minimum gain over V5 was +.0434 and CPU minimum gain −.1492;
 treatment gains were +.0411 and −.1233. Neither reaches the joint +.05 retention
@@ -377,13 +360,25 @@ rule. Control final native left is .726 and CPU yaw .519; treatment CPU yaw/righ
 are .579/.545. This rejects reward-weight-only precision repair and stops both
 arms. It does not alter product defaults or the adaptive controller.
 
-The next active proof is a from-scratch seed-23 adaptive run with the same
-lateral-drive recipe, native gate and opt-in consolidation. Run smoke64/5 first;
-request 7000 updates, allowing one bounded automatic consolidation window to stop
-at its declared deadline. Record native cohort, final native, CPU transfer,
-normalized ONNX and update budget. If acquisition never reaches the controller
-trigger or final scores remain below .80, change the acquisition stage before
-attempting seed47. Session/contract artifacts live under a unique `/tmp` root.
+The active proof is `/tmp/microduck-adaptive-from-scratch-s23-v4`, session `85159`:
+from-scratch seed23/4096 envs, lateral-drive recipe, stage-distribution native
+cohort 20260815–17 and opt-in consolidation. Smoke64/5 passed. The 7000-update
+budget allows one bounded automatic consolidation window to stop at its deadline.
+At 500 updates the cohort scores are .900/.781/.750/.606/.500/.645; consolidation
+is waiting, entropy .01 and both CoM axes remain stage0 ±.003. Record final native,
+CPU transfer, normalized ONNX and actual update budget. If acquisition never
+reaches the trigger or final scores remain below .80, change acquisition before
+seed47. Final diagnostic seed20260915 is already consumed, not fresh held-out.
+
+The live driver has an inherited assertion allowing only 6750/7000 completed
+updates, executed after production `learn()` writes its result and checkpoint.
+A legitimate earlier stop must be verified from `training-result.json` and the
+controller deadline, then final evaluations completed separately if needed;
+preserve the wrapper failure and do not restart training. The wrapper does not
+isolate package imports from the worktree: `source-equality-audit.json` verifies
+222 relevant files match the snapshot. Preserve code equality through run exit
+and recheck then. V1–v3 failed before any PPO update and remain excluded from
+learning evidence. The active capsule owns the exact wrapper/driver handles.
 
 ### Pre-consolidation reference and measured limits
 

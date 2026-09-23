@@ -15,12 +15,40 @@ three-seed gate cohort and CPU deployment rehearsal still fail all-six mastery.
 Both adaptive CoM axes remain stage 0, ±3 mm. Scores are capability, not success
 rates. No from-scratch or multi-training-seed autonomy claim is justified.
 
-V5 completed; session `10932` and audit `40226` exited 0. It consumed 250 updates
-and stopped at 6750 (24,576,000 new transitions). The matched yaw-precision comparison completed in session `16017`; audit
-`/tmp/verify_microduck_yaw_precision_v2.py` passes. Root:
-`/tmp/microduck-yaw-precision-s17-v2`. A from-scratch seed-23 adaptive run is
-now the next live proof; poll its existing handle if present and do not restart
-it on observation timeout.
+V5 and the matched yaw-precision comparison are complete. The latter is negative;
+neither arm should be extended unchanged. The current proof is the existing
+from-scratch seed-23 run below. The latest user explicitly resumed after an API
+interruption; the host goal's stale `blocked` label is not an external blocker.
+
+## Live seed-23 proof
+
+Poll session `85159` with `write_stdin`; do not restart on observation timeout.
+Root: `/tmp/microduck-adaptive-from-scratch-s23-v4`. Contract/config/commands and
+logs are in that root. Wrapper: `/tmp/run_microduck_from_scratch_s23_v4.py`;
+driver: `/tmp/train_microduck_from_scratch_s23_v4.py`. Fresh smoke64/5 passed;
+training is seed23/4096 envs from canonical initialization, budget 7000 updates,
+gate every 250, opt-in entropy consolidation. `campaign-config.json` confirms
+`stage` distribution, cohort seeds 20260815–17. Final diagnostic 20260915 is reused.
+
+The 500-update cohort scores are .900/.781/.750/.606/.500/.645 (zero/forward/
+lateral/yaw/left/right), up from a minimum of zero at 250. All evaluation cases
+survive; tracking limits the weak turn buckets. Consolidation is still waiting,
+entropy .01, both CoM axes stage0 ±.003. The teacher has shifted yaw exposure to
+.1675; temporary action-rate relief is −.2. This is learning progress, not mastery.
+
+The driver has an inherited **post-return** assertion allowing only 6750/7000
+completed updates. A valid earlier controller stop will fail that assertion
+after production `learn()` saves its final checkpoint and `training-result.json`.
+At exit validate those artifacts and the actual controller deadline; if needed,
+complete the launcher's final native/CPU evaluations separately, preserving the
+wrapper failure. Do not retrain or modify immutable running scripts to hide it.
+
+The wrapper imports campaign code from the V5 snapshot but training imports the
+editable worktree. `source-equality-audit.json` verifies 222 relevant source/
+script files equal the snapshot; preserve that equality until training ends and
+repeat the audit at closeout. Do not claim isolated imports. V1–v3 starts failed
+on inherited instrumentation assertions before any PPO update; their separate
+`invalid-driver.json` records remain diagnostic artifacts, not learning evidence.
 
 ## V5 evidence and behavior
 
@@ -112,7 +140,7 @@ yaw2 CPU yaw/right were .579/.545. No unchanged extension is justified.
 
 Summary: `/tmp/microduck-yaw-precision-s17-v2/experiment-summary.json`.
 Audit: `/tmp/microduck-yaw-precision-s17-v2/verification.json`.
-The 60 report/trace artifacts and both immutable source manifests verify. The
+The 16 report files, 60 unique traces and both immutable source manifests verify. The
 failed preparation v1 stopped before training and is retained separately. This
 rejects reward-weight-only precision repair; it does not reject adaptive training
 or the V5 candidate. Full .80 acceptance and multi-seed autonomy remain separate.
