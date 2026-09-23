@@ -21,10 +21,11 @@ limit proximity improved the native lower tail by only .030747 while regressing
 the CPU lower tail (.559→.427); both failed their joint retention criteria and
 the hip-yaw term was withdrawn. Resume compatibility for evolving
 `command_feedback.term_names` was repaired in `f470942`/`f31af04`, preserving
-common terms and rejecting non-empty incompatible history. The next experiment
-must use an explicit final-range fine-tuning resume contract; the previously
-proposed positive-yaw exposure transfer has already been rejected and no
-unchanged route is authorized.
+common terms and rejecting non-empty incompatible history. Explicit final-range
+fine-tuning is implemented; its first full-range window failed preservation.
+The matched trunk-only and head-only follow-ups also failed their declared
+preservation/weakest-score criteria. Positive-yaw exposure transfer is already
+rejected; no unchanged failed window is authorized.
 Date: 2026-09-23
 Related:
 
@@ -647,20 +648,25 @@ The same three seeds were replayed at the checkpoint's stage distribution
 stress changes the weakest bucket but does not account for the failure by itself.
 Paired contract/report: `/tmp/microduck-control-stage-final-pair-s23-v1/`.
 
-### Current final-range fine-tuning contract
+### Final-range fine-tuning contract — implemented
 
-The next bounded implementation must resume one explicit adaptive checkpoint,
-migrate both adaptive-owned CoM axes to their canonical final values, and
-disable further adaptive gate and consolidation decisions. It must preserve
-the PPO optimizer/RNG and every non-owned canonical schedule, record a
-`final_range_finetune` mode in checkpoint metadata, and refuse an unchanged
-resume of a terminal consolidation checkpoint. Run smoke64/5 first, then one
-fixed-budget fine-tuning window and the same fresh native final cohort. Retain
-the result only when all six buckets and the fresh lower tail improve or remain
-within the existing preservation tolerance; otherwise restore the pre-
-fine-tune reference. This is a fine-tuning contract, not product acceptance:
-the baked-normalizer ONNX, CPU rehearsal and full rollout/video review remain
-mandatory.
+The launcher accepts `--final-range-finetune --resume /exact/checkpoint.pt`.
+It restores PPO optimizer/RNG, preserves non-owned curricula and command
+exposure, moves owned CoM ranges to their final values, and disables automatic
+gate/consolidation decisions. Checkpoints record the mode and selected axes;
+ordinary adaptive resume cannot silently load them. Passing
+`--final-range-axes com_range` or `--final-range-axes head_com_range` isolates
+one owned axis and keeps the other at its source stage. Omission selects all owned axes. An isolated checkpoint must
+resume with the same selection. The launcher runs exact-resume smoke64/5 before
+every fixed-budget training segment. `--iterations` is cumulative, so 1500
+from a 1250 source consumes 250 updates.
+
+Candidate preservation requires every bucket to remain within .05 of its
+reference; product mastery still requires all six final-distribution scores
+≥.80 plus fresh held-out seeds, baked-normalizer ONNX, CPU rehearsal and full
+video review. The full-range treatment below failed bucket preservation before
+product review. Paired seeds 20261001–03 have now been reused; call them
+diagnostic, and reserve new unconsumed seeds for subsequent acceptance.
 
 The sensor-coverage derived inputs initialize a fresh controller for bootstrap and
 change only branch-local rollback/audit metadata plus the coverage fraction.
@@ -678,7 +684,7 @@ final stages, disables gate/consolidation decisions and final-CoM rehearsal,
 persists `training_mode=final_range_finetune`, and rejects ordinary resumes of
 fine-tune checkpoints. Smoke64/5 passed, then seed23 consumed exactly 250
 updates at 4096 environments from the retained update-1250 checkpoint. The
-fresh native cohort rejected the candidate: source lower tail `.710326` versus
+paired native cohort rejected the candidate: source lower tail `.710326` versus
 candidate `.695980`, yaw `.774594→.710368` (−.064225), and turn-right
 `.725714→.695980`. Its baked-normalizer ONNX and CPU rehearsal were generated
 for audit, but the actor is not retained. Full product video review and
@@ -686,12 +692,38 @@ seed-17/23/47 reproduction remain gated on a candidate that passes fresh native
 preservation and all-six `.80` mastery. Result:
 `/tmp/microduck-final-range-finetune-s23-v2/verification.json`.
 
-The next bounded comparison isolates the two owned axes from the same
-update-1250 checkpoint: one 250-update arm moves only `com_range` to final and
-one matched arm moves only `head_com_range` to final. Both retain the source
-axis stage, use the same seed23/4096 budget and fresh final cohort, and stop
-without extension if preservation fails. Contract:
-`/tmp/microduck-final-axis-isolation-s23-v1/experiment-contract.json`.
+The two single-axis comparisons also completed: both resume the same 1250
+checkpoint, spend 250 updates at seed23/4096 envs, and leave the other axis at
+its source stage. Trunk-only scores were .9449/.7117/.7790/.7348/.7796/.6781;
+head-only .9608/.7905/.7799/.7296/.7929/.7081. Their minima .678133 and .708083
+both fall below the source .710326, failing the declared no-regression bound.
+Head-only improves forward by .08019 but does not preserve the minimum; neither
+arm reaches six-bucket .80 mastery. In its weakest right-turn trace, yaw mean
+−.797 over 1–5 s tracks the −.8 command, while tilt p95 .1783 rad lowers the
+upright component to .7081 (tracking component .8302). The other two candidates
+are tracking-limited. This establishes a measured tracking/upright trade-off,
+not a single universal undertracking diagnosis. All three windows are rejected; the source
+checkpoint remains the reference. These results reject the tested axis-isolation
+repair as sufficient, without establishing that all such curricula must fail.
+Do not extend these windows unchanged.
+
+Contract and completed audit:
+`/tmp/microduck-final-axis-isolation-s23-v1/experiment-contract.json` and
+`verification.json` in that directory. The audit covers all 72 native traces,
+18 CPU traces, fixed update budgets, nonpositive penalties, identical consumed
+reset fields/initial observations, rederived report scores and exported actions.
+Source provenance is explicit: the full/trunk runs used the worktree; head-only
+and both isolated cohorts use the 262-file frozen source with manifest SHA
+`c345ec7af0dcd3f4ba227d7e9a53072833919fcfcd05ac432163cb9f235305b1`.
+Earlier descriptive source strings are not content hashes. None of these reused
+cohorts or incomplete video reviews count as fresh product acceptance.
+
+Implementation proof: 332 focused adaptive tests and Ruff pass, plus three
+smoke64/5 and real 250-update runs. `fbfbc21`/`762a1b0` implement final-range
+resume/isolation; `d2c865e` isolates registry configuration and locks axis-set
+resume compatibility. README and the accepted specialist reproducibility doc
+were checked and remain unchanged; these experimental candidates do not alter
+the accepted specialist inventory.
 
 ### Pre-consolidation reference and measured limits
 
