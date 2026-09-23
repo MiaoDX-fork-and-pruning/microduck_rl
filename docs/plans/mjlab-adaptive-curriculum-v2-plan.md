@@ -17,7 +17,10 @@ CPU acceptance still fail. The bounded 6750→7000 continuation completed and wa
 retained, but regressed CPU right-turn stability; stop unchanged extensions.
 6750 remains the better product diagnostic reference. Corrected CPU current
 limits and a fixed-actor delay comparison do not resolve overspeed. Formal
-training seeds 17/23/47 remain gated.
+training seeds 17/23/47 remain gated. Further paired diagnostics localize the
+remaining issue to robustness/physical transfer rather than a sufficient sensor
+or integrator fix. A bounded −.4 smoothing comparison is now running from 6750,
+at unchanged entropy zero; no automatic consolidation/default promotion yet.
 Date: 2026-09-23
 Related:
 
@@ -141,9 +144,62 @@ diagnostic seed limit the conclusion; this is not held-out acceptance.
 Diagnostic source: `/tmp/microduck-current-limit-source-918bfb6`, git archive plus
 the unchanged pre-existing CPU seed overlay; 681 files verified before/after.
 Manifest SHA: `a22c92f5a416f33e954e49ecc47055a0345e177e71ed870ba9267ae85e6be791`.
-No training has run on this source. Next isolate BAM versus XML position-PD
-response with a fixed actor and matched physical state before selecting another
-training treatment; new-source long training requires smoke64/5.
+The following treatment passed smoke64/5 before training on this source.
+
+### Transfer comparison limits and bounded smoothing consolidation
+
+Diagnostic index: `/tmp/microduck-transfer-diagnostics-6750/summary.json`.
+It verifies 19 reports and 120 traces. Replacing native actor slots 0:34 with
+current, unbiased physical measurements gives six passing scores on the reused
+seed: .954/.895/.830/.901/.847/.840; yaw mean .824 rad/s. Nominal encoder/IMU
+calibration also passes all six. That latter intervention changes both actor
+observations and physical position targets: mjlab's `JointPositionAction`
+subtracts encoder bias before sending targets. Clean actor inputs alone leave
+that target perturbation active. Neither diagnostic establishes product DR
+robustness, and neither reproduces the CPU overspeed.
+
+CPU Euler and implicitfast produce identical trace arrays at both 5 and 1 ms;
+shrinking timestep changes yaw mean 1.104→1.107, so integration is not a repair.
+A 20 ms joint-velocity observation lag worsens CPU yaw score .531→.375, improves
+left and worsens right. Native removal of that observation lag leaves yaw near
+target. Product sensor/actuator delays remain unchanged.
+
+The installed library's `bam.mujoco.MujocoController` matches friction `efc_id`
+against joint indexes. On the actual floating-base robot, CPU MuJoCo returns
+DOF indexes 6–19, while servo joint indexes are 1–14. Native BAM already uses
+DOF indexes. Temporary diagnostic v2 corrects that lookup; no installed package
+or product code is changed. Older CPU BAM comparisons are not evidence of exact
+native actuator equivalence. Corrected nominal CPU BAM yaw still averages 1.029;
+matching captured physical parameters, reset and encoder target bias gives
+1.001. Native actuator delay and solver call timing are not replicated, so this
+comparison remains a partial physical alignment, not cross-engine parity.
+
+These results do not justify changing a product-harness default to obtain a
+pass. Native acquisition exists on this diagnostic condition, while product
+sensor robustness and CPU turn oscillation remain open. Compare a bounded
+consolidation treatment: reduce the active action-rate relief from −.2 to −.4
+at unchanged zero entropy, after deterministic skill acquisition. Canonical final
+weight is −1.0; the intermediate value tests stronger smoothing without a
+fivefold jump. CPU/native action-rate and angular-rate measurements are in
+`/tmp/microduck-adaptive-consolidation-smoothness-evidence.json`; these motivate
+a hypothesis, not a proven causal relationship or a new acceptance metric.
+
+Live contract: `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2/experiment-contract.json`.
+Session `74497`, seed 17, 4096 envs, exactly 250 updates from the same 6750 actor,
+same gate cohort 20260815–17, final diagnostic seed 20260915, preserved product
+DR and .80 gates. The derived checkpoint differs only in relief weight and its
+rollback target path. Actor, critic and optimizer equal original 6750 and its
+known-good snapshot; all 179 training-source files equal the old control source.
+Smoke64/5 passes. Read-only driver records live −.4 reward-manager weight and
+override, actor/action ABI, and restored step 162001. Entropy zero and the −.4
+CLI override are verified against saved params. Native gate, retained native-final
+and CPU v4 checks run automatically after training. The earlier v1 launch failed
+before smoke due a missing source label; v2 supplies the label explicitly.
+
+Require retained native preservation plus CPU stability improvement before
+promoting this treatment or implementing an automatic taper. Rollback or no
+joint improvement stops it. Unchanged low-entropy budget extension remains
+disallowed; formal multi-seed/held-out acceptance remains open.
 
 ### Pre-consolidation reference and measured limits
 

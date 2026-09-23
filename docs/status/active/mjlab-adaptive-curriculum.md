@@ -12,7 +12,8 @@ Project-status writer: not assigned; project-status delta: none.
 Phase 0/1 automation works; Phase 2A usable-policy acquisition remains open.
 The latest **7000 actor** was retained by the native gate, but regressed in CPU
 right-turn stability. **6750 remains the better product diagnostic reference**.
-No training or diagnostic process is running. Do not extend the same treatment.
+The unchanged treatment is stopped. A bounded **−.4 smoothing** comparison is
+running in session `74497`; see the live contract below.
 Every capability bucket must score **≥ .80**; scores below are not success rates.
 Both adaptive CoM axes remain at stage 0 (±3 mm).
 
@@ -50,8 +51,9 @@ from the authoritative summary. Previously consumed seeds remain diagnostic.
 Blocker: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
 Classification: low-entropy consolidation improves deterministic acquisition,
 but native tracking/DR robustness and CPU actuator-path transfer remain open.
-Last decision delta: the extra window regresses product behavior; current-limit
-alignment and a paired actuator-delay probe do not resolve yaw overspeed.
+Last decision delta: clean native actor inputs pass this diagnostic seed, but
+CPU overspeed survives actuator, delay and integrator comparisons. No default
+harness change is justified; test stronger smoothing after skill acquisition.
 
 The single authorized follow-up, **6750→7000**, completed in session `43041`
 after smoke64/5. Seed 17, 4096 envs, explicit entropy zero, unchanged training
@@ -78,10 +80,30 @@ Every continuation must pass `--agent.algorithm.entropy-coef 0.0` and verify the
 saved config. Do not claim an automatic entropy controller exists or change the
 default before behavioral proof.
 
-Next: isolate BAM versus XML position-PD response with a fixed actor and matched
-physical state, then choose a bounded adaptive-training change from that evidence.
-Do not change runtime delay or relax acceptance. Fresh held-out seeds and the
-full acceptance below remain mandatory.
+### Running bounded smoothing comparison
+
+Session `74497`, root `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2`.
+Poll this handle; do not restart on an observation timeout.
+Contract: `.../experiment-contract.json`; wrapper:
+`/tmp/run_microduck_smooth_consolidation_v2.py`.
+From the same 6750 actor, seed 17, 4096 envs, 250 updates, entropy .0. Change
+only the active relief weight **−.2→−.4**; retain the teacher, stage gate cohort,
+DR, commands and .80 acceptance. The canonical final smoothing weight is −1.0,
+so this is an intermediate consolidation treatment, not a default promotion.
+The derived checkpoint changes only the relief weight and its rollback path.
+Actor, critic and optimizer exactly match both original 6750 and known-good.
+All 179 training-source files match the prior control's `610fbc5` snapshot.
+
+Smoke64/5 passes; live training confirms weight/override −.4, 61D/14D and resumed
+env step 162001. Read-only driver probes are in `.../smoothing-04-250/live-weights.jsonl`.
+Automatic native gate, retained final-native and CPU v4 evaluations follow.
+Success requires retained native preservation and CPU stability improvement.
+Rollback or no joint improvement stops this treatment; do not extend it merely
+to spend more budget. The earlier `...-s17-250` launch failed before smoke due a
+missing source label; v2 supplies it explicitly and owns the running process.
+
+Do not change runtime delay or relax acceptance. Fresh held-out seeds and full
+acceptance remain mandatory; automatic entropy/taper decisions remain unproven.
 
 ## CPU harness and delay evidence
 
@@ -105,6 +127,29 @@ Native zero-delay still consumes the original buffer/RNG; recorded physical and
 sensor resets, first observation and sampled lag sequences match. Native nominal
 exactly reproduces previous final traces. All 36 trace hashes, native/ONNX parity
 and 681 source files pass. One reused diagnostic seed; no new acceptance claim.
+
+## Further transfer comparisons
+
+`/tmp/microduck-transfer-diagnostics-6750/summary.json` verifies 19 reports and
+120 traces. Native with current, clean actor inputs passes all six on the reused
+seed (.954/.895/.830/.901/.847/.840), yaw .824 rad/s. Nominal encoder/IMU
+calibration also passes all six; **encoder bias changes action targets as well
+as observations** (`JointPositionAction` subtracts it). Neither is product DR
+acceptance. Actor inputs alone do not reproduce CPU yaw overspeed.
+
+CPU Euler and implicitfast trajectories are identical at each tested timestep;
+5→1 ms leaves yaw at 1.104→1.107. Adding a 20 ms joint-velocity observation lag
+worsens CPU yaw (.531→.375) while helping left and hurting right; native bypass
+does not reproduce overspeed. Neither is a sufficient repair.
+
+The library CPU BAM controller uses joint IDs to match friction `efc_id`; actual
+MuJoCo friction constraints use DOF IDs (6–19 versus joint IDs 1–14 here).
+Only temporary diagnostics correct this; installed dependencies are untouched.
+Corrected CPU BAM yaw is still 1.029 rad/s. With captured native physical
+parameters, reset and encoder target offsets it is 1.001; actuator delay and
+solver call timing remain unmatched, so this is not exact native replay.
+No product harness default changes follow. Library-based earlier comparisons
+are limited by that indexing error; use the corrected v2 artifact in the summary.
 
 ## Evidence behind the current treatment
 
@@ -143,7 +188,8 @@ live weighted-cost/61D/14D/unfiltered-action proof passed before these runs.
 Current CPU/delay diagnostic source:
 `/tmp/microduck-current-limit-source-918bfb6`, 681 verified files, manifest SHA
 `a22c92f5a416f33e954e49ecc47055a0345e177e71ed870ba9267ae85e6be791`.
-No training has run on this source; a new long run requires smoke64/5.
+The current −.4 comparison is the first training run on this source, after its
+own smoke64/5. Its 179 training-source files match the old source exactly.
 The current-limit fix has 30 passing focused tests; two failures require absent
 pre-existing specialist artifacts and reproduce on pre-fix `610fbc5`.
 Focused Ruff/diff pass; `infer_policy.py` has no new Ruff findings.
