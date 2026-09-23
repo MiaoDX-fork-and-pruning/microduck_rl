@@ -278,7 +278,15 @@ class BucketFeedbackTracker:
             raise ValueError("unsupported bucket feedback schema")
         if tuple(payload.get("bucket_names", ())) != tuple(COMMAND_FEEDBACK_BUCKETS):
             raise ValueError("bucket feedback bucket mismatch")
-        if tuple(payload.get("term_names", ())) != self.term_names:
+        saved_terms = tuple(str(name) for name in payload.get("term_names", ()))
+        if not saved_terms or len(set(saved_terms)) != len(saved_terms):
+            raise ValueError("bucket feedback reward term mismatch")
+        # Adaptive-only diagnostics may add a reward term while resuming a
+        # checkpoint created by the base recipe.  Preserve the accumulated
+        # mass for terms that still exist and initialize the new term at zero.
+        # Removing a persisted term is unsafe because its evidence cannot be
+        # represented by the destination tracker, so reject that direction.
+        if any(name not in self.term_names for name in saved_terms):
             raise ValueError("bucket feedback reward term mismatch")
         step_dt = float(payload.get("step_dt", self.step_dt))
         if not np.isclose(step_dt, self.step_dt):
@@ -290,14 +298,17 @@ class BucketFeedbackTracker:
             raise ValueError("bucket feedback payload is incomplete")
         try:
             count_values = [int(counts[name]) for name in COMMAND_FEEDBACK_BUCKETS]
-            signed_values = [
-                [float(signed[name][term]) for term in self.term_names]
-                for name in COMMAND_FEEDBACK_BUCKETS
-            ]
-            absolute_values = [
-                [float(absolute[name][term]) for term in self.term_names]
-                for name in COMMAND_FEEDBACK_BUCKETS
-            ]
+            signed_values = []
+            absolute_values = []
+            for name in COMMAND_FEEDBACK_BUCKETS:
+                signed_row = [0.0] * len(self.term_names)
+                absolute_row = [0.0] * len(self.term_names)
+                for saved_index, term in enumerate(saved_terms):
+                    current_index = self.term_names.index(term)
+                    signed_row[current_index] = float(signed[name][term])
+                    absolute_row[current_index] = float(absolute[name][term])
+                signed_values.append(signed_row)
+                absolute_values.append(absolute_row)
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("bucket feedback payload has invalid values") from exc
         if any(value < 0 for value in count_values) or not np.isfinite(signed_values).all() or not np.isfinite(absolute_values).all():

@@ -67,6 +67,27 @@ def test_bucket_feedback_rejects_wrong_reward_schema():
         tracker.load_state_dict(payload)
 
 
+def test_bucket_feedback_resumes_when_adaptive_term_is_added():
+    source = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
+    source.record(torch.tensor([0]), torch.tensor([[2.0]]))
+    payload = source.state_dict()
+
+    restored = BucketFeedbackTracker(("reward", "new_adaptive_cost"), device="cpu", step_dt=0.02)
+    restored.load_state_dict(payload)
+    assert restored.state_dict()["weighted_reward_mass"]["zero"] == {
+        "reward": pytest.approx(0.04),
+        "new_adaptive_cost": pytest.approx(0.0),
+    }
+
+
+def test_bucket_feedback_rejects_removed_persisted_term():
+    source = BucketFeedbackTracker(("reward", "old_term"), device="cpu", step_dt=0.02)
+    payload = source.state_dict()
+    restored = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
+    with pytest.raises(ValueError, match="reward term mismatch"):
+        restored.load_state_dict(payload)
+
+
 def test_bucket_feedback_buffers_remain_mutable_when_created_in_rollout_mode():
     with torch.inference_mode():
         tracker = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
