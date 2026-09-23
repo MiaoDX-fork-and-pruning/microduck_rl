@@ -1,26 +1,13 @@
 # MJLab Adaptive Curriculum v2 Plan
 
-Status: Phase 0/1 automation complete; Phase 2A usable-policy acquisition remains
-unproven. Bounded adaptive smoothing relief improved native yaw in one matched
-250-update window, but a later candidate was rolled back, the retained policy
-fails native/CPU acceptance, and a 10-seed stage diagnostic exposes startup and
-lateral-survival failures. Fixed sensor-bias ablations confirm calibration
-sensitivity in yaw; matched push ablations locate the lateral recovery regression.
-A bounded pure-yaw-only relief treatment (`610fbc5`) completed smoke64/5 and
-250 updates. It preserved survival in the failing full-push case but lost yaw
-acquisition (zero gate/native/CPU yaw scores), so it is not promoted. A fixed-actor
-noise diagnostic exposes deterministic startup failure masked by stochastic
-rollouts. A matched low-entropy consolidation comparison now retains an improved
-6750 actor: five of six buckets pass in one final-native diagnostic, CPU yaw and
-lateral improve, and the known sensor/push failures improve. Native cohort and
-CPU acceptance still fail. The bounded 6750→7000 continuation completed and was
-retained, but regressed CPU right-turn stability; stop unchanged extensions.
-6750 remains the better product diagnostic reference. Corrected CPU current
-limits and a fixed-actor delay comparison do not resolve overspeed. Formal
-training seeds 17/23/47 remain gated. Further paired diagnostics localize the
-remaining issue to robustness/physical transfer rather than a sufficient sensor
-or integrator fix. A bounded −.4 smoothing comparison is now running from 6750,
-at unchanged entropy zero; no automatic consolidation/default promotion yet.
+Status: Phase 0/1 automation works; Phase 2A usable-policy acquisition remains
+open. Low-entropy consolidation retained an improved 6750 actor, but native
+cohort and CPU acceptance still fail. The unchanged 7000 continuation and the
+matched stronger-smoothing (−.4) treatment both completed without joint native/
+CPU improvement; neither may be extended unchanged. 6750 remains the diagnostic
+reference. Resume now preserves live PPO entropy and the campaign reconstructs
+nondefault relief settings. Automatic consolidation selection, final-range
+mastery and training seeds 17/23/47 remain unproven. No long training is running.
 Date: 2026-09-23
 Related:
 
@@ -103,10 +90,11 @@ survives and turns at -.990 rad/s: samplewise error .615 exceeds the .6 stabilit
 cap; filtered error .201 alone would score .665. It is not idle.
 
 The declared stop criterion fired: no further unchanged low-entropy window.
-6750 stays the better product diagnostic reference. Entropy zero remains an
-explicit `--agent.algorithm.entropy-coef 0.0` override; adaptive checkpoints do
-not persist/inherit it and a default resume returns to .01. No automatic
-entropy-consolidation controller or default change has behavioral acceptance.
+6750 stays the better product diagnostic reference. These historical checkpoints
+predate entropy persistence, so they still need an explicit zero-entropy launch
+setting. New checkpoints preserve the live coefficient; see Resume integrity
+below. No automatic entropy-consolidation controller or default change has
+behavioral acceptance.
 
 ### Corrected CPU rehearsal and paired delay diagnosis
 
@@ -146,7 +134,7 @@ the unchanged pre-existing CPU seed overlay; 681 files verified before/after.
 Manifest SHA: `a22c92f5a416f33e954e49ecc47055a0345e177e71ed870ba9267ae85e6be791`.
 The following treatment passed smoke64/5 before training on this source.
 
-### Transfer comparison limits and bounded smoothing consolidation
+### Transfer comparison limits and completed smoothing comparison
 
 Diagnostic index: `/tmp/microduck-transfer-diagnostics-6750/summary.json`.
 It verifies 19 reports and 120 traces. Replacing native actor slots 0:34 with
@@ -176,30 +164,78 @@ comparison remains a partial physical alignment, not cross-engine parity.
 
 These results do not justify changing a product-harness default to obtain a
 pass. Native acquisition exists on this diagnostic condition, while product
-sensor robustness and CPU turn oscillation remain open. Compare a bounded
-consolidation treatment: reduce the active action-rate relief from −.2 to −.4
-at unchanged zero entropy, after deterministic skill acquisition. Canonical final
-weight is −1.0; the intermediate value tests stronger smoothing without a
-fivefold jump. CPU/native action-rate and angular-rate measurements are in
-`/tmp/microduck-adaptive-consolidation-smoothness-evidence.json`; these motivate
-a hypothesis, not a proven causal relationship or a new acceptance metric.
+sensor robustness and CPU turn oscillation remain open. A bounded consolidation
+treatment reduced action-rate relief from −.2 to −.4 at unchanged entropy zero.
+Canonical final weight is −1.0; −.4 was an experimental intermediate weight.
 
-Live contract: `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2/experiment-contract.json`.
-Session `74497`, seed 17, 4096 envs, exactly 250 updates from the same 6750 actor,
-same gate cohort 20260815–17, final diagnostic seed 20260915, preserved product
-DR and .80 gates. The derived checkpoint differs only in relief weight and its
-rollback target path. Actor, critic and optimizer equal original 6750 and its
-known-good snapshot; all 179 training-source files equal the old control source.
-Smoke64/5 passes. Read-only driver records live −.4 reward-manager weight and
-override, actor/action ABI, and restored step 162001. Entropy zero and the −.4
-CLI override are verified against saved params. Native gate, retained native-final
-and CPU v4 checks run automatically after training. The earlier v1 launch failed
-before smoke due a missing source label; v2 supplies the label explicitly.
+Contract: `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2/experiment-contract.json`.
+Authoritative result: `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2/experiment-summary.json`.
+Session `74497` completed. Seed 17, 4096 envs, exactly 250 updates from the same
+6750 actor, gate cohort 20260815–17, final diagnostic seed 20260915, preserved
+product DR and .80 gates. The derived start differs only in relief weight and
+rollback path; actor, critic and optimizer equal original 6750/known-good.
+All 179 training-source files equal the earlier control, and all 681 source
+manifest entries, report/trace hashes and final checkpoint hash verify.
+Smoke64/5 and live −.4 reward-manager, entropy-zero and 61D/14D checks pass.
 
-Require retained native preservation plus CPU stability improvement before
-promoting this treatment or implementing an automatic taper. Rollback or no
-joint improvement stops it. Unchanged low-entropy budget extension remains
-disallowed; formal multi-seed/held-out acceptance remains open.
+The retained 7000 actor equals the candidate and known-good across all 13 actor
+state tensors and differs from the start. No rollback. Mean action std falls
+.10117→.06785. Checkpoint SHA:
+`29dd98bb98506fc9f9618b88a2cfd25a32b997e42372f2b7495fca809de071f7`.
+
+| −.4 treatment, retained 7000 | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stage gate, worst of three | .964 | .822 | .777 | .672 | .818 | .783 |
+| Final-native diagnostic | .938 | .885 | .807 | .848 | .746 | .790 |
+| CPU v4 | .970 | .892 | .858 | .613 | .793 | .794 |
+
+Native/CPU pure-yaw means are .885/1.041 rad/s for a .8 command. CPU right
+stability recovers relative to the unchanged −.2 control, and CPU left improves;
+but CPU yaw worsens relative to that control (.761→.613), and stage native yaw
+falls from .790 at 6750 to .672. Final native has four passing buckets; CPU has
+three. Scores are not success rates. The declared joint-improvement criterion
+fails: **stop the treatment; do not implement/promote a −.4 taper or extend it**.
+6750 remains the reference, not an accepted usable policy. Reused diagnostic
+seeds are not fresh held-out acceptance.
+
+### Resume integrity
+
+Root causes reproduced before the fix: RSL-RL persists model/optimizer tensors,
+but omits PPO entropy; the adaptive env factory inherited only relief scope,
+so a saved −.4 controller was rebuilt with −.2 and rejected on full restore.
+Eight targeted regression cases failed before the fix (two compatibility cases
+already passed). New adaptive checkpoints record the live entropy coefficient;
+full resume/rollback restores it, while actor-only load does not change it.
+Legacy checkpoints without this metadata retain the configured launch value.
+
+For a deliberate change on full resume use
+`--env.adaptive-entropy-coef-override 0.0`. It is recorded and applies after
+full loads, including rollback. Ordinary subsequent resumes need no override.
+Fresh/legacy runs also support the existing `--agent.algorithm.entropy-coef`.
+The campaign's exact-path resume reconstructs relief weight, thresholds, window
+limits and scope before environment creation; explicit conflicting controller
+settings still fail validation. This does not choose entropy or smoothing
+adaptively. MJLab writes `params/agent.yaml` before runner restore; the effective
+restored entropy is in checkpoint/result metadata and the live proof, not
+necessarily that launch-config file.
+
+Proof: 109 focused tests pass; focused Ruff/diff checks pass with no additional
+findings in the broader pre-existing lint baseline. Real fresh64/5,
+legacy-resume64/5 and ordinary-resume64/5 all pass, with live entropy zero,
+ordinary-resume relief −.4, finite rewards/61D observations/14D actions.
+The final smoke checkpoint also exports through `scripts/export.py` with baked
+normalization; eight PyTorch/CPU-ONNX comparison cases pass at 1e-5 tolerance.
+`/tmp/microduck-resume-settings-smoke-a408d80/summary.json` records exact commands,
+checkpoint hashes and effective values. These short runs verify restoration,
+not policy improvement or matched-budget quality. Source snapshot:
+`/tmp/microduck-resume-settings-source-a408d80`, 681 manifest entries, SHA
+`aded72b5050d10e73c7e00e44210843fa339d45c228126f6b4b5f156850a9207`.
+
+Next product slice: reproduce the successful 6500→6750 consolidation through a
+bounded runner decision using frozen gate feedback, with persisted attempt
+budget and rollback. The negative unchanged continuation constrains its stopping
+rule. Do not promote a manual override into an automatic default without this
+behavioral proof; do not reopen rejected smoothing/delay/integrator treatments.
 
 ### Pre-consolidation reference and measured limits
 

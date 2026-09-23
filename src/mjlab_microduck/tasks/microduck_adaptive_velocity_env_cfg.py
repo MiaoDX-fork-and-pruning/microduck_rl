@@ -165,6 +165,10 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # overrides deterministic while ordinary resumes remain exact.
     adaptive_transition_probability_override: float | None = None
     adaptive_transition_bootstrap_mode_override: bool = False
+    # Full resumes restore the checkpoint's PPO entropy coefficient. Use this
+    # explicit treatment to change it after restore, including rollback loads.
+    # Fresh/legacy runs otherwise keep agent.algorithm.entropy_coef.
+    adaptive_entropy_coef_override: float | None = None
     # A bounded reward relief used by the lateral-drive adaptive recipe when
     # the yaw frontier is still unacquired.  The runner owns its state and
     # persists it in the adaptive checkpoint; the canonical action-rate
@@ -402,9 +406,19 @@ def make_microduck_adaptive_velocity_env_cfg(
                     # The controller temporarily softens action smoothing while
                     # the strict native capability gate stays unchanged.
                     cfg.adaptive_action_rate_relief = True
+                    saved = (_resume_adaptive_state() or {}).get("action_rate_relief")
+                    if isinstance(saved, dict):
+                        for field, key in (
+                            ("weight", "relief_weight"),
+                            ("trigger", "trigger_threshold"),
+                            ("release", "release_threshold"),
+                            ("windows", "active_windows"),
+                            ("cooldown_windows", "cooldown_windows"),
+                        ):
+                            if key in saved:
+                                setattr(cfg, f"adaptive_action_rate_relief_{field}", saved[key])
                     scope = os.environ.get("MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE")
                     if scope is None:
-                        saved = (_resume_adaptive_state() or {}).get("action_rate_relief")
                         scope = saved.get("scope", "all") if isinstance(saved, dict) else "all"
                     if scope not in ("all", "pure_yaw"):
                         raise ValueError("action-rate relief scope must be all or pure_yaw")

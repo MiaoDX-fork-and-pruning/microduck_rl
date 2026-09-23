@@ -41,6 +41,15 @@ from . import MicroduckOnPolicyRunner
 COMMAND_FEEDBACK_BUCKETS = (*BUCKETS, "nominal")
 
 
+def _entropy_coefficient(value: object) -> float:
+    if (
+        isinstance(value, bool) or not isinstance(value, (int, float))
+        or not np.isfinite(value) or value < 0.0
+    ):
+        raise ValueError("adaptive entropy coefficient must be a finite nonnegative number")
+    return float(value)
+
+
 def _manager_env(env):
     """Resolve the ManagerBasedRlEnv behind VecEnv wrappers."""
     current = env
@@ -482,6 +491,29 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                     "completed_iterations": self.completed_iterations,
                 })
                 self._needs_reset = True
+
+        if getattr(env.cfg, "adaptive_entropy_coef_override", None) is not None:
+            self._apply_entropy_override()
+
+    def _set_entropy_coefficient(self, value: object) -> None:
+        coefficient = _entropy_coefficient(value)
+        self.alg.entropy_coef = coefficient
+        self.cfg.setdefault("algorithm", {})["entropy_coef"] = coefficient
+
+    def _apply_entropy_override(self) -> None:
+        """Apply a deliberate launch treatment after restoring checkpoint state."""
+        requested = getattr(self.env.cfg, "adaptive_entropy_coef_override", None)
+        if requested is None:
+            return
+        previous = self.alg.entropy_coef
+        self._set_entropy_coefficient(requested)
+        if previous != self.alg.entropy_coef:
+            self.evaluation_events.append({
+                "kind": "entropy_override",
+                "previous_entropy_coef": previous,
+                "entropy_coef": self.alg.entropy_coef,
+                "completed_iterations": self.completed_iterations,
+            })
 
     def _set_final_com_fraction(self, fraction: float) -> None:
         """Install rehearsal on live, adaptive-owned axes using stock DR fields."""
@@ -1032,6 +1064,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             "evaluation_distribution": getattr(self, "evaluation_distribution", "final"),
             "env_step": completed * int(getattr(self, "cfg", {}).get("num_steps_per_env", 24)),
         })
+        # RSL-RL saves model/optimizer tensors but not this PPO loss coefficient.
+        # Save the live value so a restarted consolidation run stays identical.
+        if hasattr(self.alg, "entropy_coef"):
+            state["entropy_coef"] = _entropy_coefficient(self.alg.entropy_coef)
         return {"adaptive_curriculum": state, "adaptive_rng_state": self._rng_state()}
 
     def load(self, path: str, load_cfg=None, strict: bool = True, map_location=None):
@@ -1055,7 +1091,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         action_rate_relief = deepcopy(getattr(self, "action_rate_relief", None))
         completed = self.current_learning_iteration + 1
         distribution = getattr(self, "evaluation_distribution", "final")
+        entropy_coef = None
+        override = getattr(self.env.cfg, "adaptive_entropy_coef_override", None)
+        if override is not None:
+            _entropy_coefficient(override)
         if state:
+            if "entropy_coef" in state:
+                entropy_coef = _entropy_coefficient(state["entropy_coef"])
             if state.get("version", 1) != 1:
                 raise ValueError("unsupported adaptive checkpoint version")
             if state.get("task_id") and state["task_id"] != getattr(self.env.cfg, "task_id", None):
@@ -1262,6 +1304,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             self._restore_rng_state(infos["adaptive_rng_state"])
         self.resume_checkpoint = str(Path(path).resolve())
         self._needs_reset = True
+        if entropy_coef is not None:
+            self._set_entropy_coefficient(entropy_coef)
+        # Legacy checkpoints have no entropy field: keep the launch coefficient.
+        # An explicit treatment overrides full loads (including rollback), while
+        # ordinary resumes/rollbacks restore the saved trainer coefficient.
+        self._apply_entropy_override()
         return infos
 
     def rollback(self, checkpoint_path: str):

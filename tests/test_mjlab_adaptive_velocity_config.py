@@ -29,6 +29,31 @@ def test_adaptive_factory_is_separate_static_initial_slice() -> None:
     assert adaptive.commands["twist"].rel_standing_envs == 0.02
 
 
+def test_resume_inherits_action_rate_relief_contract(monkeypatch, tmp_path) -> None:
+    import torch
+
+    from mjlab_microduck.tasks.adaptive_curriculum import AdaptiveActionRateRelief
+
+    relief = AdaptiveActionRateRelief(
+        relief_weight=-0.4, trigger_threshold=0.5, release_threshold=0.85,
+        active_windows=3, cooldown_windows=2,
+    )
+    checkpoint = tmp_path / "smoothing.pt"
+    torch.save({"infos": {"adaptive_curriculum": {"action_rate_relief": relief.state_dict()}}}, checkpoint)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT", str(checkpoint))
+    cfg = make_microduck_adaptive_velocity_env_cfg(diagnostic_mode="lateral_drive", command_exposure=True)
+    restored = AdaptiveActionRateRelief(
+        relief_weight=cfg.adaptive_action_rate_relief_weight,
+        trigger_threshold=cfg.adaptive_action_rate_relief_trigger,
+        release_threshold=cfg.adaptive_action_rate_relief_release,
+        active_windows=cfg.adaptive_action_rate_relief_windows,
+        cooldown_windows=cfg.adaptive_action_rate_relief_cooldown_windows,
+        scope=cfg.adaptive_action_rate_relief_scope,
+    )
+    restored.load_state_dict(relief.state_dict())
+    assert restored.state_dict() == relief.state_dict()
+
+
 def test_adaptive_runner_has_distinct_experiment_name() -> None:
     assert AdaptiveMicroduckRlCfg.experiment_name == "velocity_adaptive"
     assert AdaptiveMicroduckRlCfg.run_name == "velocity_adaptive"
