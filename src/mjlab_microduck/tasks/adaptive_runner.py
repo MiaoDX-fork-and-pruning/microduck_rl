@@ -311,6 +311,10 @@ class BucketFeedbackTracker:
                 absolute_values.append(absolute_row)
         except (KeyError, TypeError, ValueError) as exc:
             raise ValueError("bucket feedback payload has invalid values") from exc
+        if set(saved_terms) != set(self.term_names) and (
+            sum(count_values) > 0 or int(payload.get("unclassified_count", 0)) > 0
+        ):
+            raise ValueError("empty feedback window required when reward terms change")
         if any(value < 0 for value in count_values) or not np.isfinite(signed_values).all() or not np.isfinite(absolute_values).all():
             raise ValueError("bucket feedback payload has non-finite values")
         self.sample_count.copy_(torch.tensor(count_values, dtype=torch.long, device=self.device))

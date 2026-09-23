@@ -69,15 +69,35 @@ def test_bucket_feedback_rejects_wrong_reward_schema():
 
 def test_bucket_feedback_resumes_when_adaptive_term_is_added():
     source = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
-    source.record(torch.tensor([0]), torch.tensor([[2.0]]))
     payload = source.state_dict()
 
     restored = BucketFeedbackTracker(("reward", "new_adaptive_cost"), device="cpu", step_dt=0.02)
     restored.load_state_dict(payload)
     assert restored.state_dict()["weighted_reward_mass"]["zero"] == {
-        "reward": pytest.approx(0.04),
+        "reward": pytest.approx(0.0),
         "new_adaptive_cost": pytest.approx(0.0),
     }
+    restored.record(torch.tensor([0]), torch.tensor([[2.0, -0.5]]))
+    snapshot = restored.state_dict()
+    assert snapshot["sample_count"]["zero"] == 1
+    assert snapshot["weighted_reward_mass"]["zero"]["new_adaptive_cost"] == pytest.approx(-0.01)
+
+
+@pytest.mark.parametrize("reward", [0.0, 2.0])
+def test_new_reward_cannot_borrow_counts_from_a_partially_collected_window(reward):
+    source = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
+    source.record(torch.tensor([0]), torch.tensor([[reward]]))
+    restored = BucketFeedbackTracker(("reward", "new_cost"), device="cpu", step_dt=0.02)
+    with pytest.raises(ValueError, match="empty feedback window"):
+        restored.load_state_dict(source.state_dict())
+
+
+def test_new_reward_rejects_unclassified_samples_in_saved_window():
+    source = BucketFeedbackTracker(("reward",), device="cpu", step_dt=0.02)
+    source.record(torch.tensor([-1]), torch.tensor([[0.0]]))
+    restored = BucketFeedbackTracker(("reward", "new_cost"), device="cpu", step_dt=0.02)
+    with pytest.raises(ValueError, match="empty feedback window"):
+        restored.load_state_dict(source.state_dict())
 
 
 def test_bucket_feedback_rejects_removed_persisted_term():
