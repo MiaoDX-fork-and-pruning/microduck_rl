@@ -921,6 +921,52 @@ def test_actor_only_load_does_not_restore_trainer_rng_gate_or_live_ranges(monkey
     assert evaluator._rng_state()["python"] == before_rng["python"]
 
 
+def test_final_range_finetune_loads_terminal_consolidation_as_new_window(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.entropy_consolidation = EntropyConsolidation()
+    source.alg.entropy_coef = 0.0
+    source.entropy_consolidation.begin(
+        _consolidation_metrics(), entropy_coef=0.01, checkpoint="baseline.pt",
+        completed_iterations=5, window_updates=2, focus_bucket="yaw",
+    )
+    source.entropy_consolidation.finish(
+        _consolidation_metrics(), gate_retained=True, completed_iterations=7,
+    )
+    source.completed_iterations = 7
+    source.current_learning_iteration = 6
+    checkpoint = tmp_path / "terminal-consolidation.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.evaluation_interval = 0
+    destination.final_com_fraction = 0.0
+    destination.entropy_consolidation = None
+    destination.load(str(checkpoint))
+
+    assert destination.entropy_consolidation is None
+    assert destination.completed_iterations == 7
+    assert destination.evaluation_distribution == "final"
+    assert destination.capability_gate.stage_value("com_range") == 0.005
+    assert destination.capability_gate.stage_value("head_com_range") == 0.005
+    assert destination.evaluation_events[-1]["kind"] == "final_range_finetune_source"
+
+
+def test_ordinary_adaptive_resume_rejects_final_range_checkpoint(monkeypatch, tmp_path):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.final_range_finetune = True
+    source.completed_iterations = 2
+    source.current_learning_iteration = 1
+    checkpoint = tmp_path / "final-range.pt"
+    source.save(str(checkpoint))
+
+    destination = _runner()
+    with pytest.raises(ValueError, match="final-range fine-tuning checkpoint"):
+        destination.load(str(checkpoint))
+
+
 def _attach_exposure(runner):
     from mjlab_microduck.tasks.adaptive_curriculum import CommandExposure
 

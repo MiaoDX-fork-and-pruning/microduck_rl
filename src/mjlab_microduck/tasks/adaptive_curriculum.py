@@ -913,6 +913,24 @@ class CapabilityGate:
             state.ema_score = None
             state.last_transition_step = step
 
+    def freeze_at_final(self, *, step: int) -> None:
+        """Freeze every owned axis at its canonical final stage.
+
+        Final-range fine-tuning is a separate, explicit post-acquisition mode.
+        The gate remains serializable for audit, but its live stage counters are
+        reset so no further capability window can move an axis during the
+        fixed-range segment.
+        """
+        if type(step) is not int or step < 0:
+            raise ValueError("final fine-tuning step must be a nonnegative integer")
+        for name, axis in self.axes.items():
+            state = self.states[name]
+            state.current_stage = len(axis.stages) - 1
+            state.last_transition_step = step
+            state.pass_count = 0
+            state.fail_count = 0
+            state.ema_score = None
+
     def stage_value(self, axis_name: str) -> object:
         """Return the live stage value an MJLab adapter should apply."""
         if axis_name not in self.axes:

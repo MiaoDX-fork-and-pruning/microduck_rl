@@ -74,6 +74,31 @@ def test_adaptive_factory_exposes_explicit_axis_modes() -> None:
     assert set(composed.curriculum) == set(canonical.curriculum) - {"com_range", "head_com_range"}
 
 
+def test_final_range_finetune_parses_as_fixed_final_distribution(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "250")
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+
+    assert cfg.adaptive_final_range_finetune is True
+    assert cfg.adaptive_evaluation_interval == 0
+    assert cfg.adaptive_evaluation_distribution == "final"
+    assert cfg.adaptive_final_com_fraction == 0.0
+    assert cfg.adaptive_entropy_consolidation is False
+
+
+def test_final_range_finetune_rejects_rehearsal_fraction(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION", "0.2")
+    with pytest.raises(ValueError, match="final-range fine-tuning"):
+        make_microduck_adaptive_velocity_env_cfg(axis_mode="composed")
+
+
+def test_final_range_environment_does_not_break_static_task_registration(monkeypatch) -> None:
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    cfg = make_microduck_adaptive_velocity_env_cfg(axis_mode="all_static")
+    assert cfg.adaptive_final_range_finetune is False
+
+
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
     names = {
         AdaptiveMicroduckStaticRlCfg.experiment_name,

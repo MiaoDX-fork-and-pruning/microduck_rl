@@ -367,6 +367,7 @@ class CommandCapabilityEvaluator:
             "MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT",
             "MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION",
             "MICRODUCK_ADAPTIVE_SENSOR_RESET_FRACTION",
+            "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
         ):
             evaluator_env.pop(name, None)
         with (output.parent / "evaluator.log").open("w") as log:
@@ -394,6 +395,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         axis_names = resolve_enabled_axes(mode)
         axis_configs = tuple(axis for axis in ADAPTIVE_AXIS_CONFIGS if axis.name in axis_names)
         self.evaluation_interval = int(getattr(env.cfg, "adaptive_evaluation_interval", 0))
+        self.final_range_finetune = bool(
+            getattr(env.cfg, "adaptive_final_range_finetune", False)
+        )
+        if self.final_range_finetune and self.evaluation_interval != 0:
+            raise ValueError("final-range fine-tuning requires evaluation_interval=0")
+        if self.final_range_finetune and getattr(env.cfg, "adaptive_entropy_consolidation", False):
+            raise ValueError("final-range fine-tuning cannot enable entropy consolidation")
         self.evaluator = None
         self.evaluation_seed = int(getattr(env.cfg, "adaptive_evaluation_seed", 0))
         self.evaluation_seed_set_id = str(
@@ -485,6 +493,10 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         # Evaluators/exporters have no training log_dir and never resume here.
         resume = os.environ.get("MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT")
         requested_fraction = getattr(env.cfg, "adaptive_final_com_fraction", None)
+        if self.final_range_finetune and (not resume or log_dir is None):
+            raise ValueError("final-range fine-tuning requires an explicit resume checkpoint")
+        if self.final_range_finetune and requested_fraction not in (None, 0.0):
+            raise ValueError("final-range fine-tuning cannot enable final-CoM rehearsal")
         if resume and log_dir is not None:
             self.load(resume, map_location=device)
         if requested_fraction is not None:
@@ -571,6 +583,25 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 term.params.pop("final_fraction", None)
                 term.params.pop("final_ranges", None)
         self.final_com_fraction = float(fraction)
+
+    def _activate_final_range_finetune(self) -> None:
+        """Install canonical final ranges after an explicit full resume."""
+        if not getattr(self, "final_range_finetune", False):
+            return
+        if self.capability_gate is None:
+            raise ValueError("final-range fine-tuning requires an adaptive gate")
+        step = int(self.completed_iterations) * int(self.cfg["num_steps_per_env"])
+        self.capability_gate.freeze_at_final(step=step)
+        manager_env = _manager_env(self.env)
+        for axis_name in self.capability_gate.axis_order:
+            apply_stage_to_env(
+                manager_env,
+                axis_name,
+                self.capability_gate.stage_value(axis_name),
+            )
+        if self.final_com_fraction:
+            self._set_final_com_fraction(0.0)
+        self.evaluation_distribution = "final"
 
     def _set_transition_probability(self, probability: float) -> None:
         """Apply a launch override while retaining controller accounting."""
@@ -1174,6 +1205,12 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             # silently fall back to the ordinary fixed realization.
             "sensor_reset_fraction": sensor_reset_fraction,
             "final_com_fraction": getattr(self, "final_com_fraction", 0.0),
+            "final_range_finetune": bool(getattr(self, "final_range_finetune", False)),
+            "training_mode": (
+                "final_range_finetune"
+                if getattr(self, "final_range_finetune", False)
+                else "adaptive"
+            ),
             "command_feedback": None
             if getattr(self, "bucket_feedback", None) is None
             else self.bucket_feedback.state_dict(),
@@ -1217,6 +1254,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         action_rate_relief = deepcopy(getattr(self, "action_rate_relief", None))
         consolidation = deepcopy(getattr(self, "entropy_consolidation", None))
         consolidation_needs_baseline = False
+        final_range_finetune = getattr(self, "final_range_finetune", False)
         completed = self.current_learning_iteration + 1
         distribution = getattr(self, "evaluation_distribution", "final")
         entropy_coef = None
@@ -1224,20 +1262,42 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         if override is not None:
             _entropy_coefficient(override)
         if state:
+            saved_final_range_finetune = bool(state.get("final_range_finetune", False))
+            if saved_final_range_finetune and not final_range_finetune:
+                raise ValueError(
+                    "final-range fine-tuning checkpoint requires explicit fine-tuning mode"
+                )
+            saved_mode = state.get(
+                "training_mode",
+                "final_range_finetune" if saved_final_range_finetune else "adaptive",
+            )
+            expected_mode = (
+                "final_range_finetune" if saved_final_range_finetune else "adaptive"
+            )
+            if saved_mode != expected_mode:
+                raise ValueError("adaptive checkpoint training mode is invalid")
             if "entropy_coef" in state:
                 entropy_coef = _entropy_coefficient(state["entropy_coef"])
             saved_consolidation = state.get("entropy_consolidation")
             if saved_consolidation is not None:
-                if consolidation is None:
+                if final_range_finetune:
+                    # This is a new fixed-range window, not an extension of a
+                    # terminal consolidation attempt. Drop its live controller
+                    # while retaining the source path in resume metadata.
+                    consolidation = None
+                elif consolidation is None:
                     raise ValueError("adaptive checkpoint entropy consolidation mismatch")
-                consolidation.load_state_dict(saved_consolidation)
-                if consolidation.phase == "active" and (
-                    entropy_coef != 0.0 or self.evaluation_interval != consolidation.window_updates
-                ):
-                    raise ValueError("active consolidation entropy or window mismatch")
-            elif consolidation is not None:
+                else:
+                    consolidation.load_state_dict(saved_consolidation)
+                    if consolidation.phase == "active" and (
+                        entropy_coef != 0.0 or self.evaluation_interval != consolidation.window_updates
+                    ):
+                        raise ValueError("active consolidation entropy or window mismatch")
+            elif consolidation is not None and not final_range_finetune:
                 consolidation = EntropyConsolidation()
                 consolidation_needs_baseline = True
+            elif final_range_finetune:
+                consolidation = None
             if state.get("version", 1) != 1:
                 raise ValueError("unsupported adaptive checkpoint version")
             if state.get("task_id") and state["task_id"] != getattr(self.env.cfg, "task_id", None):
@@ -1404,6 +1464,15 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
                 raise ValueError("adaptive checkpoint known-good bucket mismatch")
             self.last_known_good_buckets = tuple(str(name) for name in buckets)
             self.evaluation_events = list(state.get("evaluation_events", []))
+            if final_range_finetune and not saved_final_range_finetune:
+                self.evaluation_events.append({
+                    "kind": "final_range_finetune_source",
+                    "source_checkpoint": str(Path(path).resolve()),
+                    "source_consolidation_phase": (saved_consolidation or {}).get("phase"),
+                    "source_consolidation_deadline": (saved_consolidation or {}).get("deadline"),
+                    "source_stage_values": state.get("stage_values"),
+                    "completed_iterations": completed,
+                })
             self.last_evaluation_provenance = state.get("evaluation_provenance")
             if legacy_cohort_migration or distribution_migration:
                 self.last_known_good_checkpoint = None
@@ -1457,6 +1526,7 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
         # An explicit treatment overrides full loads (including rollback), while
         # ordinary resumes/rollbacks restore the saved trainer coefficient.
         self._apply_entropy_override()
+        self._activate_final_range_finetune()
         return infos
 
     def rollback(self, checkpoint_path: str):

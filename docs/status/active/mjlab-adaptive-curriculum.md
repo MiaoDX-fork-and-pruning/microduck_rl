@@ -31,6 +31,41 @@ Blocker: `native_mastery_and_product_rehearsal_contract`. Foot/plane contact
 generation explains the fully paired native/CPU regression below; the original
 XML-PD product rehearsal is still unvalidated. No external blocker.
 
+The explicit final-range fine-tuning window is rejected. From the retained
+seed23 control at update 1250, smoke64/5 passed and a fixed 250-update window
+at canonical CoM ranges (±15 mm and ±10 mm) produced the expected
+`training_mode=final_range_finetune` checkpoint. On the same fresh native
+cohort (seeds `20261001–20261003`), source/candidate scores were
+`.948/.710/.793/.775/.793/.726` versus
+`.962/.809/.794/.710/.825/.696` (zero/forward/lateral/yaw/left/right).
+The lower tail fell `.7103→.6960`; yaw fell `.0642`, beyond the `.05`
+preservation tolerance, and turn-right also regressed. The candidate is not
+retained; update-1250 remains the reference. Artifact:
+`/tmp/microduck-final-range-finetune-s23-v2/verification.json`.
+
+The latest turn-exposure A/B does not clear this blocker. From the same seed23
+checkpoint and matched 1000→1250 budget, moving 5 percentage points from pure
+`yaw` to `turn-left` was rejected: the pre-registered stage gain was only
+`.0366` (required `.05`), final native `turn-left` fell `.8507→.7606`, and the
+native/CPU lower tails both regressed. The runner's weakest-gain rule retained
+the treatment, but the stricter experiment contract rejected it and no teacher
+recipe was promoted. Audit: `/tmp/microduck-turn-exposure-ab-s23-v1/verification.json`.
+
+The same control checkpoint then failed a previously unconsumed final native
+cohort (seeds `20261001–20261003`): aggregate scores were zero `.9478`, forward
+`.7103`, lateral `.7929`, yaw `.7746`, turn-left `.7929`, turn-right `.7257`,
+with lower tail `.7103`, `passed=false`. The earlier six-bucket pass on one
+diagnostic seed therefore does not generalize and cannot be acceptance evidence.
+Report: `/tmp/microduck-turn-exposure-control-fresh-final-s23-v1/capability.json`.
+
+A paired stage-distribution replay on those same three seeds keeps both CoM axes
+at ±3 mm and gives zero `.9675`, forward `.7217`, lateral `.8011`, yaw `.6540`,
+turn-left `.7661`, turn-right `.7592`, lower tail `.6540`. The final-range replay
+therefore changes which bucket is weakest rather than explaining the failure as
+a simple final-CoM shift. Contract and paired report:
+`/tmp/microduck-control-stage-final-pair-s23-v1/experiment-contract.json` and
+`/tmp/microduck-control-stage-final-pair-s23-v1/stage.json`.
+
 ## Completed proof and rejected routes
 
 - Early reset: `/tmp/microduck-early-sensor-reset-s23-v2/verification.json`.
@@ -123,16 +158,20 @@ directional native gap: positive-yaw moving turns undertrack in both paired
 seeds (+.700 and +.718 rad/s over 1–5 s), while sign-reversed controls are
 closer (−.726 and −.815).
 
-Before any long run, record a bounded positive-yaw acquisition hypothesis,
-paired same-checkpoint control, fixed native gate cohort, unchanged six-bucket
-thresholds, and a rollback rule. Run smoke64/5 first, then one matched window
-with only the declared yaw-acquisition change. Retain a candidate only if the
-positive-yaw bucket improves by at least .05, every previously mastered bucket
-stays within its preservation tolerance, and the CPU rehearsal does not regress
-its lower tail; otherwise restore the baseline and stop. This is an experiment
-contract, not an acceptance result. All seeds remain diagnostic until fresh
-held-out native evidence, normalizer-baked ONNX, CPU rehearsal, and video review
-pass the product gate.
+The positive-yaw acquisition hypothesis has now been tested and rejected by the
+turn-exposure A/B above. Do not repeat that transfer or extend it unchanged.
+The next bounded contract is canonical final-range fine-tuning: resume one
+explicit checkpoint, migrate the adaptive-owned CoM axes to their canonical
+final values, disable further adaptive gate/consolidation decisions, preserve
+the PPO optimizer/RNG and all non-owned canonical schedules, and record the
+mode in checkpoint metadata. It must run smoke64/5 first and use a fixed
+fine-tuning budget plus the same native final cohort before any longer campaign.
+An unchanged resume of a terminal consolidation checkpoint is invalid for this
+purpose. Retain the fine-tuned actor only if the fresh native lower tail and
+all six buckets improve or stay within the declared preservation tolerance;
+otherwise restore the pre-fine-tune reference. All seeds remain diagnostic
+until fresh held-out native evidence, normalizer-baked ONNX, CPU rehearsal, and
+video review pass the product gate.
 
 ## Native turn and visual profile — verified
 

@@ -71,6 +71,10 @@ def main() -> int:
     parser.add_argument("--entropy-consolidation", action="store_true",
                         help="Try one low-entropy window when native capabilities qualify; stop and evaluate afterward")
     parser.add_argument(
+        "--final-range-finetune", action="store_true",
+        help="Resume an adaptive checkpoint, freeze owned CoM axes at final ranges, and run a fixed post-acquisition window",
+    )
+    parser.add_argument(
         "--gate-cohort-size", type=int, default=3,
         help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
     )
@@ -95,7 +99,15 @@ def main() -> int:
         parser.error("iterations, num-envs, gate-interval and gate-cohort-size must be positive")
     if args.resume and args.branch == "fixed":
         parser.error("the canonical fixed runner has no audited resume budget; use an adaptive/static branch")
+    if args.final_range_finetune and not args.resume:
+        parser.error("final-range fine-tuning requires --resume with an exact checkpoint path")
+    if args.final_range_finetune and args.branch == "fixed":
+        parser.error("final-range fine-tuning requires an adaptive branch")
+    if args.final_range_finetune and args.entropy_consolidation:
+        parser.error("final-range fine-tuning cannot enable entropy consolidation")
     task_id, axis_mode = TASKS[args.branch]
+    if args.final_range_finetune and axis_mode == "all_static":
+        parser.error("final-range fine-tuning requires an adaptive CoM axis")
     saved_gate_distribution = "final" if axis_mode == "all_static" else "stage"
     transition_override_requested = args.transition_probability is not None
     start_iterations = 0
@@ -113,6 +125,8 @@ def main() -> int:
         state = (resume_state.get("infos") or {}).get("adaptive_curriculum")
         if not state or state.get("task_id") != task_id:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
+        if state.get("final_range_finetune", False) and not args.final_range_finetune:
+            parser.error("final-range fine-tuning checkpoint requires --final-range-finetune")
         start_iterations = int(state["completed_iterations"])
         args.entropy_consolidation = args.entropy_consolidation or state.get("entropy_consolidation") is not None
         saved_gate_distribution = state.get("evaluation_distribution", "final")
@@ -134,8 +148,18 @@ def main() -> int:
             parser.error("resume must retain the checkpoint's gate seed")
         if args.iterations <= start_iterations:
             parser.error("iterations must exceed the checkpoint's completed update count")
+    if args.final_range_finetune:
+        # This is a separate fixed-range window, never an extension of the
+        # source checkpoint's automatic consolidation attempt.
+        args.entropy_consolidation = False
     if args.gate_distribution is None:
         args.gate_distribution = saved_gate_distribution
+    if args.final_range_finetune:
+        if args.final_com_fraction not in (None, 0.0):
+            parser.error("final-range fine-tuning cannot retain a final-CoM rehearsal fraction")
+        args.final_com_fraction = 0.0
+        args.gate_distribution = "final"
+        args.rebaseline_gate = True
     if args.gate_distribution not in ("final", "stage"):
         parser.error("checkpoint evaluation distribution must be final or stage")
     if args.resume and args.gate_distribution != saved_gate_distribution and not args.rebaseline_gate:
@@ -191,7 +215,9 @@ def main() -> int:
         )
     environment.update({
         "PYTHONUNBUFFERED": "1",
-        "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(args.gate_interval if adaptive else 0),
+        "MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL": str(
+            args.gate_interval if adaptive and not args.final_range_finetune else 0
+        ),
         "MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION": str(args.final_com_fraction),
         "MICRODUCK_ADAPTIVE_TRANSITION_PROBABILITY": str(args.transition_probability),
         "MICRODUCK_ADAPTIVE_TRANSITION_BOOTSTRAP_MODE": args.transition_mode,
@@ -199,6 +225,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_COHORT_SIZE": str(args.gate_cohort_size),
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION": args.gate_distribution,
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION": "1" if args.rebaseline_gate else "0",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE": "1" if args.final_range_finetune else "0",
         "MICRODUCK_ADAPTIVE_ALLOW_LEGACY_COHORT_MIGRATION": (
             "1" if args.resume and args.gate_cohort_size > 1 else "0"
         ),
@@ -241,7 +268,7 @@ def main() -> int:
         env["MICRODUCK_ADAPTIVE_RESULT_FILE"] = str(output / f"{phase}-result.json")
         if phase == "smoke":
             env["MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL"] = "0"
-        elif args.resume:
+        if args.resume and (phase == "training" or args.final_range_finetune):
             env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] = str(args.resume)
         command = [train, task_id, "--env.scene.num-envs", str(envs),
                    "--agent.max-iterations", str(iterations), "--agent.seed", str(args.seed),
@@ -269,6 +296,8 @@ def main() -> int:
             raise ValueError("training result lost the configured final CoM rehearsal fraction")
         if adaptive_state.get("evaluation_distribution", "final") != args.gate_distribution:
             raise ValueError("training result lost the configured gate distribution")
+        if bool(adaptive_state.get("final_range_finetune", False)) != args.final_range_finetune:
+            raise ValueError("training result lost the configured training mode")
         transition_state = adaptive_state.get("transition_exposure")
         if args.transition_probability > 0.0:
             if not isinstance(transition_state, dict):
@@ -276,7 +305,7 @@ def main() -> int:
             final_transition_probability = float(transition_state.get("probability", -1.0))
             if not 0.0 <= final_transition_probability <= 0.40:
                 raise ValueError("training result contains invalid transition probability")
-        if adaptive and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
+        if adaptive and not args.final_range_finetune and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
                                 for event in adaptive_state["evaluation_events"]):
             raise ValueError("adaptive run produced no valid evaluation windows")
     completed_iterations = args.iterations if adaptive_state is None else adaptive_state["completed_iterations"]
@@ -299,6 +328,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_ACTION_RATE_RELIEF_SCOPE",
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION",
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

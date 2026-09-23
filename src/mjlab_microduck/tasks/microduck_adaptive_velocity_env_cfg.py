@@ -172,6 +172,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # Experimental, bounded consolidation selected from native gate feedback.
     # Off for fresh recipes until behavioral validation; full resumes inherit it.
     adaptive_entropy_consolidation: bool = False
+    # Explicit post-acquisition mode. A full trainer resume moves adaptive-owned
+    # CoM axes to their canonical final stages and disables gate decisions.
+    adaptive_final_range_finetune: bool = False
     # A bounded reward relief used by the lateral-drive adaptive recipe when
     # the yaw frontier is still unacquired.  The runner owns its state and
     # persists it in the adaptive checkpoint; the canonical action-rate
@@ -288,6 +291,15 @@ def make_microduck_adaptive_velocity_env_cfg(
         "composed": "Mjlab-Velocity-Flat-Adaptive-MicroDuck",
     }[axis_mode]
     cfg.adaptive_source_sha = os.environ.get("MICRODUCK_SOURCE_SHA", "")
+    cfg.adaptive_final_range_finetune = (
+        os.environ.get("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "0") == "1"
+    )
+    # The task registry constructs every adaptive variant while importing the
+    # package.  A final-range launcher environment is therefore also visible
+    # to the static registration entry; leave that unrelated factory in its
+    # ordinary mode and let the launcher/runner reject a static fine-tune.
+    if axis_mode == "all_static":
+        cfg.adaptive_final_range_finetune = False
     cfg.adaptive_evaluator_config_sha256 = os.environ.get("MICRODUCK_ADAPTIVE_EVALUATOR_CONFIG_SHA256", "")
     cfg.adaptive_evaluation_interval = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL", "0"))
     cfg.adaptive_evaluation_seed = int(os.environ.get("MICRODUCK_ADAPTIVE_EVALUATION_SEED", "20260916"))
@@ -308,6 +320,12 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_evaluator_schema_version = 2
     cfg.adaptive_seed_set_id = os.environ.get("MICRODUCK_ADAPTIVE_SEED_SET_ID", "adaptive-gate-20260916")
     cfg.adaptive_evaluation_timeout_s = 900
+    if cfg.adaptive_final_range_finetune:
+        # The final-range segment is fixed-budget PPO; it never launches a
+        # native gate evaluator or an automatic consolidation attempt.
+        cfg.adaptive_evaluation_interval = 0
+        cfg.adaptive_evaluation_distribution = "final"
+        cfg.adaptive_allow_distribution_migration = True
     sensor_corner_fraction = os.environ.get("MICRODUCK_ADAPTIVE_SENSOR_CORNER_FRACTION")
     if sensor_corner_fraction is not None:
         try:
@@ -355,6 +373,10 @@ def make_microduck_adaptive_velocity_env_cfg(
         cfg.adaptive_final_com_fraction = float(final_com_fraction)
         if not 0.0 <= cfg.adaptive_final_com_fraction <= 0.20:
             raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
+    if cfg.adaptive_final_range_finetune:
+        if cfg.adaptive_final_com_fraction not in (None, 0.0):
+            raise ValueError("final-range fine-tuning cannot enable final-CoM rehearsal")
+        cfg.adaptive_final_com_fraction = 0.0
     if cfg.adaptive_evaluation_interval < 0:
         raise ValueError("adaptive evaluation interval must be nonnegative")
     if diagnostic_mode is not None:
@@ -527,7 +549,7 @@ def make_microduck_adaptive_velocity_env_cfg(
     if play:
         cfg.adaptive_evaluation_interval = 0
     saved_consolidation = (_resume_adaptive_state() or {}).get("entropy_consolidation")
-    if saved_consolidation is not None and not play:
+    if saved_consolidation is not None and not play and not cfg.adaptive_final_range_finetune:
         cfg.adaptive_entropy_consolidation = True
     return cfg
 
