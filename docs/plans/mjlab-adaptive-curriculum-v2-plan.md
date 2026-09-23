@@ -46,7 +46,7 @@ pass threshold, 20% exact-zero anchor, nominal exposure and directional floors.
 ### Best retained consolidation reference
 
 Authoritative evidence:
-`/tmp/microduck-adaptive-entropy-consolidation-s17-v3/experiment-summary.json`.
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
 Two branches resume the exact global-relief 6500 adaptive snapshot on immutable
 `610fbc5`, seed 17, 4096 envs, with 250 updates each. Both smoke64/5 checks pass;
 saved agent configs differ **only** in `algorithm.entropy_coef` (.01 vs .0).
@@ -322,6 +322,68 @@ tracking before selecting another bounded training treatment. Terminal attempts
 must not extend unchanged. From-scratch acquisition, fresh held-out evidence,
 multi-training-seed replication, CPU usability and final CoM mastery remain open.
 Controller remains opt-in; no product threshold/default change is justified.
+
+### Fixed V5 robustness and bounded yaw-precision comparison
+
+`/tmp/microduck-v5-robustness-diagnostics/summary.json` compares the retained V5
+actor against the manual 6750 reference at stage distribution, seeds 20260916
+(push) and 20260919 (sensor corner). All 12 native/ONNX comparisons pass, six
+recorded reset fields and initial actor observations match exactly, and all
+traces/source hashes verify. Both batteries remain upright. Push lateral improves
+.739→.781; sensor lateral .748→.795 and right .773→.830. Sensor forward remains
+.762, yaw .852. These known diagnostic seeds are not fresh held-out evidence.
+All failed buckets in this probe and V5's gate/CPU reports are tracking-limited.
+
+`/tmp/microduck-v5-cpu-visual/summary.json` records yaw/left/right videos with
+900 frames. Rendering preserves every recorded trace array exactly. Eighteen
+sampled frames show upright, foot-supported turning; contact logs contain only
+floor/feet. Instantaneous yaw oscillation and persistent over/underspeed remain.
+This is sampled-frame review, not full temporal or hardware acceptance.
+
+Next experiment is an explicit two-arm, 250-update comparison from V5's exact
+actor/critic/optimizer/RNG and teacher. Control keeps yaw L1 weight 1.0; treatment
+uses 2.0. Entropy stays zero, action-rate relief −.2, linear L1 weight 2.0;
+seed17/4096envs, gate cohort 20260815–17 and reused final/CPU seed20260915 stay
+fixed. Each arm passes fresh smoke64/5 before long training. Immutable source
+snapshots of `2a4f73f` differ only in the yaw weight, with the same pre-existing
+CPU seed overlay. The original terminal V5 checkpoint is untouched. Derived
+starts clear the terminal controller only for this separately contracted
+comparison, preserve its audit record, and set branch-local rollback baselines.
+No trainer tensors or RNG state change before the experiment.
+
+Require candidate retention, ≥.05 improvement in the native cohort minimum and
+CPU minimum over V5, with comparison against the equally trained control.
+A negative result stops this treatment. This is evidence selection for a possible
+automatic precision phase, not such a controller or a product default promotion.
+Root: `/tmp/microduck-yaw-precision-s17-v2`; `experiment-contract.json` owns all
+hashes and parameters. Session `16017` is running; prepared audit is
+`/tmp/verify_microduck_yaw_precision_v2.py`. Preparation v1 stopped before any
+training because its RNG equality helper lacked NumPy array support; the v2
+preparation audit passes and preserves v1 artifacts.
+
+### Negative yaw-precision comparison and from-scratch seed-23 proof
+
+The bounded precision comparison at `/tmp/microduck-yaw-precision-s17-v2` is
+complete. Control and treatment each resumed the exact V5 retained actor at 6750
+for 250 updates, with fresh smoke64/5, seed17/4096 environments, entropy0,
+relief−.2 and the same gate/CPU evaluation. Only the treatment changed signed-EMA
+yaw L1 weight 1.0→2.0. Both source manifests contain 682 files and differ only
+in that config line; actor, critic, optimizer and RNG at each start are equal.
+The audit verifies 60 reports/traces, finite arrays and all penalty values ≤0.
+
+Control native-cohort minimum gain over V5 was +.0434 and CPU minimum gain −.1492;
+treatment gains were +.0411 and −.1233. Neither reaches the joint +.05 retention
+rule. Control final native left is .726 and CPU yaw .519; treatment CPU yaw/right
+are .579/.545. This rejects reward-weight-only precision repair and stops both
+arms. It does not alter product defaults or the adaptive controller.
+
+The next active proof is a from-scratch seed-23 adaptive run with the same
+lateral-drive recipe, native gate and opt-in consolidation. Run smoke64/5 first;
+request 7000 updates, allowing one bounded automatic consolidation window to stop
+at its declared deadline. Record native cohort, final native, CPU transfer,
+normalized ONNX and update budget. If acquisition never reaches the controller
+trigger or final scores remain below .80, change the acquisition stage before
+attempting seed47. Session/contract artifacts live under a unique `/tmp` root.
 
 ### Pre-consolidation reference and measured limits
 

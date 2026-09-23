@@ -15,9 +15,12 @@ three-seed gate cohort and CPU deployment rehearsal still fail all-six mastery.
 Both adaptive CoM axes remain stage 0, ±3 mm. Scores are capability, not success
 rates. No from-scratch or multi-training-seed autonomy claim is justified.
 
-V5 completed; session `10932` and audit session `40226` both exited 0. No owned
-training process remains running. Requested 6500→7000; the controller consumed
-only 250 updates and stopped at 6750. This is 24,576,000 new transitions.
+V5 completed; session `10932` and audit `40226` exited 0. It consumed 250 updates
+and stopped at 6750 (24,576,000 new transitions). The matched yaw-precision comparison completed in session `16017`; audit
+`/tmp/verify_microduck_yaw_precision_v2.py` passes. Root:
+`/tmp/microduck-yaw-precision-s17-v2`. A from-scratch seed-23 adaptive run is
+now the next live proof; poll its existing handle if present and do not restart
+it on observation timeout.
 
 ## V5 evidence and behavior
 
@@ -85,13 +88,34 @@ updates invalid treatment evidence. Preserve all artifacts; do not restart them.
 ## Remaining work and next decision
 
 Blocker fingerprint: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
-Classification: V5 can retain an automatic native improvement, but reset/sensor/
-push robustness and CPU turning accuracy remain insufficient. There is no
-external blocker. Before another training intervention, evaluate this retained
-actor on the already diagnosed push/sensor seeds and compare raw tracking traces
-with the previous manual-consolidation reference. This decides whether a next
-bounded treatment should address native robustness or CPU transfer; it must not
-be an unchanged extension of this terminal attempt.
+Classification: V5 preserves acquired behavior on the known push/sensor seeds;
+remaining failures are tracking precision, with no falls in these diagnostics.
+`/tmp/microduck-v5-robustness-diagnostics/summary.json` verifies 12 native/ONNX
+cases and exact six-field reset plus initial-observation equality against the
+manual reference. Push lateral .739→.781; sensor lateral .748→.795 and right
+.773→.830; sensor forward stays .762 and yaw .852. This does not prove fresh-seed
+robustness. No external blocker exists.
+
+CPU recordings: `/tmp/microduck-v5-cpu-visual/summary.json`. All arrays from the
+three rendered cases exactly match the original product battery. Reviewed 18
+sampled video frames: upright foot-supported turning without body/head contacts;
+raw yaw oscillation and sustained speed errors remain. Videos are recorded,
+but sampled-frame review is not a full temporal/hardware acceptance.
+
+The matched yaw-precision comparison is negative. Both arms resumed the exact V5
+actor/critic/optimizer/RNG and teacher for 250 updates with entropy 0 and relief
+−.2; only the treatment changed signed-EMA yaw L1 weight 1.0→2.0. Both passed
+smoke64/5, live 61D/14D and penalty checks. The control's native cohort minimum
+gain was +.043 and CPU minimum −.149; yaw2 was +.041 and −.123. Neither meets the
+joint +.05 rule; control final native left fell to .726 and CPU yaw to .519, while
+yaw2 CPU yaw/right were .579/.545. No unchanged extension is justified.
+
+Summary: `/tmp/microduck-yaw-precision-s17-v2/experiment-summary.json`.
+Audit: `/tmp/microduck-yaw-precision-s17-v2/verification.json`.
+The 60 report/trace artifacts and both immutable source manifests verify. The
+failed preparation v1 stopped before training and is retained separately. This
+rejects reward-weight-only precision repair; it does not reject adaptive training
+or the V5 candidate. Full .80 acceptance and multi-seed autonomy remain separate.
 
 The earlier manual 6750 reference and negative −.2/−.4 continuations are indexed
 in the canonical plan. Transfer diagnostics:
