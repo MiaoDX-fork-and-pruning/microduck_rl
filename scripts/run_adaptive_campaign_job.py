@@ -27,9 +27,13 @@ def read_training_result(path: Path, *, task_id: str, completed_iterations: int,
                          start_iterations: int, num_envs: int) -> tuple[Path, dict]:
     """Read an explicit completion manifest; never guess the last file label."""
     result = json.loads(path.read_text())
-    if (result.get("version") != 1 or result.get("status") != "completed"
+    actual = result.get("completed_iterations")
+    early_stop = type(actual) is int and start_iterations <= actual < completed_iterations
+    if (result.get("version") != 1
+            or result.get("status") != ("stopped" if early_stop else "completed")
             or result.get("task_id") != task_id
-            or result.get("completed_iterations") != completed_iterations
+            or (actual != completed_iterations and not early_stop)
+            or result.get("requested_completed_iterations", completed_iterations) != completed_iterations
             or result.get("start_completed_iterations") != start_iterations
             or result.get("num_envs") != num_envs):
         raise ValueError("training result task or budget mismatch")
@@ -40,10 +44,18 @@ def read_training_result(path: Path, *, task_id: str, completed_iterations: int,
 
     saved = torch.load(checkpoint, map_location="cpu", weights_only=False)
     state = (saved.get("infos") or {}).get("adaptive_curriculum")
-    if (saved["iter"] != completed_iterations - 1 or not state
+    if (saved["iter"] != actual - 1 or not state
             or state != result["adaptive_state"]
-            or state["completed_iterations"] != completed_iterations):
+            or state["completed_iterations"] != actual):
         raise ValueError("training result does not match checkpoint state")
+    if early_stop:
+        from mjlab_microduck.tasks.adaptive_curriculum import EntropyConsolidation
+
+        controller = EntropyConsolidation()
+        controller.load_state_dict(state.get("entropy_consolidation") or {})
+        if (result.get("stop_reason") != "entropy_consolidation_terminal"
+                or not controller.terminal or controller.deadline != actual):
+            raise ValueError("training stopped without a completed consolidation window")
     return checkpoint, state
 
 
@@ -56,6 +68,8 @@ def main() -> int:
     parser.add_argument("--resume", type=Path, help="Exact checkpoint path; supported by adaptive/static experiment runners")
     parser.add_argument("--num-envs", type=int, default=4096)
     parser.add_argument("--gate-interval", type=int, default=250)
+    parser.add_argument("--entropy-consolidation", action="store_true",
+                        help="Try one low-entropy window when native capabilities qualify; stop and evaluate afterward")
     parser.add_argument(
         "--gate-cohort-size", type=int, default=3,
         help="Fixed native reset/DR seeds per adaptive gate evaluation (default: 3)",
@@ -100,6 +114,7 @@ def main() -> int:
         if not state or state.get("task_id") != task_id:
             parser.error("resume requires a runner checkpoint with a matching task and completed-update budget")
         start_iterations = int(state["completed_iterations"])
+        args.entropy_consolidation = args.entropy_consolidation or state.get("entropy_consolidation") is not None
         saved_gate_distribution = state.get("evaluation_distribution", "final")
         saved_fraction = state.get("final_com_fraction", 0.0)
         saved_final_com_fraction = 0.0 if saved_fraction is None else float(saved_fraction)
@@ -145,6 +160,8 @@ def main() -> int:
         parser.error("transition acquisition requires a command-exposure branch")
     if args.final_com_fraction and axis_mode == "all_static":
         parser.error("final CoM rehearsal requires an adaptive CoM axis")
+    if args.entropy_consolidation and axis_mode == "all_static":
+        parser.error("entropy consolidation requires the native adaptive gate")
     source_sha = os.environ["MICRODUCK_SOURCE_SHA"]
     source = Path(__file__).resolve().parents[1]
     output = args.output.resolve()
@@ -230,6 +247,8 @@ def main() -> int:
                    "--agent.max-iterations", str(iterations), "--agent.seed", str(args.seed),
                    "--agent.logger", "tensorboard", "--agent.experiment-name", f"matched_{args.branch}",
                    "--agent.run-name", f"matched-{args.branch}-s{args.seed}"]
+        if args.entropy_consolidation:
+            command.extend(["--env.adaptive-entropy-consolidation", "True"])
         print(f"Starting {phase}: {command}", flush=True)
         with (output / f"{phase}.log").open("w") as log:
             subprocess.run(command, env=env, cwd=(training if phase == "training" else output / "smoke"), check=True, stdout=log, stderr=subprocess.STDOUT)
@@ -260,6 +279,7 @@ def main() -> int:
         if adaptive and not any(event["kind"] in ("hold", "advance", "regress", "preservation_failure")
                                 for event in adaptive_state["evaluation_events"]):
             raise ValueError("adaptive run produced no valid evaluation windows")
+    completed_iterations = args.iterations if adaptive_state is None else adaptive_state["completed_iterations"]
     # Training may use launch-only transition overrides, but native and CPU
     # evaluators explicitly disable transition acquisition and must not inherit
     # those training-only settings. Passing the override through makes the
@@ -303,8 +323,9 @@ def main() -> int:
         **config,
         "status": "evaluated", "checkpoint": str(checkpoint),
         "checkpoint_sha256": hashlib.sha256(checkpoint.read_bytes()).hexdigest(),
-        "segment_training_transitions": (args.iterations - start_iterations) * 24 * args.num_envs,
-        "total_training_transitions": args.iterations * 24 * args.num_envs,
+        "completed_iterations": completed_iterations,
+        "segment_training_transitions": (completed_iterations - start_iterations) * 24 * args.num_envs,
+        "total_training_transitions": completed_iterations * 24 * args.num_envs,
         "adaptive_state": adaptive_state,
         "heldout_report": str(report_path),
         "heldout_report_sha256": hashlib.sha256(report_path.read_bytes()).hexdigest(),

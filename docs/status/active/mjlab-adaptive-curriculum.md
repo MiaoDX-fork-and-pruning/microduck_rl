@@ -9,102 +9,104 @@ Project-status writer: not assigned; project-status delta: none.
 
 ## Current verdict
 
-Phase 0/1 automation works. Phase 2A acquisition and deployment rehearsal fail.
-No long training is running. The −.4 smoothing comparison completed; it failed
-its joint-improvement criterion and must not be extended or promoted. The
-unchanged entropy-zero continuation is also stopped. **6750 remains the product
-diagnostic reference**, not an accepted policy. Both CoM axes remain stage 0,
-±3 mm. All six capability buckets must score ≥ .80; scores are not success rates.
+Phase 0/1 automation works. V5 is the current automatically retained candidate:
+one final-distribution native diagnostic passes all six buckets, but the native
+three-seed gate cohort and CPU deployment rehearsal still fail all-six mastery.
+Both adaptive CoM axes remain stage 0, ±3 mm. Scores are capability, not success
+rates. No from-scratch or multi-training-seed autonomy claim is justified.
 
-## Latest completed treatment
+V5 completed; session `10932` and audit session `40226` both exited 0. No owned
+training process remains running. Requested 6500→7000; the controller consumed
+only 250 updates and stopped at 6750. This is 24,576,000 new transitions.
 
-Same 6750 actor/critic/optimizer, seed 17, 4096 envs, 250 updates to 7000,
-entropy zero, only relief weight −.2→−.4. Canonical final smoothing is −1.0.
-Smoke64/5 and live settings/61D/14D checks pass. All 179 training-source files
-match the −.2 control; all 681 source files and report/trace hashes verify.
-Session `74497` ended. All 13 retained actor tensors equal candidate/known-good
-and differ from start; no rollback. Mean action std .10117→.06785.
+## V5 evidence and behavior
 
-| −.4 treatment, retained 7000 | Zero | Forward | Lateral | Yaw | Left | Right |
+The runner automatically selected entropy .01→0 from current native capability,
+then shifted one bounded command-exposure slice toward the weakest bucket, yaw.
+The change reached the live command manager: yaw probability .0890→.1368 during
+training, with zero/nominal anchors and directional floors preserved. The normal
+end-of-window teacher update leaves .1726 in the retained checkpoint.
+
+The weakest cohort score improved .6694→.7320 (+.0626), while the existing gate
+preserved mastered capabilities. The controller retained the candidate and
+stopped. Retained actor equals candidate/known-good and differs from baseline;
+mean action std fell .27970→.10010. Entropy remains zero. This demonstrates one
+automatic improvement from an existing actor, not a reliable complete recipe.
+
+| Capability scores | Zero | Forward | Lateral | Yaw | Left | Right |
 | --- | ---: | ---: | ---: | ---: | ---: | ---: |
-| Stage gate, worst of 20260815–17 | .964 | .822 | .777 | .672 | .818 | .783 |
-| Final native, seed 20260915 | .938 | .885 | .807 | .848 | .746 | .790 |
-| CPU v4, seed 20260915 | .970 | .892 | .858 | .613 | .793 | .794 |
+| Starting stage cohort, worst of three | .938 | .735 | .796 | .669 | .830 | .812 |
+| V5 stage cohort, worst of three | .962 | .754 | .792 | .732 | .819 | .819 |
+| V5 final native, diagnostic seed 20260915 | .937 | .886 | .810 | .851 | .802 | .811 |
+| V5 CPU v4, same diagnostic battery seed | .981 | .902 | .851 | .668 | .754 | .766 |
 
-CPU left/right improve over the unchanged −.2 continuation, but CPU yaw drops
-.761→.613 and native stage yaw drops .790→.672 relative to 6750. Native/CPU yaw
-means .885/1.041 rad/s for a .8 command. No joint improvement; **stop treatment**.
-Result: `/tmp/microduck-adaptive-smooth-consolidation-s17-250-v2/experiment-summary.json`.
-Checkpoint SHA: `29dd98bb98506fc9f9618b88a2cfd25a32b997e42372f2b7495fca809de071f7`.
-The summary contains full checkpoint paths, exact contract and retention proof.
+Native/CPU yaw rates average .840/1.004 rad/s for a .8 command. CPU cases remain
+upright; their tracking scores fail. The final-native left margin is only .0025,
+and one gate seed passes all six while the other two do not. The single final
+native pass cannot establish robustness or justify product acceptance.
 
-## Reference and diagnosis
+Summary: `/tmp/microduck-auto-consolidation-s17-v5/experiment-summary.json`.
+Audit: `/tmp/microduck-auto-consolidation-s17-v5/verification.json`.
+Checkpoint root:
+`/tmp/microduck-auto-consolidation-s17-v5/training/logs/rsl_rl/matched_lateral-drive/2026-09-23_09-49-03_matched-lateral-drive-s17/`.
+Retained `model_6749.pt` SHA:
+`311265f7d9258c6de29845675d1b68bcf499e247ee80d43e6749d59064167aea`.
+Source: `/tmp/microduck-auto-consolidation-source-d503d63-v5`, 682 files; manifest
+SHA `8aa8f6a42c8f46ae38023ed33687a1a31657a7e4136b8a342e9a903128a60ea6`.
+Audit verifies source, 12 reports, 48 unique traces and checkpoint hashes.
+Baseline actor/critic/optimizer equal the original 6500 start. Training seed 17,
+4096 envs, gate seeds 20260815–17; diagnostic seed 20260915 is already reused.
 
-6750 evidence:
-`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
-Checkpoint:
-`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/entropy0-250/training/logs/rsl_rl/matched_lateral-drive/2026-09-23_07-08-07_matched-lateral-drive-s17/model_6749.pt`.
-SHA: `95d8fd11b8b7a5acc44669584981f87dbb2b8d8c48460bb6cb51e91bad49be2e`.
-Stage cohort scores: .961/.782/.783/.790/.838/.777.
-Final native: .936/.875/.812/.857/.815/.797. CPU v4:
-.966/.892/.861/.531/.700/.788. Native/CPU yaw means .817/1.104 rad/s.
-One final-native diagnostic passes five of six; cohort and CPU still fail.
+## Controller contract and verified implementation
+
+Experimental opt-in `--entropy-consolidation`; no default promotion. Trigger:
+all native scores ≥ .60, zero ≥ .80, some bucket < .80, existing entropy > 0.
+Save the baseline before changing entropy or exposure. Try one evaluation
+window; retain only with gate preservation and weakest-score gain ≥ .05 (or
+all six ≥ .80). Otherwise restore baseline trainer, entropy and teacher. Either
+outcome stops and runs final native/CPU evaluation. Resume preserves the original
+deadline and actual update budget; a terminal attempt cannot extend unchanged.
+
+176 focused tests pass. V5 fresh smoke64/5, live manager/controller agreement,
+finite 61D/14D, entropy, relief −.2 and early-stop assertions pass. Focused Ruff
+and `git diff --check` pass. Worktree code/tests match the verified V5 snapshot.
+Human docs checked: README and specialist reproducibility record remain valid;
+experimental evidence belongs here and in the canonical plan. No Serena memory
+entries were present to update.
+
+V3 proved automatic rejection/rollback: candidate right .812→.726, weakest gain
+only .033; original actor/teacher/entropy restored. Evidence:
+`/tmp/microduck-auto-consolidation-s17-v3/verification.json`. V3/V5 bootstrap
+scores match exactly. The changed focus treatment helped this V5 run, but one
+training seed does not prove the earlier stale-focus hypothesis causal.
+V1/v2 failed before PPO; V4's missing live-manager update made its at-least-11
+updates invalid treatment evidence. Preserve all artifacts; do not restart them.
+
+## Remaining work and next decision
 
 Blocker fingerprint: `reset_conditioned_acquisition_and_cpu_yaw_rate_transfer`.
-Classification: entropy-zero consolidation improves acquisition, while native
-sensor/push robustness and CPU turn stability remain open. The unchanged
-7000 control retains its actor but fails CPU right stability (turning/surviving,
-not idle). The stronger-smoothing follow-up gives mixed results, not a repair.
+Classification: V5 can retain an automatic native improvement, but reset/sensor/
+push robustness and CPU turning accuracy remain insufficient. There is no
+external blocker. Before another training intervention, evaluate this retained
+actor on the already diagnosed push/sensor seeds and compare raw tracking traces
+with the previous manual-consolidation reference. This decides whether a next
+bounded treatment should address native robustness or CPU transfer; it must not
+be an unchanged extension of this terminal attempt.
 
-`/tmp/microduck-transfer-diagnostics-6750/summary.json` verifies 19 reports and
-120 traces. Clean native actor inputs or nominal calibration pass six on one
-reused seed; nominal encoder calibration affects both observations and targets.
-CPU actuator/delay/sensor-lag/integrator changes do not resolve yaw. Corrected
-CPU library BAM must match friction constraints by DOF IDs; installed dependency
-is unchanged. Partial matched physics is not exact cross-engine replay. Product
-CPU stays XML PD with runtime 1.75 A cap (`918bfb6`); do not change evaluator
-physics or gates to obtain a pass. Historical details remain in the plan.
+The earlier manual 6750 reference and negative −.2/−.4 continuations are indexed
+in the canonical plan. Transfer diagnostics:
+`/tmp/microduck-transfer-diagnostics-6750/summary.json`. Clean native inputs or
+nominal calibration help one reused seed; CPU delay/integrator/actuator changes
+did not resolve transfer. Product defaults and installed dependencies stay as
+specified; the temporary CPU BAM friction-DOF diagnosis is not a shipped fix.
 
-## Completed resume repair
-
-New checkpoints persist live PPO entropy. Full resume/rollback restores it;
-actor-only load leaves trainer settings alone. Legacy checkpoints lack this
-field and still need their explicit launch entropy. A deliberate full-resume
-change uses `--env.adaptive-entropy-coef-override 0.0` (also applied on rollback).
-The campaign exact-path env factory now inherits relief weight, thresholds,
-windows and scope. Conflicting explicit controller settings remain rejected.
-No automatic entropy selection or smoothing taper is implemented by this fix.
-
-Proof: 109 focused tests; fresh64/5, legacy-resume64/5, ordinary-resume64/5.
-The last run has no entropy/relief override and retains live .0/−.4; all steps
-have finite rewards, 61D observations and 14D actions. Source manifest verifies
-681 files. Export through `scripts/export.py` bakes normalization; all eight
-PyTorch/CPU-ONNX comparison cases pass at 1e-5 tolerance. No additional Ruff
-findings; focused Ruff and diff checks pass.
-Evidence: `/tmp/microduck-resume-settings-smoke-a408d80/summary.json`.
-Source: `/tmp/microduck-resume-settings-source-a408d80`, manifest SHA
-`aded72b5050d10e73c7e00e44210843fa339d45c228126f6b4b5f156850a9207`.
-MJLab writes launch YAML before runner restore; effective restored entropy is
-recorded in checkpoint/result metadata and live proof. These are restoration
-checks, not policy-quality continuation or acceptance.
-
-## Next slice and stopping rule
-
-Use frozen gate feedback to make a bounded runner-owned consolidation decision,
-reproducing the successful 6500→6750 low-entropy attempt with persisted budget
-and rollback. The negative unchanged continuation constrains its stop rule.
-Prove it with focused tests, smoke64/5 and the same native/CPU comparisons before
-claiming autonomous consolidation. Do not extend the stopped −.2/−.4 treatments,
-relax .80 gates, or change product sensor/actuator defaults.
-
-Required acceptance remains: all-six retained native mastery at final ranges,
-fresh held-out seeds, rollout/video inspection, normalized ONNX and CPU rehearsal,
-autonomous training seeds 17/23/47, canonical final-range fine-tuning and matched-
-budget fixed/axis comparisons. Used diagnostic seeds are no longer held out.
-Goal is active; no external blocker prevents further work.
+Required acceptance: all-six native mastery at final ranges, fresh held-out
+seeds, rollout/video inspection, normalized ONNX/CPU rehearsal, the same procedure
+across training seeds 17/23/47, canonical final-range fine-tuning and matched-
+budget fixed/axis comparisons. Reused diagnostic seeds are not held-out proof.
 
 Preserve canonical Velocity, BAM M6, unfiltered actions, 61D/14D, reward signs,
-zero/nominal anchors and the existing CPU seed patch in
+.80 gates, zero/nominal anchors and the existing CPU seed patch in
 `scripts/run_specialist_action_battery.py`. IsaacLab, generated files, `uv.lock`
 and unrelated processes are outside scope. Advisor, stronger teachers,
 generalist and hardware deployment remain parked. Use unique `/tmp` directories;

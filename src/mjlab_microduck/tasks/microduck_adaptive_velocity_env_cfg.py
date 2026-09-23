@@ -169,6 +169,9 @@ class AdaptiveVelocityEnvCfg(ManagerBasedRlEnvCfg):
     # explicit treatment to change it after restore, including rollback loads.
     # Fresh/legacy runs otherwise keep agent.algorithm.entropy_coef.
     adaptive_entropy_coef_override: float | None = None
+    # Experimental, bounded consolidation selected from native gate feedback.
+    # Off for fresh recipes until behavioral validation; full resumes inherit it.
+    adaptive_entropy_consolidation: bool = False
     # A bounded reward relief used by the lateral-drive adaptive recipe when
     # the yaw frontier is still unacquired.  The runner owns its state and
     # persists it in the adaptive checkpoint; the canonical action-rate
@@ -523,6 +526,9 @@ def make_microduck_adaptive_velocity_env_cfg(
         cfg.adaptive_frontier_stall_windows = override
     if play:
         cfg.adaptive_evaluation_interval = 0
+    saved_consolidation = (_resume_adaptive_state() or {}).get("entropy_consolidation")
+    if saved_consolidation is not None and not play:
+        cfg.adaptive_entropy_consolidation = True
     return cfg
 
 

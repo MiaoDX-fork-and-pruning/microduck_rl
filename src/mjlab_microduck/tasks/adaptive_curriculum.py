@@ -15,6 +15,132 @@ from enum import StrEnum
 from mjlab_microduck.evaluation.capability import BUCKETS, resolve_enabled_axes
 
 
+class EntropyConsolidation:
+    """One measured consolidation attempt, followed by a campaign checkpoint.
+
+    The .60 acquisition boundary and .80 mastery boundary match the existing
+    native gate. Neither is a new acceptance threshold. A full evaluation
+    window at zero entropy is retained only if the gate preserves acquired
+    skills and the weakest bucket improves by .05 (or all buckets master).
+    Every attempt terminates, including failed evaluation, so a large requested
+    budget cannot silently extend an ineffective consolidation treatment.
+    """
+
+    version = 2
+
+    def __init__(self) -> None:
+        self.phase = "waiting"
+        self.baseline_metrics: dict[str, float] = {}
+        self.baseline_checkpoint: str | None = None
+        self.original_entropy_coef: float | None = None
+        self.start_iterations: int | None = None
+        self.window_updates: int | None = None
+        self.focus_bucket: str | None = None
+        self.result_metrics: dict[str, float] | None = None
+        self.reason: str | None = None
+
+    @staticmethod
+    def _metrics(metrics: Mapping[str, float]) -> dict[str, float]:
+        values = {name: float(metrics[name]) for name in BUCKETS}
+        if any(not math.isfinite(value) or not 0.0 <= value <= 1.0 for value in values.values()):
+            raise ValueError("invalid consolidation capability scores")
+        return values
+
+    @property
+    def terminal(self) -> bool:
+        return self.phase in ("retained", "rejected")
+
+    @property
+    def deadline(self) -> int | None:
+        if self.start_iterations is None or self.window_updates is None:
+            return None
+        return self.start_iterations + self.window_updates
+
+    def ready(self, metrics: Mapping[str, float], entropy_coef: float) -> bool:
+        values = self._metrics(metrics)
+        return (
+            self.phase == "waiting" and entropy_coef > 0.0
+            and values["zero"] >= 0.80 and 0.60 <= min(values.values()) < 0.80
+        )
+
+    def begin(self, metrics: Mapping[str, float], *, entropy_coef: float,
+              checkpoint: str, completed_iterations: int, window_updates: int,
+              focus_bucket: str | None = None) -> None:
+        if not self.ready(metrics, entropy_coef):
+            raise ValueError("consolidation requires acquired but unmastered capabilities")
+        if (not math.isfinite(entropy_coef) or not checkpoint
+                or type(completed_iterations) is not int or completed_iterations < 0
+                or type(window_updates) is not int or window_updates < 1):
+            raise ValueError("invalid consolidation start contract")
+        if focus_bucket is not None and focus_bucket not in BUCKETS[1:]:
+            raise ValueError("consolidation focus must be directional")
+        self.phase = "active"
+        self.baseline_metrics = self._metrics(metrics)
+        self.baseline_checkpoint = checkpoint
+        self.original_entropy_coef = float(entropy_coef)
+        self.start_iterations = completed_iterations
+        self.window_updates = window_updates
+        self.focus_bucket = focus_bucket
+
+    def finish(self, metrics: Mapping[str, float] | None, *, gate_retained: bool,
+               completed_iterations: int) -> None:
+        if self.phase != "active" or completed_iterations < self.deadline:
+            raise ValueError("consolidation window has not completed")
+        values = None if metrics is None else self._metrics(metrics)
+        self.result_metrics = values
+        improved = values is not None and (
+            min(values.values()) >= 0.80
+            or min(values.values()) >= min(self.baseline_metrics.values()) + 0.05
+        )
+        self.phase = "retained" if gate_retained and improved else "rejected"
+        self.reason = (
+            "evaluation_failed" if values is None
+            else "preservation_failed" if not gate_retained
+            else "weakest_capability_improved" if improved
+            else "insufficient_capability_gain"
+        )
+
+    def state_dict(self) -> dict[str, object]:
+        return {"version": self.version, **vars(self), "baseline_metrics": dict(self.baseline_metrics),
+                "result_metrics": None if self.result_metrics is None else dict(self.result_metrics)}
+
+    def load_state_dict(self, payload: Mapping[str, object]) -> None:
+        if payload.get("version") == 1:
+            payload = {**payload, "version": self.version, "focus_bucket": None}
+        if payload.get("version") != self.version or set(payload) != set(self.state_dict()):
+            raise ValueError("invalid consolidation state schema")
+        phase = payload["phase"]
+        if phase not in ("waiting", "active", "retained", "rejected"):
+            raise ValueError("invalid consolidation phase")
+        restored = EntropyConsolidation()
+        if phase == "waiting":
+            if dict(payload) != restored.state_dict():
+                raise ValueError("waiting consolidation contains an old attempt")
+        else:
+            for key in ("start_iterations", "window_updates"):
+                if type(payload[key]) is not int:
+                    raise ValueError("invalid consolidation update budget")
+            coefficient = payload["original_entropy_coef"]
+            if isinstance(coefficient, bool) or not isinstance(coefficient, (int, float)):
+                raise ValueError("invalid consolidation entropy value")
+            checkpoint = payload["baseline_checkpoint"]
+            if not isinstance(checkpoint, str):
+                raise ValueError("invalid consolidation baseline path")
+            restored.begin(payload["baseline_metrics"], entropy_coef=coefficient,
+                           checkpoint=checkpoint, completed_iterations=payload["start_iterations"],
+                           window_updates=payload["window_updates"], focus_bucket=payload["focus_bucket"])
+            if phase == "active":
+                if payload["reason"] is not None or payload["result_metrics"] is not None:
+                    raise ValueError("active consolidation contains a terminal verdict")
+            else:
+                restored.finish(payload["result_metrics"],
+                                gate_retained=payload["reason"] not in ("preservation_failed", "evaluation_failed"),
+                                completed_iterations=restored.deadline)
+                if restored.phase != phase or restored.reason != payload["reason"]:
+                    raise ValueError("consolidation verdict does not match its evidence")
+        self.__dict__.update(restored.__dict__)
+
+
 class CommandExposure:
     """Keep learned commands alive while concentrating on one frontier.
 
@@ -214,6 +340,22 @@ class CommandExposure:
         self.retention_repairs += 1
         self.last_repair_buckets = ordered
         return ordered
+
+    def consolidation_focus(self, bucket: str, metrics: Mapping[str, float]) -> str:
+        """Move one bounded focus slice to a selected consolidation frontier."""
+        if bucket not in self.frontier_order:
+            raise ValueError("consolidation focus must be directional")
+        value = float(metrics[bucket])
+        if not math.isfinite(value) or not 0.0 <= value <= 1.0:
+            raise ValueError("consolidation focus score must be finite and in [0, 1]")
+        target = self._target(bucket)
+        for name in BUCKETS:
+            self.probabilities[name] += self.update_rate * (target[name] - self.probabilities[name])
+        self.focus_bucket = bucket
+        self.focus_best_score = value
+        self.focus_stall_count = 0
+        self.windows += 1
+        return bucket
 
     def state_dict(self) -> dict[str, object]:
         return {

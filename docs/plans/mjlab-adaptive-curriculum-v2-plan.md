@@ -4,10 +4,12 @@ Status: Phase 0/1 automation works; Phase 2A usable-policy acquisition remains
 open. Low-entropy consolidation retained an improved 6750 actor, but native
 cohort and CPU acceptance still fail. The unchanged 7000 continuation and the
 matched stronger-smoothing (−.4) treatment both completed without joint native/
-CPU improvement; neither may be extended unchanged. 6750 remains the diagnostic
-reference. Resume now preserves live PPO entropy and the campaign reconstructs
-nondefault relief settings. Automatic consolidation selection, final-range
-mastery and training seeds 17/23/47 remain unproven. No long training is running.
+CPU improvement; neither may be extended unchanged. The manual 6750 remains a comparison
+reference. Resume preserves live PPO entropy and nondefault relief settings.
+The opt-in automatic consolidation V5 trial completed and retained an improved
+actor: all six pass on one final-native diagnostic seed, but the three-seed
+native cohort and CPU rehearsal still fail. Final-range mastery across seeds and
+autonomous training seeds 17/23/47 remain unproven.
 Date: 2026-09-23
 Related:
 
@@ -44,7 +46,7 @@ pass threshold, 20% exact-zero anchor, nominal exposure and directional floors.
 ### Best retained consolidation reference
 
 Authoritative evidence:
-`/tmp/microduck-adaptive-entropy-consolidation-s17-v2/experiment-summary.json`.
+`/tmp/microduck-adaptive-entropy-consolidation-s17-v3/experiment-summary.json`.
 Two branches resume the exact global-relief 6500 adaptive snapshot on immutable
 `610fbc5`, seed 17, 4096 envs, with 250 updates each. Both smoke64/5 checks pass;
 saved agent configs differ **only** in `algorithm.entropy_coef` (.01 vs .0).
@@ -231,11 +233,95 @@ not policy improvement or matched-budget quality. Source snapshot:
 `/tmp/microduck-resume-settings-source-a408d80`, 681 manifest entries, SHA
 `aded72b5050d10e73c7e00e44210843fa339d45c228126f6b4b5f156850a9207`.
 
-Next product slice: reproduce the successful 6500→6750 consolidation through a
-bounded runner decision using frozen gate feedback, with persisted attempt
-budget and rollback. The negative unchanged continuation constrains its stopping
-rule. Do not promote a manual override into an automatic default without this
-behavioral proof; do not reopen rejected smoothing/delay/integrator treatments.
+### Automatic consolidation: completed V3 and V5 comparison
+
+The opt-in `--entropy-consolidation` campaign flag enables a bounded runner-owned
+attempt. A fresh validated native cohort must show all six ≥ .60, zero ≥ .80,
+weakest < .80, and positive current entropy. On legacy resume it re-evaluates the
+actual retained actor without consuming another teacher window. Historical
+per-bucket best scores do not authorize the switch.
+
+The runner saves a baseline, selects entropy zero and persists the original
+coefficient, scores/path and one-window update budget. The existing gate must
+preserve mastered capabilities, and the weakest score must gain ≥ .05 (or all
+six master), to retain the candidate. Otherwise restore the baseline trainer.
+Failed evaluation also rejects the attempt. Either outcome stops training and
+runs final-native/CPU evaluation. Result manifests distinguish requested and
+actual completed updates; resumes preserve deadlines, and pending-at-deadline
+evaluation occurs before further PPO updates. Terminal attempts cannot extend
+unchanged. No acceptance threshold changes.
+
+V3 is complete: `/tmp/microduck-auto-consolidation-s17-v3/experiment-summary.json`
+and `verification.json`. It automatically selected zero entropy for 6500→6750,
+then rejected turn-right preservation (.812→.726), restored baseline entropy .01
+and stopped at 6750 despite requesting 7000. Worst score .669→.702 also misses
+the required .05 gain. Candidate stage scores:
+.970/.748/.794/.702/.790/.726 (zero/forward/lateral/yaw/left/right).
+Retained final native: .923/.879/.797/.837/.737/.820; CPU:
+.940/.903/.730/.000/.696/.849. The retained actor matches baseline/known-good
+and differs from the rejected candidate. Baseline actor/critic/optimizer match
+the original 6500 snapshot. All 682 source files, 12 reports, 48 unique traces and
+checkpoint hashes verify. Retained checkpoint SHA:
+`f91a92fa1f66648adf6632c2525833b4b3ee47516217330ce510d89685a135fd`.
+This proves automatic negative-decision execution, not usability or reliable
+consolidation improvement. The earlier manual 6750 remains the reference.
+
+A stale lateral exposure focus while yaw is weakest motivates a second treatment,
+but has not been proven causal. V5 redirects one 25%-toward-target exposure slice
+to the weakest directional bucket after saving the baseline, applies it to the
+live command manager, and checkpoints the selected bucket (state version 2 with
+version-1 migration). Rejection restores original teacher state as well as PPO.
+The zero/nominal anchors and directional floors remain fixed. No reward or DR
+change, no manual entropy value, no change to product gates or actor ABI.
+
+176 focused tests pass, including actual manager values, teacher rollback,
+partial resume, pending-at-deadline evaluation and early-stop transition budgets.
+V1/v2 failed before PPO updates (logger initialization / relative-path validation)
+and are covered by regressions. V4 was intentionally terminated after at least
+11 updates because probabilities never reached the manager; its
+`/tmp/microduck-auto-consolidation-s17-v4/invalid-intervention.json` excludes it
+from treatment comparisons. Preserve these failed artifacts; do not restart.
+
+V5 completed with training seed 17, 4096 envs, cohort 20260815–17 and reused
+diagnostic seed 20260915. Fresh smoke64/5 passed. The request was 7000 total;
+the controller retained the improved candidate and stopped at 6750 after exactly
+250 new updates (24,576,000 transitions). Session `10932` and audit `40226` exited 0.
+Baseline actor/critic/optimizer equal the exact 6500 start; V3/V5 bootstrap scores
+match. Retained actor equals the evaluated candidate and known-good, differs from
+baseline, and has mean action std .10010 (start .27970), with entropy zero.
+
+| V5 retained actor | Zero | Forward | Lateral | Yaw | Left | Right |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Stage cohort, worst of three | .962 | .754 | .792 | .732 | .819 | .819 |
+| Final native, diagnostic seed 20260915 | .937 | .886 | .810 | .851 | .802 | .811 |
+| CPU v4, diagnostic seed 20260915 | .981 | .902 | .851 | .668 | .754 | .766 |
+
+The weakest cohort score gains .0626 while mastered capabilities are preserved,
+so retention follows the declared rule. One cohort seed passes all six; two do
+not. The final-native diagnostic passes all six with a left-turn margin of only
+.0025. Native/CPU yaw means .840/1.004 rad/s for a .8 command. CPU remains upright
+but turning accuracy fails. This is evidence of one automatically selected and
+retained improvement; it is not product acceptance or proof of a causal focus
+mechanism. Source/trace audit verifies 682 source files, 12 reports and 48 unique
+traces; live manager yaw probability was .1368 during training, from baseline
+.0890. The ordinary end-of-window teacher update leaves .1726 in the checkpoint.
+
+Contract, summary and audit:
+`/tmp/microduck-auto-consolidation-s17-v5/{experiment-contract,experiment-summary,verification}.json`.
+Source: `/tmp/microduck-auto-consolidation-source-d503d63-v5`, manifest SHA
+`8aa8f6a42c8f46ae38023ed33687a1a31657a7e4136b8a342e9a903128a60ea6`.
+Retained checkpoint SHA:
+`311265f7d9258c6de29845675d1b68bcf499e247ee80d43e6749d59064167aea`.
+The summary owns the full checkpoint path and retention proof. Focused Ruff and
+diff checks pass; worktree code/tests match the verified source. README and the
+specialist reproducibility document remain unchanged after documentation review.
+
+V5 is the current automatic candidate; the manual 6750 actor remains a comparison
+reference. Next inspect V5 on already diagnosed push/sensor seeds and raw CPU
+tracking before selecting another bounded training treatment. Terminal attempts
+must not extend unchanged. From-scratch acquisition, fresh held-out evidence,
+multi-training-seed replication, CPU usability and final CoM mastery remain open.
+Controller remains opt-in; no product threshold/default change is justified.
 
 ### Pre-consolidation reference and measured limits
 
