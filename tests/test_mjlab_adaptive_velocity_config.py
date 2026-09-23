@@ -111,6 +111,24 @@ def test_final_range_axis_isolation_parses_owned_subset(monkeypatch, raw_axes, e
     assert cfg.adaptive_final_range_axes == expected
 
 
+@pytest.mark.parametrize("target,axes", [
+    ("composed", "com_range"), ("composed", "head_com_range"),
+    ("com", "com_range"), ("head_com", "head_com_range"),
+])
+def test_final_range_launch_can_construct_all_registered_recipes(monkeypatch, target, axes):
+    from mjlab_microduck.tasks.microduck_adaptive_velocity_env_cfg import ADAPTIVE_RECIPES
+
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "1")
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE", target)
+    monkeypatch.setenv("MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES", axes)
+    for mode, diagnostic, feedback, _ in ADAPTIVE_RECIPES:
+        cfg = make_microduck_adaptive_velocity_env_cfg(
+            axis_mode=mode, diagnostic_mode=diagnostic, command_exposure=feedback,
+        )
+        assert cfg.adaptive_final_range_finetune == (mode == target)
+        assert cfg.adaptive_final_range_axes == ((axes,) if mode == target else ())
+
+
 def test_adaptive_experiment_branches_have_distinct_log_names() -> None:
     names = {
         AdaptiveMicroduckStaticRlCfg.experiment_name,

@@ -181,6 +181,9 @@ def main() -> int:
             name not in enabled_final_axes for name in args.final_range_axes
         ) or len(set(args.final_range_axes)) != len(args.final_range_axes):
             parser.error("final-range axes must be a nonempty owned subset without duplicates")
+        args.final_range_axes = tuple(
+            name for name in enabled_final_axes if name in args.final_range_axes
+        )
     elif args.final_range_axes is not None:
         parser.error("--final-range-axes requires --final-range-finetune")
     if args.gate_distribution not in ("final", "stage"):
@@ -249,6 +252,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_EVALUATION_DISTRIBUTION": args.gate_distribution,
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION": "1" if args.rebaseline_gate else "0",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE": "1" if args.final_range_finetune else "0",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE": axis_mode if args.final_range_finetune else "",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES": (
             ",".join(args.final_range_axes) if args.final_range_finetune else ""
         ),
@@ -358,6 +362,7 @@ def main() -> int:
         "MICRODUCK_ADAPTIVE_ALLOW_DISTRIBUTION_MIGRATION",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE",
         "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES",
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE",
     ):
         evaluation_environment.pop(name, None)
     report_path = output / "heldout" / "capability.json"

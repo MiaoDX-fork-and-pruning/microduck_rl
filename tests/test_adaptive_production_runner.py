@@ -973,6 +973,25 @@ def test_final_range_finetune_can_isolate_one_axis(monkeypatch, tmp_path):
     assert destination.capability_gate.stage_value("head_com_range") == 0.003
 
 
+@pytest.mark.parametrize("legacy", [False, True])
+def test_final_range_resume_cannot_silently_change_axes(monkeypatch, tmp_path, legacy):
+    _fake_parent_io(monkeypatch)
+    source = _runner()
+    source.final_range_finetune = True
+    source.final_range_axes = ("com_range", "head_com_range")
+    checkpoint = tmp_path / "both-final.pt"
+    source.save(str(checkpoint))
+    if legacy:
+        payload = torch.load(checkpoint, weights_only=False)
+        payload["infos"]["adaptive_curriculum"].pop("final_range_axes")
+        torch.save(payload, checkpoint)
+    destination = _runner()
+    destination.final_range_finetune = True
+    destination.final_range_axes = ("com_range",)
+    with pytest.raises(ValueError, match="final-range axes mismatch"):
+        destination.load(str(checkpoint))
+
+
 def test_ordinary_adaptive_resume_rejects_final_range_checkpoint(monkeypatch, tmp_path):
     _fake_parent_io(monkeypatch)
     source = _runner()

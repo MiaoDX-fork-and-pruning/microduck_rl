@@ -1289,11 +1289,13 @@ class AdaptiveMicroduckOnPolicyRunner(MicroduckOnPolicyRunner):
             )
             if saved_mode != expected_mode:
                 raise ValueError("adaptive checkpoint training mode is invalid")
-            saved_final_axes = tuple(state.get("final_range_axes", ()))
-            if saved_final_range_finetune and saved_final_axes and (
-                tuple(self.final_range_axes) != saved_final_axes
-            ):
-                raise ValueError("adaptive checkpoint final-range axes mismatch")
+            if saved_final_range_finetune:
+                # Earlier final-range checkpoints expanded every owned axis.
+                # A missing field must not allow a later isolated resume to
+                # silently change that treatment contract.
+                saved_final_axes = tuple(state.get("final_range_axes", state.get("enabled_axes", ())))
+                if tuple(self.final_range_axes) != saved_final_axes:
+                    raise ValueError("adaptive checkpoint final-range axes mismatch")
             if "entropy_coef" in state:
                 entropy_coef = _entropy_coefficient(state["entropy_coef"])
             saved_consolidation = state.get("entropy_consolidation")

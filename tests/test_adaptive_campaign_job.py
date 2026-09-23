@@ -16,7 +16,8 @@ spec.loader.exec_module(campaign)
 
 
 def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events=None,
-                  fraction=None, sensor_reset_fraction=None, transition=False, distribution="final"):
+                  fraction=None, sensor_reset_fraction=None, transition=False, distribution="final",
+                  final_axes=None):
     state = {"task_id": task, "completed_iterations": completed,
              "num_envs": 64, "evaluation_seed": 20260815,
              "evaluation_events": events or [{"kind": "hold"}],
@@ -28,6 +29,9 @@ def _write_result(path, checkpoint, *, start=5, completed=7, task="task", events
     if transition:
         state["transition_exposure"] = {"probability": 0.2}
         state["transition_bootstrap_mode"] = "zero"
+    if final_axes is not None:
+        state.update(final_range_finetune=True, final_range_axes=list(final_axes),
+                     training_mode="final_range_finetune")
     torch.save({"iter": completed - 1, "infos": {"adaptive_curriculum": state}}, checkpoint)
     result = {"version": 1, "status": "completed", "task_id": task,
               "completed_iterations": completed, "start_completed_iterations": start,
@@ -213,6 +217,59 @@ def test_campaign_cannot_silently_reuse_final_gate_evidence_for_stage_gate(monke
     with pytest.raises(SystemExit):
         campaign.main()
     assert not (tmp_path / "run").exists()
+
+
+@pytest.mark.parametrize("requested_axes,expected_axes", [
+    (None, ["com_range", "head_com_range"]),
+    ("com_range", ["com_range"]),
+    ("head_com_range", ["head_com_range"]),
+    ("head_com_range,com_range", ["com_range", "head_com_range"]),
+])
+def test_final_range_campaign_smokes_exact_resume_and_disables_rehearsal(
+    monkeypatch, tmp_path, requested_axes, expected_axes,
+):
+    task, _ = campaign.TASKS["feedback"]
+    checkpoint = tmp_path / "source.pt"
+    _write_result(tmp_path / "prior.json", checkpoint, task=task, start=0,
+                  completed=5, fraction=0.2, distribution="stage")
+    output = tmp_path / "finetune"
+    monkeypatch.setenv("MICRODUCK_SOURCE_SHA", "source")
+    argv = ["campaign", "--branch", "feedback", "--seed", "23",
+            "--resume", str(checkpoint), "--output", str(output),
+            "--num-envs", "64", "--iterations", "7", "--final-range-finetune"]
+    if requested_axes is not None:
+        argv += ["--final-range-axes", requested_axes]
+    monkeypatch.setattr(sys, "argv", argv)
+    phases = []
+
+    def run(command, **kwargs):
+        env = kwargs["env"]
+        if Path(command[0]).name == "train":
+            phase = Path(kwargs["cwd"]).name
+            phases.append(phase)
+            assert env["MICRODUCK_ADAPTIVE_RESUME_CHECKPOINT"] == str(checkpoint)
+            assert env["MICRODUCK_ADAPTIVE_FINAL_COM_FRACTION"] == "0.0"
+            assert env["MICRODUCK_ADAPTIVE_EVALUATION_INTERVAL"] == "0"
+            assert env["MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE"] == "composed"
+            assert env["MICRODUCK_ADAPTIVE_FINAL_RANGE_AXES"].split(",") == expected_axes
+            assert command[command.index("--agent.max-iterations") + 1] == ("5" if phase == "smoke" else "2")
+            if phase == "training":
+                _write_result(Path(env["MICRODUCK_ADAPTIVE_RESULT_FILE"]), output / "final.pt",
+                              task=task, fraction=0.0, final_axes=expected_axes,
+                              events=[{"kind": "final_range_finetune_source"}])
+        else:
+            assert not any(k.startswith("MICRODUCK_ADAPTIVE_FINAL_RANGE") for k in env)
+            report = Path(command[command.index("--output") + 1])
+            report.parent.mkdir(parents=True)
+            report.write_text(json.dumps({"aggregate": {"passed": False}}))
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(campaign.subprocess, "run", run)
+    assert campaign.main() == 0
+    assert phases == ["smoke", "training"]
+    result = json.loads((output / "campaign-result.json").read_text())
+    assert result["segment_training_transitions"] == 2 * 24 * 64
+    assert result["final_range_axes"] == expected_axes
 
 
 def test_resumed_job_recreates_sensor_reset_setting_from_checkpoint(

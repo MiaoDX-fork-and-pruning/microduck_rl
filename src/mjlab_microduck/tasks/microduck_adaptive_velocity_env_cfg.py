@@ -297,11 +297,14 @@ def make_microduck_adaptive_velocity_env_cfg(
     cfg.adaptive_final_range_finetune = (
         os.environ.get("MICRODUCK_ADAPTIVE_FINAL_RANGE_FINETUNE", "0") == "1"
     )
+    target_final_axis_mode = os.environ.get(
+        "MICRODUCK_ADAPTIVE_FINAL_RANGE_AXIS_MODE", "composed"
+    )
     # The task registry constructs every adaptive variant while importing the
     # package.  A final-range launcher environment is therefore also visible
     # to the static registration entry; leave that unrelated factory in its
     # ordinary mode and let the launcher/runner reject a static fine-tune.
-    if axis_mode == "all_static":
+    if axis_mode == "all_static" or axis_mode != target_final_axis_mode:
         cfg.adaptive_final_range_finetune = False
         cfg.adaptive_final_range_axes = ()
     elif cfg.adaptive_final_range_finetune:
