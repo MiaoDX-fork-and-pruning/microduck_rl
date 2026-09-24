@@ -223,7 +223,7 @@ def run_export(task_id: str, cfg: ExportConfig):
     else:
         runner_cls = load_runner_cls(task_id) or OnPolicyRunner
         runner = runner_cls(env, asdict(agent_cfg), device=device)
-        runner.load(str(resume_path), map_location=device)
+        runner.load(str(resume_path), load_cfg={"actor": True}, map_location=device)
         policy = runner.get_inference_policy(device=device)
 
     # mjlab 1.3.0: ONNX export + metadata moved to mjlab.rl.exporter_utils and

@@ -1,0 +1,69 @@
+jobName: microduck-adaptive-wave1-battery-c72423f
+description: Frozen six-bucket battery for completed canonical and wave-1 checkpoints
+accessType: PRIVATE
+imageConfig:
+  imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+  imageCommand: |
+    set -euo pipefail
+    export PYTHONUNBUFFERED=1
+    export PYTHONPATH=/mnt/cloudml/source/src
+    battery=/mnt/cloudml/source/scripts/run_adaptive_capability_battery.py
+    for branch in control static com headcom composed; do
+      onnx=$(find "/mnt/cloudml/input/${branch}" -type f -name '*.onnx' | sort | tail -n 1)
+      test -n "$onnx"
+      /opt/microduck_rl/.venv/bin/python "$battery" --onnx "$onnx" --output "/mnt/cloudml/output/${branch}" --duration-seconds 6.0
+    done
+queueId: '11759'
+priority: 5
+framework: pytorch
+resourceConfigs:
+  - nodeRole: worker
+    nodeNumber: 1
+    perNodeResourceSpec:
+      resourcePriority: GUARANTEED
+      resourceName: cloudml.ng1r49-8-8.13-107
+      resourceNumber: 1
+JuiceFSMountConfigs:
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/source/adaptive-curriculum/c72423f
+    MountPath: /mnt/cloudml/source
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-control-r2-af06b34
+    MountPath: /mnt/cloudml/input/control
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-static-r2-af06b34
+    MountPath: /mnt/cloudml/input/static
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-com-r2-af06b34
+    MountPath: /mnt/cloudml/input/com
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-headcom-r2-af06b34
+    MountPath: /mnt/cloudml/input/headcom
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-composed-r2-af06b34
+    MountPath: /mnt/cloudml/input/composed
+    ReadOnly: true
+  - Volume: robot-intelligent-planning-data
+    JuiceFSCluster: wlcb-cloudml
+    SubPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/wave1-battery-c72423f
+    MountPath: /mnt/cloudml/output
+    ReadOnly: false
+retryConfig:
+  enableRetry: false
+  maxRetryTimes: 0
+  policySets:
+    - JobFailed
+diagOptions:
+  - name: HangDetection
+    enable: false

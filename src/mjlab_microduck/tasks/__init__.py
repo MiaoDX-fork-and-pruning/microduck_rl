@@ -53,6 +53,11 @@ from .microduck_velocity_env_cfg import (
     make_microduck_velocity_env_cfg,
     MicroduckRlCfg,
 )
+from .microduck_adaptive_velocity_env_cfg import (
+    make_microduck_adaptive_velocity_env_cfg,
+    ADAPTIVE_RECIPES,
+)
+from .adaptive_runner import AdaptiveMicroduckOnPolicyRunner
 from .microduck_standup_env_cfg import (
     make_microduck_standup_env_cfg,
     MicroduckStandUpRlCfg,
@@ -117,6 +122,17 @@ register_mjlab_task(
     rl_cfg=MicroduckRlCfg,
     runner_cls=MicroduckOnPolicyRunner,
 )
+
+for _axis_mode, _diagnostic, _feedback, _rl_cfg in ADAPTIVE_RECIPES:
+    _options = dict(axis_mode=_axis_mode, diagnostic_mode=_diagnostic, command_exposure=_feedback)
+    _env_cfg = make_microduck_adaptive_velocity_env_cfg(**_options)
+    register_mjlab_task(
+        task_id=_env_cfg.task_id,
+        env_cfg=_env_cfg,
+        play_env_cfg=make_microduck_adaptive_velocity_env_cfg(play=True, **_options),
+        rl_cfg=_rl_cfg,
+        runner_cls=AdaptiveMicroduckOnPolicyRunner,
+    )
 
 register_mjlab_task(
     task_id="Mjlab-GeneralistG0-DirectPPO-Flat-MicroDuck",

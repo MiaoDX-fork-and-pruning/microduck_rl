@@ -32,6 +32,30 @@ MICRODUCK_XML = "src/mjlab_microduck/robot/microduck/scene.xml"
 # MICRODUCK_XML = "src/mjlab_microduck/robot/microduck/scene_robot_walk.xml"
 MICRODUCK_ROLLERS_XML = "src/mjlab_microduck/robot/microduck/scene_rollers.xml"
 MICRODUCK_BALL_XML = "src/mjlab_microduck/robot/microduck/scene_ball.xml"
+DEFAULT_CURRENT_LIMIT_A = 1.75
+
+
+def apply_xl330_current_limit(model, current_limit=DEFAULT_CURRENT_LIMIT_A):
+    """Match the XL330 current saturation in every CPU deployment rehearsal.
+
+    XML position actuators remain an approximation of BAM. This shares the
+    firmware torque cap between interactive inference and headless batteries.
+    A nonpositive value leaves the XML force limits unchanged.
+    """
+    if current_limit is None:
+        return None
+    if not math.isfinite(current_limit):
+        raise ValueError("current limit must be finite")
+    if current_limit <= 0:
+        return None
+    from bam.model import load_model
+
+    kt = load_model(motor_name="xl330", model="m6").kt.value
+    torque_limit = float(kt * current_limit)
+    model.actuator_forcerange[:, 0] = -torque_limit
+    model.actuator_forcerange[:, 1] = torque_limit
+    model.actuator_forcelimited[:] = 1
+    return torque_limit
 
 # Body pose command constants (must match training constants)
 BODY_CMD_MAX_Z = 0.03              # ±30 mm
@@ -926,7 +950,7 @@ def main():
                         help="Use the unified 13D command obs layout (twist+head_pose+body_pose). "
                              "Required for policies trained with the new pose-command-tracking setup. "
                              "Old policies (51D obs, head_offset added to ctrl) need this flag OFF.")
-    parser.add_argument("--current-limit", type=float, default=1.75,
+    parser.add_argument("--current-limit", type=float, default=DEFAULT_CURRENT_LIMIT_A,
                         help="XL330 firmware current limit [A]. Actuator torque is clipped to "
                              "+/- current_limit * kt (kt from the bam package), matching the "
                              "current saturation modeled in training. <=0 disables.")
@@ -995,15 +1019,10 @@ def main():
     # MuJoCo position actuators here are not the BAM voltage model, but clipping
     # their output force reproduces the same current saturation the policy was
     # trained against (see BamActuator.max_current). kt comes from the bam package.
-    if args.current_limit and args.current_limit > 0:
-        from bam.model import load_model
-        kt = load_model(motor_name="xl330", model="m6").kt.value
-        torque_limit = kt * args.current_limit
-        model.actuator_forcerange[:, 0] = -torque_limit
-        model.actuator_forcerange[:, 1] = torque_limit
-        model.actuator_forcelimited[:] = 1
+    torque_limit = apply_xl330_current_limit(model, args.current_limit)
+    if torque_limit is not None:
         print(f"Current limit: {args.current_limit:.2f} A -> torque limit "
-              f"+/-{torque_limit:.4f} Nm (kt={kt:.4f})")
+              f"+/-{torque_limit:.4f} Nm")
 
     # Foot contact override — emulate the real grippy + soft PU sole to check
     # whether it reproduces the on-robot forward-fall-at-speed. Training used

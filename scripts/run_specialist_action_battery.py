@@ -21,7 +21,12 @@ SCRIPT_DIR = Path(__file__).resolve().parent
 if str(SCRIPT_DIR) not in sys.path:
     sys.path.insert(0, str(SCRIPT_DIR))
 
-from infer_policy import DEFAULT_POSE, PolicyInference  # noqa: E402
+from infer_policy import (  # noqa: E402
+    DEFAULT_CURRENT_LIMIT_A,
+    DEFAULT_POSE,
+    PolicyInference,
+    apply_xl330_current_limit,
+)
 
 
 COMMAND_SPEEDS = (0.03, 0.05, 0.08, 0.10, 0.15, 0.20)
@@ -41,6 +46,7 @@ PROFILE_SCENES = {
 }
 
 POLICY_PROFILES = {
+    "adaptive_velocity": "walk_all_collisions",
     "velocity_flat": "walk_all_collisions",
     "velstand_flat": "walk_all_collisions",
     "sitstand_flat": "walk_all_collisions",
@@ -57,6 +63,7 @@ POLICY_PROFILES = {
 }
 
 LOCOMOTION_POLICIES = {"velocity_flat", "velocity_rollers"}
+ADAPTIVE_POLICIES = {"adaptive_velocity"}
 PHASE_POLICIES = {"ground_pick_flat", "roller_crouch", "spin"}
 RECOVERY_POLICIES = {"standup_flat", "roller_standup", "roulade_flat"}
 
@@ -70,6 +77,26 @@ def sha256(path: Path) -> str:
 
 
 def command_cases(policy_id: str, smoke: bool) -> list[dict[str, Any]]:
+    if policy_id in ADAPTIVE_POLICIES:
+        buckets = (
+            ("zero", (0.0, 0.0, 0.0)),
+            ("forward", (0.12, 0.0, 0.0)),
+            ("lateral", (0.0, 0.12, 0.0)),
+            ("yaw", (0.0, 0.0, 0.8)),
+            ("turn-left", (0.08, 0.0, 0.8)),
+            ("turn-right", (0.08, 0.0, -0.8)),
+        )
+        if smoke:
+            buckets = buckets[:1]
+        return [
+            {
+                "id": name,
+                "bucket": name,
+                "command": command,
+                "input_mode": "direct_step",
+            }
+            for name, command in buckets
+        ]
     if policy_id in LOCOMOTION_POLICIES:
         speeds = COMMAND_SPEEDS[:1] if smoke else COMMAND_SPEEDS
         modes = COMMAND_MODES[:1] if smoke else COMMAND_MODES
@@ -81,9 +108,17 @@ def command_cases(policy_id: str, smoke: bool) -> list[dict[str, Any]]:
     if policy_id == "sitstand_flat":
         return [{"id": "sit_then_rise", "input_mode": "direct_step"}]
     if policy_id == "standup_flat":
-        cases = [{"id": "sit_to_stand", "input_mode": "direct_step", "acceptance": "primary"}]
+        cases = [
+            {"id": "sit_to_stand", "input_mode": "direct_step", "acceptance": "primary"}
+        ]
         if not smoke:
-            cases.append({"id": "prone_recovery_probe", "input_mode": "direct_step", "acceptance": "probe"})
+            cases.append(
+                {
+                    "id": "prone_recovery_probe",
+                    "input_mode": "direct_step",
+                    "acceptance": "probe",
+                }
+            )
         return cases
     return [{"id": "canonical", "input_mode": "direct_step"}]
 
@@ -98,16 +133,26 @@ def apply_command_input(
     raise ValueError(f"unsupported command input mode: {mode}")
 
 
-def trunk_metrics(model: mujoco.MjModel, data: mujoco.MjData, body_id: int) -> dict[str, Any]:
+def trunk_metrics(
+    model: mujoco.MjModel, data: mujoco.MjData, body_id: int
+) -> dict[str, Any]:
     rotation = data.xmat[body_id].reshape(3, 3)
     up_dot = float(np.clip(rotation[2, 2], -1.0, 1.0))
     position = data.xpos[body_id].copy()
     quaternion = data.xquat[body_id].copy()
+    # BODY uses the rotated principal-inertia frame at the CoM. XBODY uses
+    # the link axes and origin shared by commands and MJLab root_link_*_b.
+    velocity = np.zeros(6, dtype=np.float64)
+    mujoco.mj_objectVelocity(
+        model, data, mujoco.mjtObj.mjOBJ_XBODY, body_id, velocity, 1
+    )
     return {
         "position": position.tolist(),
         "quaternion_wxyz": quaternion.tolist(),
         "height_m": float(position[2]),
         "tilt_rad": float(math.acos(up_dot)),
+        "angular_velocity_rad_s": velocity[:3].astype(np.float32),
+        "linear_velocity_m_s": velocity[3:].astype(np.float32),
     }
 
 
@@ -120,9 +165,13 @@ def contact_names(model: mujoco.MjModel, data: mujoco.MjData) -> list[str]:
     return sorted(names)
 
 
-def requested_command(policy_id: str, case: dict[str, Any], step: int, steps: int) -> np.ndarray:
+def requested_command(
+    policy_id: str, case: dict[str, Any], step: int, steps: int
+) -> np.ndarray:
     command = np.zeros(13, dtype=np.float32)
-    if policy_id in LOCOMOTION_POLICIES:
+    if policy_id in ADAPTIVE_POLICIES:
+        command[:3] = np.asarray(case["command"], dtype=np.float32)
+    elif policy_id in LOCOMOTION_POLICIES:
         command[0] = float(case["speed"])
     elif policy_id == "sitstand_flat":
         command[0] = 1.0 if step < steps // 2 else 0.0
@@ -135,9 +184,17 @@ def requested_command(policy_id: str, case: dict[str, Any], step: int, steps: in
     return command
 
 
-def reset_pose(policy_id: str, case_id: str, model: mujoco.MjModel, data: mujoco.MjData, policy: PolicyInference) -> None:
+def reset_pose(
+    policy_id: str,
+    case_id: str,
+    model: mujoco.MjModel,
+    data: mujoco.MjData,
+    policy: PolicyInference,
+) -> None:
     mujoco.mj_resetData(model, data)
-    free_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint")
+    free_id = mujoco.mj_name2id(
+        model, mujoco.mjtObj.mjOBJ_JOINT, "trunk_base_freejoint"
+    )
     qadr = int(model.jnt_qposadr[free_id])
     height = 0.1385 if POLICY_PROFILES[policy_id] == "rollers" else 0.125
     data.qpos[qadr : qadr + 3] = [0.0, 0.0, height]
@@ -149,8 +206,16 @@ def reset_pose(policy_id: str, case_id: str, model: mujoco.MjModel, data: mujoco
         data.qpos[qadr + 3 : qadr + 7] = [0.0, 1.0, 0.0, 0.0]
     elif policy_id == "standup_flat":
         data.qpos[qadr : qadr + 3] = [0.0, 0.0, 0.060]
-        for index, value in {1: 0.0, 2: -0.4079, 3: 1.35, 4: 0.0,
-                             10: 0.0, 11: 0.4079, 12: -1.35, 13: 0.0}.items():
+        for index, value in {
+            1: 0.0,
+            2: -0.4079,
+            3: 1.35,
+            4: 0.0,
+            10: 0.0,
+            11: 0.4079,
+            12: -1.35,
+            13: 0.0,
+        }.items():
             data.qpos[policy.joint_qpos_indices[index]] = value
     elif policy_id == "roller_standup":
         data.qpos[qadr : qadr + 3] = [0.0, 0.0, 0.07]
@@ -180,14 +245,20 @@ def classify_case(
     # 0.03/0.05 m/s are an allowed standing deadband: the controller may hold
     # upright instead of forcing a barely-observable gait cycle.
     outside_deadband = requested_speed is None or requested_speed > 0.05
-    if policy_id in LOCOMOTION_POLICIES and outside_deadband and displacement[0] < 0.005:
+    if (
+        policy_id in LOCOMOTION_POLICIES
+        and outside_deadband
+        and displacement[0] < 0.005
+    ):
         return False, "insufficient_forward_displacement"
     if policy_id in RECOVERY_POLICIES and max_tilt > TILT_FAILURE_RAD and not recovered:
         return False, "did_not_recover"
     return True, None
 
 
-def _load_policy(model: mujoco.MjModel, data: mujoco.MjData, onnx_path: Path) -> PolicyInference:
+def _load_policy(
+    model: mujoco.MjModel, data: mujoco.MjData, onnx_path: Path
+) -> PolicyInference:
     # Match scripts/infer_policy.py's deployment default: projected gravity is
     # the trained 61D observation, while raw accelerometer is opt-in.
     policy = PolicyInference(
@@ -216,6 +287,7 @@ def run_case(
     profile = POLICY_PROFILES[policy_id]
     model = mujoco.MjModel.from_xml_path(str(PROFILE_SCENES[profile]))
     model.opt.timestep = 0.005
+    torque_limit = apply_xl330_current_limit(model)
     data = mujoco.MjData(model)
     policy = _load_policy(model, data, onnx_path)
     reset_pose(policy_id, case["id"], model, data, policy)
@@ -228,15 +300,26 @@ def run_case(
     max_tilt = 0.0
     finite = True
     records: dict[str, list[Any]] = {
-        "requested_command": [], "applied_command": [], "observation": [],
-        "raw_action": [], "applied_action": [], "trunk_position": [],
-        "trunk_quaternion_wxyz": [], "trunk_tilt_rad": [], "trunk_height_m": [],
-        "contacts": [], "recovered": [],
+        "requested_command": [],
+        "applied_command": [],
+        "observation": [],
+        "raw_action": [],
+        "applied_action": [],
+        "trunk_position": [],
+        "trunk_quaternion_wxyz": [],
+        "trunk_tilt_rad": [],
+        "trunk_height_m": [],
+        "trunk_linear_velocity_m_s": [],
+        "trunk_angular_velocity_rad_s": [],
+        "contacts": [],
+        "recovered": [],
     }
 
     for step in range(steps):
         requested = requested_command(policy_id, case, step, steps)
-        applied_command = apply_command_input(requested, applied_command, case["input_mode"])
+        applied_command = apply_command_input(
+            requested, applied_command, case["input_mode"]
+        )
         policy.command = applied_command.copy()
         observation = policy.get_observations()
         raw_action = policy.infer()
@@ -266,6 +349,8 @@ def run_case(
         records["trunk_quaternion_wxyz"].append(metrics["quaternion_wxyz"])
         records["trunk_tilt_rad"].append(tilt)
         records["trunk_height_m"].append(metrics["height_m"])
+        records["trunk_angular_velocity_rad_s"].append(metrics["angular_velocity_rad_s"])
+        records["trunk_linear_velocity_m_s"].append(metrics["linear_velocity_m_s"])
         records["contacts"].append("|".join(contact_names(model, data)))
         records["recovered"].append(recovered)
 
@@ -288,25 +373,38 @@ def run_case(
         "id": case["id"],
         "seed": seed,
         "input_mode": case["input_mode"],
+        "actuator_profile": {
+            "model": "xml_position_pd",
+            "current_limit_a": DEFAULT_CURRENT_LIMIT_A,
+            "force_limit_nm": torque_limit,
+        },
         "requested_speed_m_s": case.get("speed"),
         "steps": len(records["raw_action"]),
-        "finite_61d_14d": finite and all(
-            np.asarray(obs).shape == (61,) for obs in records["observation"]
-        ) and all(np.asarray(action).shape == (14,) for action in records["raw_action"]),
+        "finite_61d_14d": finite
+        and all(np.asarray(obs).shape == (61,) for obs in records["observation"])
+        and all(np.asarray(action).shape == (14,) for action in records["raw_action"]),
         "world_displacement_m": displacement,
         "max_tilt_rad": max_tilt,
         "final_tilt_rad": float(final["tilt_rad"]),
         "final_height_m": float(final["height_m"]),
-        "max_abs_raw_action": float(np.max(np.abs(records["raw_action"]))) if records["raw_action"] else None,
-        "max_abs_applied_action": float(np.max(np.abs(records["applied_action"]))) if records["applied_action"] else None,
-        "contact_geoms": sorted({name for item in records["contacts"] for name in item.split("|") if name}),
+        "max_abs_raw_action": float(np.max(np.abs(records["raw_action"])))
+        if records["raw_action"]
+        else None,
+        "max_abs_applied_action": float(np.max(np.abs(records["applied_action"])))
+        if records["applied_action"]
+        else None,
+        "contact_geoms": sorted(
+            {name for item in records["contacts"] for name in item.split("|") if name}
+        ),
         "recovered": recovered,
         "passed": passed,
         "failure_reason": failure_reason,
     }
     if not report["finite_61d_14d"]:
         report["passed"] = False
-        report["failure_reason"] = report["failure_reason"] or "abi_or_finiteness_failure"
+        report["failure_reason"] = (
+            report["failure_reason"] or "abi_or_finiteness_failure"
+        )
     elif smoke:
         # Smoke proves artifact loading, ABI, finite inference, stepping, and
         # evidence serialization. Behavior gates require a full-duration case.
@@ -377,7 +475,9 @@ def run_battery(args: argparse.Namespace) -> dict[str, Any]:
             "passed": all(case["passed"] for case in case_reports),
             "cases": case_reports,
         }
-        (policy_dir / "report.json").write_text(json.dumps(policy_report, indent=2) + "\n")
+        (policy_dir / "report.json").write_text(
+            json.dumps(policy_report, indent=2) + "\n"
+        )
         reports.append(policy_report)
     summary = {
         "schema_version": 1,
@@ -397,7 +497,11 @@ def run_battery(args: argparse.Namespace) -> dict[str, Any]:
 
 def make_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--manifest", type=Path, default=ROOT / "artifacts/specialist_artifact_manifest.json")
+    parser.add_argument(
+        "--manifest",
+        type=Path,
+        default=ROOT / "artifacts/specialist_artifact_manifest.json",
+    )
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--policy", choices=sorted(POLICY_PROFILES))
     parser.add_argument("--seed", type=int, default=42)
