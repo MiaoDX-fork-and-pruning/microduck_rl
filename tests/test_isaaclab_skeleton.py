@@ -11,6 +11,11 @@ def test_task_registry_is_available_without_simulator() -> None:
     assert available_tasks() == (
         "IsaacLab-Velocity-Flat-MicroDuck",
         "IsaacLab-Velocity-Flat-MicroDuck-Adapted",
+        "IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat",
+        "IsaacLab-Velocity-Flat-MicroDuck-Symmetry",
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets",
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry",
+        "IsaacLab-Velocity-Flat-MicroDuck-Strictification",
     )
 
 
@@ -25,6 +30,11 @@ def test_task_cli_is_importable_without_simulator(capsys: pytest.CaptureFixture[
     assert capsys.readouterr().out == (
         "IsaacLab-Velocity-Flat-MicroDuck\n"
         "IsaacLab-Velocity-Flat-MicroDuck-Adapted\n"
+        "IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat\n"
+        "IsaacLab-Velocity-Flat-MicroDuck-Symmetry\n"
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets\n"
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry\n"
+        "IsaacLab-Velocity-Flat-MicroDuck-Strictification\n"
     )
 
 

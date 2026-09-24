@@ -190,7 +190,14 @@ def _summary_error(left: list[dict], right: list[dict], field: str) -> float:
     return max(abs(float(a[field]) - float(b[field])) for a, b in zip(left, right))
 
 
-def _assemble_report(cases: dict[str, dict], isaac: dict[str, dict], steps: int) -> dict:
+def _assemble_report(
+    cases: dict[str, dict],
+    isaac: dict[str, dict],
+    steps: int,
+    *,
+    solver_position_iterations: int,
+    solver_velocity_iterations: int,
+) -> dict:
     report_cases: dict[str, dict] = {}
     for case, refs in cases.items():
         ib = isaac[case]
@@ -226,6 +233,10 @@ def _assemble_report(cases: dict[str, dict], isaac: dict[str, dict], steps: int)
         "nominal_voltage": NOMINAL_VOLTAGE,
         "drop_gain": DROP_GAIN,
         "steps": steps,
+        "physx_solver": {
+            "position_iterations": solver_position_iterations,
+            "velocity_iterations": solver_velocity_iterations,
+        },
         "cases": report_cases,
         "finite": bool(np.isfinite(finite_values).all()),
         "interpretation": {
@@ -238,7 +249,13 @@ def _assemble_report(cases: dict[str, dict], isaac: dict[str, dict], steps: int)
 
 
 def _run_isaaclab(
-    args, cases: dict[str, dict], steps: int, output_path: Path
+    args,
+    cases: dict[str, dict],
+    steps: int,
+    output_path: Path,
+    *,
+    solver_position_iterations: int,
+    solver_velocity_iterations: int,
 ) -> dict[str, dict]:
     # IsaacLab imports are intentionally delayed until after the MuJoCo traces,
     # keeping the reference path runnable in the repository's normal uv env.
@@ -255,6 +272,12 @@ def _run_isaaclab(
 
         register_tasks()
         cfg = make_velocity_flat_env_cfg(num_envs=1)
+        cfg.scene.robot.spawn.articulation_props.solver_position_iteration_count = (
+            solver_position_iterations
+        )
+        cfg.scene.robot.spawn.articulation_props.solver_velocity_iteration_count = (
+            solver_velocity_iterations
+        )
         # Remove task DR from this same-state comparison.  The production
         # task keeps these events stochastic; this proof isolates controller,
         # authored asset, and solver behavior with neutral one-point ranges.
@@ -346,7 +369,17 @@ def _run_isaaclab(
             json.dumps(output, indent=2, sort_keys=True) + "\n"
         )
         output_path.write_text(
-            json.dumps(_assemble_report(cases, output, steps), indent=2, sort_keys=True)
+            json.dumps(
+                _assemble_report(
+                    cases,
+                    output,
+                    steps,
+                    solver_position_iterations=solver_position_iterations,
+                    solver_velocity_iterations=solver_velocity_iterations,
+                ),
+                indent=2,
+                sort_keys=True,
+            )
             + "\n"
         )
         return output
@@ -360,6 +393,18 @@ def main() -> None:
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, required=True)
     parser.add_argument("--steps", type=int, default=40)
+    parser.add_argument(
+        "--solver-position-iterations",
+        type=int,
+        default=4,
+        help="PhysX articulation position iterations for this probe only.",
+    )
+    parser.add_argument(
+        "--solver-velocity-iterations",
+        type=int,
+        default=1,
+        help="PhysX articulation velocity iterations for this probe only.",
+    )
     parser.add_argument(
         "--reference-only",
         action="store_true",
@@ -380,6 +425,8 @@ def main() -> None:
     args = parser.parse_args()
     if args.steps < DELAY + 2:
         raise ValueError("--steps must exceed the fixed delay")
+    if args.solver_position_iterations < 1 or args.solver_velocity_iterations < 1:
+        raise ValueError("solver iteration counts must be positive")
     if args.reference_only:
         model, qpos_ids, dof_ids, actuator_ids = _compile_mujoco()
         cases: dict[str, dict] = {}
@@ -404,6 +451,10 @@ def main() -> None:
             "nominal_voltage": NOMINAL_VOLTAGE,
             "drop_gain": DROP_GAIN,
             "steps": args.steps,
+            "physx_solver": {
+                "position_iterations": args.solver_position_iterations,
+                "velocity_iterations": args.solver_velocity_iterations,
+            },
             "cases": cases,
             "reference_only": True,
             "finite": True,
@@ -417,8 +468,21 @@ def main() -> None:
         args.output.write_text(encoded)
         print(encoded, end="")
         return
-    isaac = _run_isaaclab(args, cases, args.steps, args.output)
-    report = _assemble_report(cases, isaac, args.steps)
+    isaac = _run_isaaclab(
+        args,
+        cases,
+        args.steps,
+        args.output,
+        solver_position_iterations=args.solver_position_iterations,
+        solver_velocity_iterations=args.solver_velocity_iterations,
+    )
+    report = _assemble_report(
+        cases,
+        isaac,
+        args.steps,
+        solver_position_iterations=args.solver_position_iterations,
+        solver_velocity_iterations=args.solver_velocity_iterations,
+    )
     encoded = json.dumps(report, indent=2, sort_keys=True) + "\n"
     args.output.parent.mkdir(parents=True, exist_ok=True)
     args.output.write_text(encoded)

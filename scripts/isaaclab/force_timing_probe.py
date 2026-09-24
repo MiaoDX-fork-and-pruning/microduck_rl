@@ -53,6 +53,7 @@ def main() -> None:
         result: dict[str, object] = {
             "view_type": type(view).__name__,
             "joint_names": robot.joint_names,
+            "target_step": {"joint_index": 0, "target_rad": 0.35},
             "phases": [],
         }
 
@@ -70,7 +71,11 @@ def main() -> None:
             )
 
         capture("after_reset")
+        # A nonzero target is required here.  HOME produces near-zero forces,
+        # which can make a stale pre-step getter look equivalent to a fresh
+        # post-step getter even though the timing contract is different.
         target = robot.data.default_joint_pos.torch.clone()
+        target[:, 0] += 0.35
         robot.set_joint_position_target(target)
         scene.write_data_to_sim()
         capture("after_write_before_step")
@@ -84,6 +89,42 @@ def main() -> None:
         capture("second_after_step_before_scene_update")
         scene.update(sim.cfg.dt)
         capture("second_after_scene_update")
+
+        phases = result["phases"]
+        assert isinstance(phases, list)
+
+        def max_delta(left: int, right: int, key: str) -> float:
+            first = phases[left][key]
+            second = phases[right][key]
+            assert isinstance(first, dict) and isinstance(second, dict)
+            first_values = torch.as_tensor(first["first"], dtype=torch.float64)
+            second_values = torch.as_tensor(second["first"], dtype=torch.float64)
+            return float((first_values - second_values).abs().max().item())
+
+        result["timing_summary"] = {
+            "projected_force_delta_write_to_post_step": max_delta(
+                1, 2, "projected_joint_forces"
+            ),
+            "incoming_force_delta_write_to_post_step": max_delta(
+                1, 2, "incoming_joint_force"
+            ),
+            "actuation_delta_write_to_post_step": max_delta(
+                1, 2, "actuation_forces"
+            ),
+            "projected_force_delta_post_step_to_scene_update": max_delta(
+                2, 3, "projected_joint_forces"
+            ),
+            "incoming_force_delta_post_step_to_scene_update": max_delta(
+                2, 3, "incoming_joint_force"
+            ),
+            "actuation_delta_post_step_to_scene_update": max_delta(
+                2, 3, "actuation_forces"
+            ),
+            "interpretation": (
+                "force getters are sampled from the previous solved state before "
+                "sim.step; the actuator callback cannot use same-step external load"
+            ),
+        }
 
         encoded = json.dumps(result, indent=2, sort_keys=True) + "\n"
         if args.output:

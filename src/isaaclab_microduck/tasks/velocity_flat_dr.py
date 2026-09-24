@@ -323,6 +323,48 @@ def curriculum_event_range(
     return torch.tensor([value], device=_device(env))
 
 
+def curriculum_strictification(
+    env: Any,
+    env_ids: torch.Tensor | None,
+    profile_stages: list[dict],
+) -> torch.Tensor:
+    """Move a diagnostic run from the adapted basin to strict semantics.
+
+    Manager constructors deepcopy their configs.  This function therefore
+    updates the live command, reward, and termination managers explicitly so
+    the stage transition affects the running environment rather than the
+    inert environment config object.
+    """
+
+    del env_ids
+    stage = _latest_stage(env.common_step_counter, profile_stages, "step")
+    values = _latest_stage_values(env.common_step_counter, profile_stages)
+
+    command = env.command_manager.get_term("base_velocity")
+    command.cfg.rel_forward_envs = float(values["rel_forward_envs"])
+    command.cfg.rel_lateral_envs = float(values["rel_lateral_envs"])
+
+    for reward_name in ("track_lin_vel", "track_ang_vel", "pose", "air_time", "action_rate_l2"):
+        cfg = env.reward_manager.get_term_cfg(reward_name)
+        cfg.weight = float(values[reward_name])
+        env.reward_manager.set_term_cfg(reward_name, cfg)
+
+    termination = env.termination_manager.get_term_cfg("root_height")
+    termination.params["min_height"] = float(values["root_height"])
+    env.termination_manager.set_term_cfg("root_height", termination)
+    return torch.tensor([float(stage)], device=_device(env))
+
+
+def _latest_stage_values(step: int, stages: list[dict]) -> dict:
+    """Return the complete profile dictionary for a curriculum step."""
+
+    value = stages[0]
+    for stage in stages:
+        if step >= int(stage["step"]):
+            value = stage
+    return value
+
+
 def push_velocity(
     env: Any,
     env_ids: torch.Tensor | None,
@@ -396,6 +438,7 @@ __all__ = [
     "randomize_bam_friction",
     "randomize_com_offsets",
     "curriculum_event_range",
+    "curriculum_strictification",
     "curriculum_pose_command_ranges",
     "curriculum_reward_weight",
     "curriculum_standing_probability",

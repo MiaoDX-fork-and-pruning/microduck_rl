@@ -6,7 +6,14 @@ checkpoint, so playback and export use the same transform as training.
 """
 
 from isaaclab.utils.configclass import configclass
-from isaaclab_rl.rsl_rl import RslRlMLPModelCfg, RslRlOnPolicyRunnerCfg, RslRlPpoAlgorithmCfg
+from isaaclab_rl.rsl_rl import (
+    RslRlMLPModelCfg,
+    RslRlOnPolicyRunnerCfg,
+    RslRlPpoAlgorithmCfg,
+    RslRlSymmetryCfg,
+)
+
+from isaaclab_microduck.tasks.symmetry import microduck_velocity_symmetry
 
 
 @configclass
@@ -62,7 +69,65 @@ class MicroduckVelocityFlatAdaptedPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg
     experiment_name = "microduck_isaaclab_velocity_flat_adapted"
 
 
+@configclass
+class MicroduckVelocityFlatActionRateFlatPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """Runner for the isolated strict action-rate curriculum diagnostic."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_action_rate_flat"
+
+
+@configclass
+class MicroduckVelocityFlatSymmetryPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """Diagnostic runner with left-right data augmentation enabled."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_symmetry"
+    algorithm = RslRlPpoAlgorithmCfg(
+        value_loss_coef=1.0,
+        use_clipped_value_loss=True,
+        clip_param=0.2,
+        entropy_coef=0.01,
+        num_learning_epochs=5,
+        num_mini_batches=4,
+        learning_rate=1.0e-3,
+        schedule="adaptive",
+        gamma=0.99,
+        lam=0.95,
+        desired_kl=0.01,
+        max_grad_norm=1.0,
+        symmetry_cfg=RslRlSymmetryCfg(
+            use_data_augmentation=True,
+            data_augmentation_func=microduck_velocity_symmetry,
+        ),
+    )
+
+
+@configclass
+class MicroduckVelocityFlatCommandBucketsPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """Strict diagnostic runner for the adapted command-bucket hypothesis."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_command_buckets"
+
+
+@configclass
+class MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg(MicroduckVelocityFlatSymmetryPPORunnerCfg):
+    """T21 runner: adapted command buckets plus left-right augmentation."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_command_buckets_symmetry"
+
+
+@configclass
+class MicroduckVelocityFlatStrictificationPPORunnerCfg(MicroduckVelocityFlatPPORunnerCfg):
+    """T22 runner for adapted bootstrap followed by strictification."""
+
+    experiment_name = "microduck_isaaclab_velocity_flat_strictification"
+
+
 __all__ = [
     "MicroduckVelocityFlatPPORunnerCfg",
     "MicroduckVelocityFlatAdaptedPPORunnerCfg",
+    "MicroduckVelocityFlatActionRateFlatPPORunnerCfg",
+    "MicroduckVelocityFlatSymmetryPPORunnerCfg",
+    "MicroduckVelocityFlatCommandBucketsPPORunnerCfg",
+    "MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg",
+    "MicroduckVelocityFlatStrictificationPPORunnerCfg",
 ]

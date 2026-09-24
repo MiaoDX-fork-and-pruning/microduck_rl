@@ -24,6 +24,9 @@ def test_fixed_root_dynamics_probe_keeps_both_reference_modes_and_shared_setting
         "robot.write_root_velocity_to_sim_index",
         "scene.write_data_to_sim()",
         "sim.step()",
+        "--solver-position-iterations",
+        "--solver-velocity-iterations",
+        '"physx_solver"',
     ):
         assert token in source
 

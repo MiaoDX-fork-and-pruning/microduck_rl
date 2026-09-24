@@ -8,3 +8,6 @@ def test_force_timing_probe_covers_physx_force_getters_and_step_phases() -> None
     assert 'capture("after_write_before_step")' in source
     assert 'capture("after_step_before_scene_update")' in source
     assert 'capture("after_scene_update")' in source
+    assert 'target[:, 0] += 0.35' in source
+    assert 'timing_summary' in source
+    assert 'force getters are sampled from the previous solved state' in source

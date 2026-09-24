@@ -61,6 +61,104 @@ def test_adapted_profile_preserves_known_good_training_manifest() -> None:
     assert '"IsaacLab-Velocity-Flat-MicroDuck-Adapted"' in registry_source
 
 
+def test_action_rate_flat_profile_isolated_from_canonical_and_adapted() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    assert "class IsaacLabVelocityFlatActionRateFlatEnvCfg(IsaacLabVelocityFlatEnvCfg)" in source
+    assert "self.curriculum.action_rate_weight.params[\"weight_stages\"] = [" in source
+    assert "class MicroduckVelocityFlatActionRateFlatPPORunnerCfg" in runner_source
+    assert "microduck_isaaclab_velocity_flat_action_rate_flat" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat"' in registry_source
+
+
+def test_symmetry_transform_is_an_involution_and_mirrors_commands() -> None:
+    from tensordict import TensorDict
+
+    import importlib.util
+
+    symmetry_path = ROOT / "src/isaaclab_microduck/tasks/symmetry.py"
+    spec = importlib.util.spec_from_file_location("microduck_isaaclab_symmetry", symmetry_path)
+    assert spec is not None and spec.loader is not None
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+
+    policy = torch.arange(61, dtype=torch.float32).reshape(1, 61)
+    critic = torch.arange(76, dtype=torch.float32).reshape(1, 76)
+    obs = TensorDict({"policy": policy.clone(), "critic": critic.clone()}, batch_size=[1])
+    action_source = torch.arange(14, dtype=torch.float32).reshape(1, 14)
+    augmented, actions = module.microduck_velocity_symmetry(None, obs, action_source.clone())
+    assert augmented is not None and actions is not None
+    assert tuple(augmented.batch_size) == (2,)
+    mirrored = augmented["policy"][1:2]
+    restored, _ = module.microduck_velocity_symmetry(
+        None,
+        TensorDict({"policy": mirrored, "critic": critic.clone()}, batch_size=[1]),
+        actions[1:2],
+    )
+    assert restored is not None
+    torch.testing.assert_close(restored["policy"][1], policy[0])
+    torch.testing.assert_close(actions[1, 0], -action_source[0, 9])
+    torch.testing.assert_close(mirrored[0, 49], -policy[0, 49])
+    torch.testing.assert_close(mirrored[0, 50], -policy[0, 50])
+
+
+def test_symmetry_profile_is_separate_from_canonical() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    symmetry_source = _source(ROOT / "src/isaaclab_microduck/tasks/symmetry.py")
+    assert "class IsaacLabVelocityFlatSymmetryEnvCfg(IsaacLabVelocityFlatEnvCfg)" in source
+    assert "class MicroduckVelocityFlatSymmetryPPORunnerCfg" in runner_source
+    assert "RslRlSymmetryCfg" in runner_source
+    assert "microduck_velocity_symmetry" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-Symmetry"' in registry_source
+    assert "_JOINT_PERM" in symmetry_source
+    assert "_OBS_SIGN" in symmetry_source
+
+
+def test_command_bucket_profile_is_strict_except_for_sampling_buckets() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    assert "class IsaacLabVelocityFlatCommandBucketsEnvCfg(IsaacLabVelocityFlatEnvCfg)" in source
+    assert "command.rel_forward_envs = 0.0" in source
+    assert "command.rel_lateral_envs = 0.25" in source
+    assert "class MicroduckVelocityFlatCommandBucketsPPORunnerCfg" in runner_source
+    assert "microduck_isaaclab_velocity_flat_command_buckets" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets"' in registry_source
+
+
+def test_command_bucket_symmetry_profile_isolated_from_t20() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    assert "class IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg(IsaacLabVelocityFlatCommandBucketsEnvCfg)" in source
+    assert "class MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg" in runner_source
+    assert "microduck_isaaclab_velocity_flat_command_buckets_symmetry" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry"' in registry_source
+
+
+def test_strictification_profile_isolated_from_canonical_task() -> None:
+    source = _source(TASK)
+    runner_source = _source(ROOT / "src/isaaclab_microduck/tasks/agents/rsl_rl_ppo_cfg.py")
+    registry_source = _source(ROOT / "src/isaaclab_microduck/tasks/__init__.py")
+    assert "class IsaacLabVelocityFlatStrictificationEnvCfg(IsaacLabVelocityFlatEnvCfg)" in source
+    assert "func=curriculum_strictification" in source
+    assert "class MicroduckVelocityFlatStrictificationPPORunnerCfg" in runner_source
+    assert "microduck_isaaclab_velocity_flat_strictification" in runner_source
+    assert '"IsaacLab-Velocity-Flat-MicroDuck-Strictification"' in registry_source
+    assert '"step": 500 * NUM_STEPS_PER_ENV' in source
+    assert '"root_height": MIN_ROOT_HEIGHT_M' in source
+
+
+def test_strictification_battery_replays_final_live_profile() -> None:
+    source = _source(ROOT / "scripts/isaaclab/velocity_flat_command_battery.py")
+    assert 'args.task == "IsaacLab-Velocity-Flat-MicroDuck-Strictification"' in source
+    assert "base_env.common_step_counter = 1000 * 24" in source
+    assert "curriculum_strictification(base_env, None, _STRICTIFICATION_STAGES)" in source
+
+
 def test_velocity_flat_minimum_root_height_matches_mjlab_recipe() -> None:
     isaac_source = _source(TASK)
     mjlab_source = _source(ROOT / "src/mjlab_microduck/tasks/microduck_velocity_env_cfg.py")

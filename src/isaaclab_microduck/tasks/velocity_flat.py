@@ -49,6 +49,7 @@ from isaaclab_microduck.tasks.velocity_flat_dr import (
     curriculum_pose_command_ranges,
     curriculum_reward_weight,
     curriculum_standing_probability,
+    curriculum_strictification,
     reset_velocity_flat_state,
 )
 from isaaclab_microduck.tasks.velocity_flat_sensors import (
@@ -1207,7 +1208,149 @@ class IsaacLabVelocityFlatAdaptedEnvCfg(IsaacLabVelocityFlatEnvCfg):
 
 
 @configclass
+class IsaacLabVelocityFlatActionRateFlatEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """Strict diagnostic profile with a fixed action-rate penalty.
+
+    This is intentionally separate from both the canonical strict and adapted
+    profiles.  It isolates the action-rate curriculum as a training
+    hypothesis without changing the canonical task registration.
+    """
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.curriculum.action_rate_weight.params["weight_stages"] = [
+            {"step": 0, "weight": -0.1},
+        ]
+
+
+@configclass
+class IsaacLabVelocityFlatSymmetryEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """Strict diagnostic task whose runner applies left-right augmentation."""
+
+
+@configclass
+class IsaacLabVelocityFlatCommandBucketsEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """Strict diagnostic using the known-good adapted command buckets only.
+
+    Rewards, terminations, observations, DR, and PPO remain strict. This
+    isolates whether the adapted profile's 25% lateral bucket and removal of
+    the forward-only bucket are the missing training signal.
+    """
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        command = self.commands.base_velocity
+        command.rel_forward_envs = 0.0
+        command.rel_lateral_envs = 0.25
+
+
+@configclass
+class IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg(IsaacLabVelocityFlatCommandBucketsEnvCfg):
+    """T21 environment; symmetry is enabled by its paired runner config."""
+
+
+_STRICTIFICATION_STAGES = [
+    {
+        "step": 0,
+        "rel_forward_envs": 0.0,
+        "rel_lateral_envs": 0.25,
+        "track_lin_vel": 4.0,
+        "track_ang_vel": 6.0,
+        "pose": 0.5,
+        "air_time": 1.0,
+        "root_height": 0.0,
+        "action_rate_l2": -0.1,
+    },
+    {
+        "step": 500 * NUM_STEPS_PER_ENV,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_lin_vel": 2.0,
+        "track_ang_vel": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": MIN_ROOT_HEIGHT_M,
+        "action_rate_l2": -0.2,
+    },
+    {
+        "step": 750 * NUM_STEPS_PER_ENV,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_lin_vel": 2.0,
+        "track_ang_vel": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": MIN_ROOT_HEIGHT_M,
+        "action_rate_l2": -0.4,
+    },
+    {
+        "step": 1000 * NUM_STEPS_PER_ENV,
+        "rel_forward_envs": 0.2,
+        "rel_lateral_envs": 0.0,
+        "track_lin_vel": 2.0,
+        "track_ang_vel": 2.0,
+        "pose": 1.0,
+        "air_time": 3.0,
+        "root_height": MIN_ROOT_HEIGHT_M,
+        "action_rate_l2": -0.6,
+    },
+]
+
+
+@configclass
+class IsaacLabVelocityFlatStrictificationEnvCfg(IsaacLabVelocityFlatEnvCfg):
+    """T22 diagnostic: adapted bootstrap followed by strictification."""
+
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.curriculum.strictify_profile = CurrTerm(
+            func=curriculum_strictification,
+            params={"profile_stages": _STRICTIFICATION_STAGES},
+        )
+
+
+@configclass
 class IsaacLabVelocityFlatAdaptedEnvCfg_PLAY(IsaacLabVelocityFlatAdaptedEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
+@configclass
+class IsaacLabVelocityFlatActionRateFlatEnvCfg_PLAY(IsaacLabVelocityFlatActionRateFlatEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
+@configclass
+class IsaacLabVelocityFlatSymmetryEnvCfg_PLAY(IsaacLabVelocityFlatSymmetryEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
+@configclass
+class IsaacLabVelocityFlatCommandBucketsEnvCfg_PLAY(IsaacLabVelocityFlatCommandBucketsEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
+@configclass
+class IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg_PLAY(IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg):
+    def __post_init__(self) -> None:
+        super().__post_init__()
+        self.scene.num_envs = 1
+        self.observations.policy.enable_corruption = False
+
+
+@configclass
+class IsaacLabVelocityFlatStrictificationEnvCfg_PLAY(IsaacLabVelocityFlatStrictificationEnvCfg):
     def __post_init__(self) -> None:
         super().__post_init__()
         self.scene.num_envs = 1
@@ -1230,13 +1373,74 @@ def make_velocity_flat_adapted_env_cfg(*, play: bool = False, num_envs: int = 1)
     return cfg
 
 
+def make_velocity_flat_action_rate_flat_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatActionRateFlatEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatActionRateFlatEnvCfg()
+    )
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_symmetry_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = IsaacLabVelocityFlatSymmetryEnvCfg_PLAY() if play else IsaacLabVelocityFlatSymmetryEnvCfg()
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_command_buckets_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatCommandBucketsEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatCommandBucketsEnvCfg()
+    )
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_command_buckets_symmetry_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg()
+    )
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
+def make_velocity_flat_strictification_env_cfg(*, play: bool = False, num_envs: int = 1):
+    cfg = (
+        IsaacLabVelocityFlatStrictificationEnvCfg_PLAY()
+        if play
+        else IsaacLabVelocityFlatStrictificationEnvCfg()
+    )
+    cfg.scene.num_envs = num_envs
+    return cfg
+
+
 __all__ = [
     "IsaacLabVelocityFlatEnvCfg",
     "IsaacLabVelocityFlatEnvCfg_PLAY",
     "IsaacLabVelocityFlatAdaptedEnvCfg",
     "IsaacLabVelocityFlatAdaptedEnvCfg_PLAY",
+    "IsaacLabVelocityFlatActionRateFlatEnvCfg",
+    "IsaacLabVelocityFlatActionRateFlatEnvCfg_PLAY",
+    "IsaacLabVelocityFlatSymmetryEnvCfg",
+    "IsaacLabVelocityFlatSymmetryEnvCfg_PLAY",
+    "IsaacLabVelocityFlatCommandBucketsEnvCfg",
+    "IsaacLabVelocityFlatCommandBucketsEnvCfg_PLAY",
+    "IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg",
+    "IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg_PLAY",
+    "IsaacLabVelocityFlatStrictificationEnvCfg",
+    "IsaacLabVelocityFlatStrictificationEnvCfg_PLAY",
     "make_velocity_flat_env_cfg",
     "make_velocity_flat_adapted_env_cfg",
+    "make_velocity_flat_action_rate_flat_env_cfg",
+    "make_velocity_flat_symmetry_env_cfg",
+    "make_velocity_flat_command_buckets_env_cfg",
+    "make_velocity_flat_command_buckets_symmetry_env_cfg",
+    "make_velocity_flat_strictification_env_cfg",
     "policy_command_block",
     "policy_gyro",
     "policy_joint_pos",
