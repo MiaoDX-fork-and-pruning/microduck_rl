@@ -9,6 +9,7 @@ from isaaclab_microduck.tasks.velocity_flat_dr import (
     curriculum_event_range,
     curriculum_pose_command_ranges,
     curriculum_reward_weight,
+    curriculum_strictification,
     curriculum_standing_probability,
     randomize_bam_friction,
     randomize_mass_inertia,
@@ -169,6 +170,75 @@ def test_curricula_update_live_manager_configs_at_stage_boundaries() -> None:
         [{"step": 0, "range": 0.003}, {"step": 500 * 24, "range": 0.005}],
     )
     assert event_cfg.params["ranges"] == (-0.005, 0.005)
+
+
+def test_strictification_updates_live_command_reward_and_termination_managers() -> None:
+    reward_cfgs = {
+        name: SimpleNamespace(weight=0.0)
+        for name in ("track_lin_vel", "track_ang_vel", "pose", "air_time", "action_rate_l2")
+    }
+    termination_cfg = SimpleNamespace(params={"min_height": 0.055})
+    command_cfg = SimpleNamespace(rel_forward_envs=0.2, rel_lateral_envs=0.0)
+
+    class Manager:
+        def __init__(self, cfgs):
+            self.cfgs = cfgs
+            self.writes = []
+
+        def get_term_cfg(self, name):
+            return self.cfgs[name]
+
+        def set_term_cfg(self, name, cfg):
+            self.cfgs[name] = cfg
+            self.writes.append(name)
+
+    reward_manager = Manager(reward_cfgs)
+    termination_manager = Manager({"root_height": termination_cfg})
+    env = SimpleNamespace(
+        common_step_counter=500 * 24,
+        device=torch.device("cpu"),
+        command_manager=SimpleNamespace(get_term=lambda _: SimpleNamespace(cfg=command_cfg)),
+        reward_manager=reward_manager,
+        termination_manager=termination_manager,
+    )
+    stages = [
+        {
+            "step": 0,
+            "rel_forward_envs": 0.0,
+            "rel_lateral_envs": 0.25,
+            "track_lin_vel": 4.0,
+            "track_ang_vel": 6.0,
+            "pose": 0.5,
+            "air_time": 1.0,
+            "root_height": 0.0,
+            "action_rate_l2": -0.1,
+        },
+        {
+            "step": 500 * 24,
+            "rel_forward_envs": 0.2,
+            "rel_lateral_envs": 0.0,
+            "track_lin_vel": 2.0,
+            "track_ang_vel": 2.0,
+            "pose": 1.0,
+            "air_time": 3.0,
+            "root_height": 0.055,
+            "action_rate_l2": -0.2,
+        },
+    ]
+
+    result = curriculum_strictification(env, None, stages)
+
+    assert float(result.item()) == 500 * 24
+    assert command_cfg.rel_forward_envs == 0.2
+    assert command_cfg.rel_lateral_envs == 0.0
+    assert reward_cfgs["track_lin_vel"].weight == 2.0
+    assert reward_cfgs["track_ang_vel"].weight == 2.0
+    assert reward_cfgs["pose"].weight == 1.0
+    assert reward_cfgs["air_time"].weight == 3.0
+    assert reward_cfgs["action_rate_l2"].weight == -0.2
+    assert termination_cfg.params["min_height"] == 0.055
+    assert set(reward_manager.writes) == set(reward_cfgs)
+    assert termination_manager.writes == ["root_height"]
 
 
 def test_reset_matches_mjlab_root_randomization_and_exact_home_joints() -> None:

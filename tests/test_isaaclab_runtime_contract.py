@@ -120,6 +120,10 @@ def test_command_battery_has_fixed_required_scenarios() -> None:
         assert f'"{name}"' in source
     assert "checkpoint_sha256" in source
     assert "friction_bridge" in source
+    assert 'choices=("production", "one_step_lag")' in source
+    assert "_observe_lagged_friction" in source
+    assert "get_dof_projected_joint_forces" in source
+    assert "get_dof_actuation_forces" in source
     assert "mean_actual_vel_xy_m_s" in source
     assert "mean_actual_vel_yaw_rad_s" in source
     assert "RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)" in source

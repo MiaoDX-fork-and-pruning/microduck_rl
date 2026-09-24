@@ -1,0 +1,63 @@
+jobName: microduck-adaptive-curriculum-gate-resume-30ebb4e-r6
+description: Resume second frozen battery window and verify adaptive transition
+accessType: PRIVATE
+imageConfig:
+    imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+    imageCommand: |
+        set -euo pipefail
+        export PYTHONUNBUFFERED=1
+        export WANDB_MODE=disabled
+        export PYTHONPATH=/mnt/cloudml/source/src
+        cp /mnt/cloudml/input/battery/capability.json /mnt/cloudml/output/capability.json
+        cp /mnt/cloudml/input/adaptive-state.json /mnt/cloudml/output/adaptive-state.json
+        /opt/microduck_rl/.venv/bin/python /mnt/cloudml/source/scripts/advance_adaptive_curriculum.py --battery /mnt/cloudml/output/capability.json --state /mnt/cloudml/output/adaptive-state.json --stage-file /mnt/cloudml/output/adaptive-stage.json --step 44 --checkpoint model_19.pt
+        grep -q '0.005' /mnt/cloudml/output/adaptive-stage.json
+modelUri: ""
+juiceFsMountConfigs:
+    - volume: robot-intelligent-planning-data
+      juiceFsCluster: wlcb-cloudml
+      subPath: /dongxu/microduck_rl/source/adaptive-curriculum/30ebb4e
+      mountPath: /mnt/cloudml/source
+      readOnly: true
+    - volume: robot-intelligent-planning-data
+      juiceFsCluster: wlcb-cloudml
+      subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r4
+      mountPath: /mnt/cloudml/input
+      readOnly: true
+    - volume: robot-intelligent-planning-data
+      juiceFsCluster: wlcb-cloudml
+      subPath: /dongxu/microduck_rl/runs/adaptive-curriculum/20260915/pipeline-30ebb4e-r6
+      mountPath: /mnt/cloudml/output
+      readOnly: false
+queueId: "11759"
+priority: 5
+preemptible: false
+framework: pytorch
+resourceConfigs:
+    - nodeRole: worker
+      nodeNumber: 1
+      perNodeResourceSpec:
+        resourcePriority: GUARANTEED
+        resourceName: cloudml.ng1r49-8-8.13-107
+        resourceNumber: 1
+      elastic: false
+      preemptible: false
+enableTensorboard: false
+enableMetrics: false
+retryConfig:
+    enableRetry: false
+    maxRetryTimes: 0
+    policySets:
+        - JobFailed
+diagOptions:
+    - name: HangDetection
+      enable: false
+alertConfig:
+    enableAlert: true
+    alertItems:
+        - alertConditions:
+            - FAILED
+          alertLevel: P2
+          alertReceivers:
+            persons:
+                - miaodongxu

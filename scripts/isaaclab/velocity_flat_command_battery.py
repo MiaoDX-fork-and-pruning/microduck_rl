@@ -17,6 +17,8 @@ import torch
 
 from isaaclab.app import AppLauncher
 
+from isaaclab_microduck.actuators.physx_friction_bridge import LaggedExternalEffort
+
 try:
     from scripts.isaaclab.velocity_flat_battery_spec import (
         CASES,
@@ -97,9 +99,57 @@ def _refresh_fixed_command_observation(base_env):
     base_env.obs_buf = base_env.observation_manager.compute(update_history=False)
 
 
-def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], steps: int) -> tuple[dict, object]:
+def _warp_to_torch(value):
+    import warp as wp
+
+    return wp.to_torch(value)
+
+
+def _apply_lagged_friction(robot, actuator, bridge: LaggedExternalEffort) -> float:
+    """Write the last post-step external-load sample for the next solve."""
+
+    motor_effort = actuator.applied_effort
+    external_effort = bridge.external_effort()
+    velocity = robot.data.joint_vel.torch
+    static, dynamic, viscous = actuator.physx_friction_coefficients(
+        motor_effort, external_effort, velocity
+    )
+    robot.write_joint_friction_coefficient_to_sim_index(
+        joint_friction_coeff=static,
+        joint_dynamic_friction_coeff=dynamic,
+        joint_viscous_friction_coeff=viscous,
+    )
+    return float(external_effort.abs().max().item())
+
+
+def _observe_lagged_friction(robot, bridge: LaggedExternalEffort, dones: torch.Tensor) -> float:
+    """Capture solved external load, excluding environments reset this step."""
+
+    projected = _warp_to_torch(robot.root_view.get_dof_projected_joint_forces())
+    actuation = _warp_to_torch(robot.root_view.get_dof_actuation_forces())
+    done_ids = torch.nonzero(dones, as_tuple=False).flatten()
+    if done_ids.numel():
+        bridge.reset(done_ids)
+    active_ids = torch.nonzero(~dones, as_tuple=False).flatten()
+    if active_ids.numel():
+        observed = bridge.observe(projected[active_ids], actuation[active_ids], active_ids)
+        return float(observed.abs().max().item())
+    return 0.0
+
+
+def _run_case(
+    env,
+    policy,
+    obs,
+    name: str,
+    value: tuple[float, float, float],
+    steps: int,
+    friction_bridge: LaggedExternalEffort | None = None,
+) -> tuple[dict, object]:
     base_env = env.unwrapped
     robot = base_env.scene["robot"]
+    if friction_bridge is not None:
+        friction_bridge.reset()
     _set_command(base_env, value)
     _refresh_fixed_command_observation(base_env)
     obs = env.get_observations()
@@ -112,12 +162,24 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
     heights: list[torch.Tensor] = []
     tilts: list[torch.Tensor] = []
     actions: list[torch.Tensor] = []
+    observed_external_effort_peak = 0.0
+    applied_external_effort_peak = 0.0
     resets = 0
     finite = True
     for _ in range(steps):
+        if friction_bridge is not None:
+            applied_external_effort_peak = max(
+                applied_external_effort_peak,
+                _apply_lagged_friction(robot, next(iter(robot.actuators.values())), friction_bridge),
+            )
         with torch.inference_mode():
             action = policy(obs)
             obs, _, dones, _ = env.step(action)
+        if friction_bridge is not None:
+            observed_external_effort_peak = max(
+                observed_external_effort_peak,
+                _observe_lagged_friction(robot, friction_bridge, dones),
+            )
         _set_command(base_env, value)
         _refresh_fixed_command_observation(base_env)
         obs = env.get_observations()
@@ -164,6 +226,9 @@ def _run_case(env, policy, obs, name: str, value: tuple[float, float, float], st
         "max_tilt_rad": float(tilt.max()),
         "mean_abs_action": float(action_values.abs().mean()),
         "p95_abs_action": float(torch.quantile(action_values.abs(), 0.95)),
+        "friction_bridge": "one_step_lag_external_effort" if friction_bridge is not None else "production_motor_only",
+        "observed_external_effort_peak_nm": observed_external_effort_peak,
+        "applied_external_effort_peak_nm": applied_external_effort_peak,
     }
     case = next(case for case in CASES if case.name == name)
     result["passed"], result["failures"] = evaluate_case(
@@ -185,6 +250,12 @@ def main() -> None:
     parser.add_argument("--steps", type=int, default=STEPS_PER_CASE)
     parser.add_argument("--seed", type=int, default=SEED)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument(
+        "--friction-mode",
+        choices=("production", "one_step_lag"),
+        default="production",
+        help="Diagnostic only: apply the reset-safe one-step-lag PhysX friction bridge.",
+    )
     AppLauncher.add_app_launcher_args(parser)
     args = parser.parse_args()
     launcher = AppLauncher(args)
@@ -200,10 +271,16 @@ def main() -> None:
         from isaaclab_microduck.tasks import register_tasks
         from isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg import (
             MicroduckVelocityFlatAdaptedPPORunnerCfg,
+            MicroduckVelocityFlatCommandBucketsPPORunnerCfg,
+            MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg,
+            MicroduckVelocityFlatStrictificationPPORunnerCfg,
             MicroduckVelocityFlatPPORunnerCfg,
         )
         from isaaclab_microduck.tasks.velocity_flat import (
             make_velocity_flat_adapted_env_cfg,
+            make_velocity_flat_command_buckets_env_cfg,
+            make_velocity_flat_command_buckets_symmetry_env_cfg,
+            make_velocity_flat_strictification_env_cfg,
             make_velocity_flat_env_cfg,
         )
 
@@ -215,6 +292,18 @@ def main() -> None:
                 make_velocity_flat_adapted_env_cfg,
                 MicroduckVelocityFlatAdaptedPPORunnerCfg,
             ),
+            "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets": (
+                make_velocity_flat_command_buckets_env_cfg,
+                MicroduckVelocityFlatCommandBucketsPPORunnerCfg,
+            ),
+            "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry": (
+                make_velocity_flat_command_buckets_symmetry_env_cfg,
+                MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg,
+            ),
+            "IsaacLab-Velocity-Flat-MicroDuck-Strictification": (
+                make_velocity_flat_strictification_env_cfg,
+                MicroduckVelocityFlatStrictificationPPORunnerCfg,
+            ),
         }
         try:
             make_env_cfg, runner_cfg_type = profiles[args.task]
@@ -225,6 +314,18 @@ def main() -> None:
         env_cfg.commands.base_velocity.resampling_time_range = (1.0e9, 1.0e9)
         env = gym.make(args.task, cfg=env_cfg)
         print("ISAACLAB_VELOCITY_BATTERY:env_made", flush=True)
+        if args.task == "IsaacLab-Velocity-Flat-MicroDuck-Strictification":
+            # A fresh evaluation env starts at curriculum step zero.  Replay
+            # T22 checkpoints under the final strict live-manager profile so
+            # the acceptance battery cannot accidentally use the bootstrap
+            # root-height or reward configuration.
+            from isaaclab_microduck.tasks.velocity_flat import _STRICTIFICATION_STAGES
+            from isaaclab_microduck.tasks.velocity_flat_dr import curriculum_strictification
+
+            base_env = env.unwrapped
+            base_env.common_step_counter = 1000 * 24
+            curriculum_strictification(base_env, None, _STRICTIFICATION_STAGES)
+            print("ISAACLAB_VELOCITY_BATTERY:strict_profile_applied", flush=True)
         agent_cfg = runner_cfg_type()
         # Use the same action boundary as training and the production mjlab
         # recipe. In particular, do not silently make evaluation safer by
@@ -241,13 +342,29 @@ def main() -> None:
         print("ISAACLAB_VELOCITY_BATTERY:checkpoint_loaded", flush=True)
         policy = runner.get_inference_policy(device=vec_env.unwrapped.device)
 
+        friction_bridge = None
+        if args.friction_mode == "one_step_lag":
+            robot = vec_env.unwrapped.scene["robot"]
+            friction_bridge = LaggedExternalEffort(
+                vec_env.unwrapped.scene.num_envs,
+                robot.num_joints,
+                device=vec_env.unwrapped.device,
+            )
         cases = []
         obs = vec_env.get_observations()
         for index, (name, command) in enumerate(COMMANDS.items()):
             print(f"ISAACLAB_VELOCITY_BATTERY:case:{name}:start", flush=True)
             vec_env.seed(args.seed + index)
             obs, _ = vec_env.reset()
-            result, obs = _run_case(vec_env, policy, obs, name, command, args.steps)
+            result, obs = _run_case(
+                vec_env,
+                policy,
+                obs,
+                name,
+                command,
+                args.steps,
+                friction_bridge,
+            )
             cases.append(result)
             print(f"ISAACLAB_VELOCITY_BATTERY:case:{name}:done", flush=True)
 
@@ -263,7 +380,12 @@ def main() -> None:
             "checkpoint_sha256": _sha256(args.checkpoint),
             "actuator": "BamActuator",
             "clip_actions": agent_cfg.clip_actions,
-            "friction_bridge": "motor_only_external_effort_unavailable",
+            "friction_mode": args.friction_mode,
+            "friction_bridge": (
+                "one_step_lag_external_effort"
+                if friction_bridge is not None
+                else "production_motor_only_external_effort_unavailable"
+            ),
             "passed": all(case["passed"] for case in cases),
             "cases": cases,
         }

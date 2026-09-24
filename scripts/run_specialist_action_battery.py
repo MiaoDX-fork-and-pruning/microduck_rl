@@ -283,7 +283,10 @@ def run_case(
     duration_s: float,
     smoke: bool = False,
 ) -> tuple[dict[str, Any], dict[str, np.ndarray]]:
-    np.random.seed(seed)
+    # The battery seed must affect consumed physics state, not only be a
+    # metadata label.  Keep the perturbation small enough to represent reset
+    # noise while recording it verbatim for replay validation.
+    rng = np.random.default_rng(seed)
     profile = POLICY_PROFILES[policy_id]
     model = mujoco.MjModel.from_xml_path(str(PROFILE_SCENES[profile]))
     model.opt.timestep = 0.005
@@ -291,6 +294,11 @@ def run_case(
     data = mujoco.MjData(model)
     policy = _load_policy(model, data, onnx_path)
     reset_pose(policy_id, case["id"], model, data, policy)
+    reset_qpos_noise = rng.normal(0.0, 1.0e-4, size=data.qpos.shape)
+    reset_qvel_noise = rng.normal(0.0, 1.0e-3, size=data.qvel.shape)
+    data.qpos[:] += reset_qpos_noise
+    data.qvel[:] = reset_qvel_noise
+    mujoco.mj_forward(model, data)
     body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
     start = data.xpos[body_id].copy()
     steps = max(1, round(duration_s * CONTROL_HZ))
@@ -369,9 +377,16 @@ def run_case(
         key: np.asarray(value, dtype=str if key == "contacts" else None)
         for key, value in records.items()
     }
+    trace["reset_qpos_noise"] = reset_qpos_noise.astype(np.float32)
+    trace["reset_qvel_noise"] = reset_qvel_noise.astype(np.float32)
     report = {
         "id": case["id"],
         "seed": seed,
+        "seed_manifest": {
+            "version": "adaptive-battery-seed-v1",
+            "sources": ["reset_qpos_noise", "reset_qvel_noise"],
+            "generator": "numpy.default_rng",
+        },
         "input_mode": case["input_mode"],
         "actuator_profile": {
             "model": "xml_position_pd",

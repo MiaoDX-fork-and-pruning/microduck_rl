@@ -41,3 +41,7 @@ backup_onnx/
 logdir/.claude/
 logdir/
 logdir/.claude/worktrees/
+
+# Local simulator and CloudML runtime artifacts
+.cache/
+tmp/

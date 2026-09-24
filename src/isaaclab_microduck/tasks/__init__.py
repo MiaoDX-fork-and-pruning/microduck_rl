@@ -24,6 +24,26 @@ def register_tasks() -> None:
             "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatAdaptedEnvCfg",
             "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatAdaptedPPORunnerCfg",
         ),
+        "IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat": (
+            "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatActionRateFlatEnvCfg",
+            "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatActionRateFlatPPORunnerCfg",
+        ),
+        "IsaacLab-Velocity-Flat-MicroDuck-Symmetry": (
+            "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatSymmetryEnvCfg",
+            "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatSymmetryPPORunnerCfg",
+        ),
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets": (
+            "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatCommandBucketsEnvCfg",
+            "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatCommandBucketsPPORunnerCfg",
+        ),
+        "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry": (
+            "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatCommandBucketsSymmetryEnvCfg",
+            "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatCommandBucketsSymmetryPPORunnerCfg",
+        ),
+        "IsaacLab-Velocity-Flat-MicroDuck-Strictification": (
+            "isaaclab_microduck.tasks.velocity_flat:IsaacLabVelocityFlatStrictificationEnvCfg",
+            "isaaclab_microduck.tasks.agents.rsl_rl_ppo_cfg:MicroduckVelocityFlatStrictificationPPORunnerCfg",
+        ),
     }
     for task_id, (env_cfg_entry_point, rsl_rl_cfg_entry_point) in registrations.items():
         if task_id not in gym.registry:

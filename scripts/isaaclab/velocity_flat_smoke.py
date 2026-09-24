@@ -39,11 +39,22 @@ def main() -> None:
         register_tasks()
         print("ISAACLAB_VELOCITY_FLAT_SMOKE:tasks_registered", flush=True)
         task_module = __import__("isaaclab_microduck.tasks.velocity_flat", fromlist=[
-            "make_velocity_flat_env_cfg", "make_velocity_flat_adapted_env_cfg"
+            "make_velocity_flat_env_cfg",
+            "make_velocity_flat_adapted_env_cfg",
+            "make_velocity_flat_action_rate_flat_env_cfg",
+            "make_velocity_flat_symmetry_env_cfg",
+            "make_velocity_flat_command_buckets_env_cfg",
+            "make_velocity_flat_command_buckets_symmetry_env_cfg",
+            "make_velocity_flat_strictification_env_cfg",
         ])
         factories = {
             "IsaacLab-Velocity-Flat-MicroDuck": task_module.make_velocity_flat_env_cfg,
             "IsaacLab-Velocity-Flat-MicroDuck-Adapted": task_module.make_velocity_flat_adapted_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat": task_module.make_velocity_flat_action_rate_flat_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-Symmetry": task_module.make_velocity_flat_symmetry_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets": task_module.make_velocity_flat_command_buckets_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry": task_module.make_velocity_flat_command_buckets_symmetry_env_cfg,
+            "IsaacLab-Velocity-Flat-MicroDuck-Strictification": task_module.make_velocity_flat_strictification_env_cfg,
         }
         try:
             make_env_cfg = factories[args.task]

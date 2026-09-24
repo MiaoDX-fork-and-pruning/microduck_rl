@@ -7,6 +7,11 @@ import importlib.util
 TASKS: tuple[str, ...] = (
     "IsaacLab-Velocity-Flat-MicroDuck",
     "IsaacLab-Velocity-Flat-MicroDuck-Adapted",
+    "IsaacLab-Velocity-Flat-MicroDuck-ActionRateFlat",
+    "IsaacLab-Velocity-Flat-MicroDuck-Symmetry",
+    "IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets",
+    "IsaacLab-Velocity-Flat-MicroDuck-CommandBucketsSymmetry",
+    "IsaacLab-Velocity-Flat-MicroDuck-Strictification",
 )
 
 

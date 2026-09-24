@@ -1,6 +1,6 @@
 # IsaacLab backend: local implementation and validation plan
 
-Status: **active execution plan — strict mjlab-semantic parity closure before the next IsaacLab Velocity-Flat long run**
+Status: **T26 current IsaacLab train/restore/evaluate verification complete; T25 one-update RSL-RL probe complete; T24 raw sensor-source trace complete; T22 strict Velocity-Flat acceptance complete; backend deltas and deployment gates remain explicit**
 Architecture reference: [`isaaclab_backend_architecture.md`](isaaclab_backend_architecture.md)  
 Primary execution environment: local workstation(s) with Isaac Sim/IsaacLab-capable GPU  
 Reference behavior: current `mjlab_microduck` tasks and real-robot sim2real lessons
@@ -785,9 +785,11 @@ checkpoint is not a reliable gait. See
   invalid as the final baseline because its critic architecture was stale and
   its battery failed. That run predates the strict-parity lock in this plan and
   was launched under the earlier "close enough" acceptance rule; it is not an
-  execution of the current Task H. A replacement run requires the parity
-  closure gates, a new manifest, and the same fixed battery; external-load BAM
-  friction parity remains an explicit PhysX limitation.
+  execution of the current Task H. T22 subsequently completed the independent
+  strict-trained policy gate with a separate adapted-to-strict curriculum;
+  its final checkpoint and ONNX/MuJoCo rehearsal are recorded under T22 below.
+  A future replacement run requires a new bounded hypothesis and manifest;
+  external-load BAM friction parity remains an explicit PhysX limitation.
 
 ### Task I — decide whether to continue
 
@@ -908,12 +910,305 @@ After that point, additional tasks, backlash, rollers, generalist training, came
   tensors and records translation, tilt, yaw response, and resets. Motion
   quality gates are evaluated on a trained checkpoint, not the 5-iteration
   integration smoke.
-- [ ] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch a replacement
-  4096-env/6000-iteration strict-parity run with a new manifest. The corrected
-  64-env/5-iteration smoke and `[1,61] -> [1,14]` ONNX export now pass in
-  `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-31-53/`.
-  The earlier 6000-iteration run was trained with `clip_actions=1.0` and is
-  invalid; the corrected long run and trained-policy battery remain pending.
+- [x] **T7 (P1)** — Run the 64-env/5-iteration smoke and launch a replacement
+  4096-env/6000-iteration strict-parity run with a new manifest. The current
+  checkout also passes a fresh 64-env/5-iteration random-action smoke and
+  official RSL-RL training smoke, writing `model_0.pt` and `model_4.pt` under
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-11_09-47-26/`.
+  The corrected strict long run and `[1,61] -> [1,14]` export are complete,
+  but strict trained-policy acceptance remains blocked because its fixed
+  battery fails forward/lateral response. The earlier 6000-iteration run
+  trained with `clip_actions=1.0` remains diagnostic-invalid.
+
+- [x] **T8 (P1)** — Verify official RSL-RL checkpoint resume and run one
+  bounded strict-task warm-start hypothesis. Loading adapted `model_750.pt`
+  into the unchanged strict task and continuing 250 iterations at 4096 envs
+  produced strict-task `model_999.pt`. The 300-step fixed battery passes all
+  six cases with zero resets; the checkpoint audit and official ONNX export
+  also pass. This closes a viable strict-task walking candidate; its warm-start
+  provenance remains distinct from an independently strict-trained result.
+
+- [x] **T9 (P1)** — Run the exported warm-start checkpoint through a finite,
+  headless CPU MuJoCo battery using the shared six-case command specification.
+  All six cases pass with finite 61D/14D inference, zero resets, positive
+  body-frame directional response, and bounded tilt. This closes runtime
+  deployment evidence for the warm-start candidate; independent strict-from-
+  scratch training remains the only trained-policy blocker.
+
+- [x] **T10 (P1)** — Evaluate an independently strict-trained checkpoint with
+  the common six-case battery before authorizing another long run. The
+  corrected strict `model_250.pt` is finite but fails every case, with roughly
+  `0.16` resets per environment step and negative zero-command drift. The
+  independent strict-training gate therefore remains blocked. Any next run
+  requires one bounded training hypothesis and a new manifest; this result does
+  not justify reward/PPO changes by itself.
+
+- [x] **T11 (P1, bounded hypothesis)** — Test whether the PhysX contact path
+  makes the strict `air_time` term dominate early optimization. Keep the
+  strict task, command distribution, termination/DR configuration, PPO recipe,
+  and all other reward terms unchanged; override only `air_time.weight` to
+  `1.0`, run `750` iterations at `4096` environments, and evaluate the saved
+  checkpoint with the common six-case battery. The run completed normally and
+  remained finite, with approximately 950/1000 mean episode length, but its
+  `model_749.pt` still fails forward/lateral response and settles near `0.071 m`
+  root height. Zero, yaw, and turn cases pass. Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_strict_airtime1_model749.json`.
+  This rejects air-time dominance as the complete explanation; it is not a
+  strict-parity acceptance result.
+
+- [x] **T12 (P1, bounded hypothesis)** — Test whether the strict low-height
+  termination creates the observed crouch basin during bootstrap. Keep the
+  strict reward, commands, DR, and PPO recipe unchanged, train `750` iterations
+  at `4096` environments with only `env.terminations.root_height=null`, then
+  evaluate the checkpoint under the unchanged strict task (height guard
+  restored). The finite endpoint `model_749.pt` fails all six battery cases:
+  the zero case has `776` resets (`0.1617` per env-step) and `-0.199 m/s`
+  drift, and commanded translation/yaw fail. Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_strict_rootbootstrap_model749.json`
+  (SHA256 `3d764508b657d657346c990edd5f7cb882b8d6b28a31262c53e182773118c256`).
+  This rejects the low-height bootstrap hypothesis; the training-only override
+  does not alter the canonical MJLab recipe, and independent strict acceptance
+  remains blocked.
+
+- [x] **T13 (P1, bounded hypothesis)** — Test whether the strict action-rate
+  curriculum suppresses gait discovery. A separately registered strict
+  diagnostic task froze `action_rate_l2` at its initial `-0.1` weight and ran
+  `750` iterations at `4096` environments. The run stayed finite with no NaN
+  terminations and the live curriculum remained `-0.1000`. Under the unchanged
+  strict battery, `model_250.pt` passed zero/forward/lateral/left-turn but
+  failed yaw/right-turn; `model_500.pt` and `model_749.pt` lost additional
+  directional response while remaining reset-free. Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model749.json`.
+  This rejects action-rate freezing as a complete explanation, though it
+  improves early stabilization. The canonical MJLab recipe remains unchanged.
+
+- [x] **T14 (P1, bounded hypothesis)** — Test whether strict angular tracking
+  reward is too weak for yaw/turn skill discovery. Only
+  `env.rewards.track_ang_vel.weight` changed from `2.0` to `6.0`; commands,
+  action-rate stages, terminations, DR, PPO, and all other rewards remained
+  strict. The `4096`-environment run completed `750` iterations with finite
+  losses and no NaN terminations. Under the unchanged strict six-case battery,
+  `model_250.pt`, `model_500.pt`, and `model_749.pt` all pass zero/yaw/turn-left/
+  turn-right but fail forward and lateral response (the endpoint has one
+  negligible lateral reset). Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model749.json`.
+  T14 is rejected as a complete explanation; the independent strict-training
+  gate remains open, and the canonical MJLab recipe is unchanged.
+
+- [x] **T15 (P1, bounded hypothesis)** — Test whether strict linear tracking
+  weight is too weak for translation discovery. Only
+  `env.rewards.track_lin_vel.weight` changed from `2.0` to `4.0`; the
+  `4096`-environment run completed `750` iterations with finite losses and no
+  NaN terminations. Under the unchanged strict six-case battery, all three
+  checkpoints pass zero/forward/lateral/turn-left but fail yaw and turn-right.
+  Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model749.json`.
+  This establishes a complementary translation-versus-positive-yaw tradeoff;
+  it is not a strict-parity acceptance result.
+
+- [x] **T16 (P1, bounded hypothesis)** — Test whether the complementary
+  tracking terms need the adapted profile's pair: change only strict
+  `track_lin_vel.weight=4.0` and `track_ang_vel.weight=6.0`, train `750`
+  iterations at `4096` environments, and evaluate under the unchanged strict
+  task. Keep commands, action-rate stages, terminations, DR, PPO, and every
+  other reward unchanged. The run completed finite with no NaN terminations.
+  All three checkpoints pass zero/forward/lateral; `model_500.pt` and
+  `model_749.pt` also pass turn-left, but yaw and turn-right fail. Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model749.json`.
+  The pair preserves translation but does not resolve yaw-direction asymmetry;
+  the canonical MJLab recipe remains unchanged.
+
+- [x] **T17 (P1, bounded hypothesis)** — Test whether the observed positive-yaw
+  blind spot is an optimization asymmetry. Keep the T16 tracking pair
+  (`track_lin_vel=4.0`, `track_ang_vel=6.0`) and all strict task semantics
+  unchanged, but enable the explicitly registered left-right symmetry data
+  augmentation runner. Train `750` iterations at `4096` environments and
+  evaluate under the canonical strict task. Accept only a finite, zero-reset
+  checkpoint with all six battery cases passing; do not enable symmetry on the
+  canonical runner or alter the MJLab recipe. The mirror transform is covered
+  by CPU involution/sign contracts and the IsaacLab smoke. The `750`-iteration
+  run remained finite with no NaN terminations. Under the canonical battery,
+  `model_500.pt` passes zero/forward/lateral/turn-left but fails yaw/turn-right;
+  `model_749.pt` passes zero/yaw/turn-left/turn-right but fails lateral. No
+  checkpoint passes all six, so T17 is rejected as a complete solution.
+  Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model749.json`.
+
+- [x] **T18 (P1, bounded hypothesis)** — Test whether T17 contains a transient
+  all-six behavior window that the coarse `250`-iteration checkpoint cadence
+  missed. Keep the T17 symmetry task, tracking pair, commands, rewards,
+  curricula, terminations, DR, PPO, and `4096` environments unchanged; override
+  only `agent.save_interval=50` and train `750` iterations from scratch. Evaluate
+  every saved checkpoint with the canonical six-case battery. Accept only a
+  finite, zero-reset checkpoint passing zero/forward/lateral/yaw/turn-left/
+  turn-right; this experiment changes observability, not policy semantics. The
+  run completed normally and wrote checkpoints every 50 iterations, but no
+  checkpoint passed all six: pass vectors (zero, forward, lateral, yaw,
+  turn-left, turn-right) were `FFFFFF` at model 0, `PPPFFP` at model 50,
+  `PPFFPP` at model 100, `PPPFPF` at model 150 and models 350--600, `PPPFPP` at
+  model 200, `PPPFFF` at model 250, and `PPFFPF` at model 300 and models 650--749. T18 is
+  rejected; however, post-run manifest inspection found that the invocation did
+  not carry T17's `track_lin_vel=4.0` / `track_ang_vel=6.0` overrides. The
+  resulting `2.0/2.0` run is retained as invalid provenance evidence and does
+  not test the T17 checkpoint window.
+
+- [x] **T19 (P1, bounded hypothesis)** — Repeat the T17 checkpoint-window test
+  with the exact T17 recipe: symmetry augmentation enabled,
+  `track_lin_vel=4.0`, `track_ang_vel=6.0`, `4096` environments, and only
+  `agent.save_interval=50` changed for observability. Train `750` iterations
+  from scratch, smoke-test the exact overrides first, and replay every saved
+  checkpoint under the canonical six-case battery. Accept only a finite,
+  zero-reset checkpoint passing all six cases; do not treat T18's default-pair
+  run as evidence for this hypothesis. The exact-pair smoke passed and the
+  `750`-iteration run completed normally with finite losses and no NaN
+  terminations. All 16 checkpoints were replayed under the canonical battery;
+  pass vectors were `FFFFFF` (0), `PPFFFF` (50), `PPPFFP` (100), `PPPPFP`
+  (150), `PPPFFF` (200), `PPFPFF` (250), `PPPFPF` (300--400 and 500),
+  `PPPFPP` (450 and 550), and `PPFPPP` (600--749). No checkpoint passed all
+  six, so T19 is rejected and the independent strict-training gate remains
+  open.
+
+- [x] **T20 (P1, bounded hypothesis)** — Isolate the adapted command-bucket
+  distribution as a training signal. The new
+  `IsaacLab-Velocity-Flat-MicroDuck-CommandBuckets` diagnostic keeps strict
+  rewards, terminations, observations, DR, actuator semantics, and PPO
+  unchanged, but sets only `rel_forward_envs=0.0` and
+  `rel_lateral_envs=0.25`, matching the known-good adapted profile. Run the
+  64-env/5-iteration smoke first, then train 750 iterations at 4096 envs from
+  scratch with checkpoints at 250/500/749. Replay each checkpoint under the
+  canonical six-case battery. Accept only a finite, zero-reset all-six
+  checkpoint. A pass would identify command coverage as the blocker and
+  justify a later strict-final-stage curriculum; a fail rejects this signal
+  without changing the canonical task or launching another blind long run.
+  The smoke passed and the 750-iteration run completed with finite losses and
+  zero NaN terminations. The canonical battery pass vectors were `PPFPFP`
+  (model 250), `PPFFPF` (model 500), and `PFFFFP` (model 749), so no
+  checkpoint passed all six. T20 is rejected: command buckets improved early
+  translation/stability but did not recover yaw or right-turn response.
+  Evidence: `.cache/isaaclab-assets/velocity_flat_smoke_t20_command_buckets_64.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t20_command_buckets_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t20_command_buckets_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t20_command_buckets_model749.json`,
+  and `logs/rsl_rl/microduck_isaaclab_velocity_flat_command_buckets/2026-09-11_18-20-09/`.
+
+- [x] **T21 (P1, bounded hypothesis)** — Combine the T20 adapted command
+  buckets with the existing symmetry augmentation. Keep strict rewards,
+  terminations, observations, DR, actuator semantics, and PPO unchanged;
+  enable only `rel_forward_envs=0.0`, `rel_lateral_envs=0.25`, and the
+  registered left-right symmetry runner. Smoke-test, then train 750 iterations
+  at 4096 environments from scratch and replay models 250/500/749 under the
+  canonical battery. Accept only a finite, zero-reset all-six checkpoint.
+  This tests whether command coverage and yaw-direction augmentation are
+  complementary; reject it without changing the canonical task if no
+  checkpoint passes. The smoke passed and the 750-iteration run completed
+  with finite losses and zero NaN terminations. The canonical battery pass
+  vectors were `PPPFPF` (model 250), `PPFFPF` (model 500), and `PFFFPF`
+  (model 749), so no checkpoint passed all six. T21 is rejected: symmetry did
+  not recover the missing yaw/right-turn response.
+  Evidence: `.cache/isaaclab-assets/velocity_flat_smoke_t21_command_buckets_symmetry_64.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t21_command_buckets_symmetry_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t21_command_buckets_symmetry_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t21_command_buckets_symmetry_model749.json`,
+  and `logs/rsl_rl/microduck_isaaclab_velocity_flat_command_buckets_symmetry/2026-09-11_18-50-09/`.
+
+- [x] **T22 (P1, bounded hypothesis)** — Train from scratch with an explicit
+  adapted-to-strict curriculum. Bootstrap using the known-good adapted command
+  buckets and reward balance, keep root-height termination effectively off,
+  then switch all of those fields to the strict MJLab values at a stated
+  curriculum boundary before evaluation. The production canonical task stays
+  unchanged; the diagnostic must use live managers for reward, command, and
+  termination mutations. Smoke-test first, then train 1000 iterations at 4096
+  environments and evaluate checkpoints before and after strictification.
+  Accept only a finite, zero-reset checkpoint that passes all six cases while
+  the final live configuration is strict. This tests whether the strict
+  recipe's optimization basin, rather than a missing ABI/physics primitive,
+  prevents independent training. The 64-env/5-step smoke passed with finite
+  61D observations, 14D actions, zero resets, and finite contact forces. The
+  4096-env run completed 1000 iterations from scratch at
+  `logs/rsl_rl/microduck_isaaclab_velocity_flat_strictification/2026-09-11_19-26-41/`.
+  The live manager curriculum switched at iteration 500 (step 12000) to strict
+  command buckets, reward weights, root-height threshold, and action-rate
+  schedule, then advanced its later stages at iterations 750 and 1000. No NaN
+  terminations occurred. The canonical six-case battery pass vectors were
+  `PPFPFP` (model 250), `PPPPPP` (model 500), `PPPPPP` (model 750), and
+  `PPPPPP` (model 999). T22 is accepted: model 500 is the first independently
+  strict checkpoint passing all six cases, and the later strict checkpoints
+  retain the pass. The battery harness explicitly applies the final strict
+  live-manager profile before replay. Evidence:
+  `.cache/isaaclab-assets/velocity_flat_smoke_t22_strictification_64.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t22_strictification_model250.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t22_strictification_model500.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t22_strictification_model750.json`,
+  and `.cache/isaaclab-assets/velocity_flat_command_battery_t22_strictification_model999.json`.
+  The final `model_999.pt` has SHA256
+  `2034e7c3f6893f700de2d321746f1267e062aa3d3d29a8ceec4f3005e17e16ce`.
+  Official IsaacLab play exported a finite `[1,61] -> [1,14]` ONNX graph
+  (SHA256 `371cb8d92300377363c89b5ada5c7c39683dd1464f93ea620c4c83859b3ce30e`),
+  and the graph passes the headless CPU MuJoCo six-case rehearsal with zero
+  resets in `.cache/isaaclab-assets/mujoco_onnx_battery_t22_strictification_model999.json`.
+
+- [x] **T23 (P1, bounded hypothesis)** — Test whether a reset-safe one-step-
+  lagged PhysX external-effort bridge can close the BAM load-dependent friction
+  gap. Keep the accepted T22 task and production `BamActuator` motor-only;
+  sample projected-minus-actuation joint effort only after `scene.update()` and
+  apply it on the following pre-step. The fixed-root probe passed with finite
+  14-joint loads, zero reset leakage, one-step warm-up, and distinct friction
+  coefficients at scales `0.5/1.0/1.5`. A 100-step T22 `model_999.pt` battery
+  passed all six cases for both lagged and production paths. The canonical
+  300-step lagged battery failed `turn_left` with one tilt reset
+  (`max_tilt_rad=1.08818`, reset fraction `0.0002083`); the other five cases
+  passed. T23 is rejected as a production BAM parity solution. Evidence:
+  `.cache/isaaclab-assets/lagged_friction_bridge_probe.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_one_step_lag_100.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_production_100.json`,
+  and `.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_one_step_lag_300.json`
+  (SHA256 `ac4702d6b84b010149d1457a8f52df5cadfdf8d1a2de3e493aad3de0e1440263`).
+  The bridge remains diagnostic-only; do not tune it to recover this checkpoint.
+
+- [x] **T24 (P1, bounded hypothesis)** — Compare raw sensor sources before
+  attributing remaining policy differences to PPO or solver behavior. A seeded
+  12-step scripted root/joint state trace was written for both backends with
+  explicit delay index and reset metadata. Root gyro/gravity, policy-ordered
+  joint state, and foot-site position match at floating-point precision;
+  foot-site velocity differs by at most `8.84e-3 m/s`, and reconstructed
+  subtree angular momentum differs from the named MuJoCo sensor by at most
+  `7.99e-6`. These are retained as explicit source/backend deltas; no reward
+  or observation workaround was introduced. Evidence:
+  `.cache/isaaclab-assets/sensor_source_comparison.json`,
+  `tests/test_isaaclab_sensor_source_trace_contract.py`.
+
+- [x] **T25 (P1, bounded hypothesis)** — Isolate the `rsl-rl-lib 5.0.1`
+  versus `5.4.1` implementation difference with one identical synthetic
+  rollout/update. Both stacks produce identical initial/final actor and critic
+  parameter hashes and update metrics for the exercised feed-forward path.
+  The IsaacLab entrypoint remains on supported `5.4.1`; source differences in
+  PPO and rollout storage remain an explicit training-stack delta. Evidence:
+  `.cache/isaaclab-assets/rsl_rl_one_update_mjlab.json`,
+  `.cache/isaaclab-assets/rsl_rl_one_update_isaaclab.json`, and
+  `tests/test_rsl_rl_one_update_probe_contract.py`.
+
+- [x] **T26 (P1, runtime gate)** — Re-run the official IsaacLab RSL-RL
+  entrypoint from the current checkout, then reload both the fresh smoke
+  checkpoint and the independently strict trained checkpoint through the
+  evaluation harness. The 64-env/5-iteration smoke wrote `model_0.pt` and
+  `model_4.pt` with finite losses and no `nan_state` terminations. The smoke
+  checkpoint is correctly classified as untrained and fails motion-quality
+  gates, while the current-code replay of T22 `model_999.pt` passes all six
+  canonical 300-step cases with zero resets and max tilt below `0.18 rad`.
+  Evidence:
+  `.cache/isaaclab-assets/velocity_flat_command_battery_current_smoke_model4.json`,
+  `.cache/isaaclab-assets/velocity_flat_command_battery_current_strict_model999_300.json`,
+  and `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-11_21-07-34/`.
 
 ## 26. Failure modes and verification
 
