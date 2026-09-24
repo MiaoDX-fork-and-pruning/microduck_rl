@@ -1,11 +1,26 @@
 # MJLab Adaptive Curriculum v2
 
-Status: **ACTIVE** — no usable adaptive policy accepted. Updated: 2026-09-23.
+Status: **ACTIVE** — adaptive control plane is executable, but no usable adaptive policy is accepted. Updated: 2026-09-24.
 Control plane: `01a0c2ae-6895-7700-accd-89a0e7a46e1b` (`/root`, `holy-ape`).
 Scope: [canonical plan](../../plans/mjlab-adaptive-curriculum-v2-plan.md).
 Latest intent: continue sustained implementation, training and checks after API
 interruption via `intuitive-flow`. The stale host `blocked` label is not an
 external blocker. Project-status writer unassigned; leave shared status alone.
+
+## Status review (2026-09-24)
+
+The original objective remains open: use adaptive curriculum to produce a
+policy that passes the product gate. The adaptive control plane is ready for
+bounded follow-up experiments: capability evaluation, checkpoint preservation,
+rollback, resume, consolidation, final-range fine-tuning, axis isolation, and
+normalizer-baked ONNX export have all been implemented and exercised.
+
+The behavioral acceptance gates are still outstanding. No candidate has been
+promoted, all training and evaluation sessions are finished, and no process is
+running. This is an experiment-ready state for a new falsifiable hypothesis,
+not a deployment-ready policy state. The next experiment must address the
+measured directional-tracking/upright trade-off and must not repeat a rejected
+exposure-only or unchanged final-range window.
 
 ## Current decision
 

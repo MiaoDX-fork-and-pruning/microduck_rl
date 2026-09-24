@@ -1,7 +1,8 @@
 # MJLab Adaptive Curriculum v2 Plan
 
 Status: Phase 0/1 automation works; Phase 2A usable-policy acquisition remains
-open. Seed23's early sensor-reset arm was automatically retained, but the stage
+open. Last reviewed: 2026-09-24. The adaptive control plane is executable, but
+the plan's usable-policy objective is still unmet. Seed23's early sensor-reset arm was automatically retained, but the stage
 cohort minimum is .7399 and CPU minimum is .4556; both still fail .80. Matched
 late sensor coverage, delayed consolidation and command-magnitude rehearsal did
 not yield an accepted recipe. Uniform and hip-yaw action scaling, sensor refresh
