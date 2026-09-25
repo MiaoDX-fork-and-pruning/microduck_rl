@@ -17,7 +17,7 @@ from mjlab.tasks.velocity.mdp.velocity_command import UniformVelocityCommand, Un
 from mjlab.tasks.velocity.mdp import observations as _velocity_obs
 from mjlab.managers.command_manager import CommandTerm
 from mjlab.managers import CommandTermCfg
-from mjlab.managers.event_manager import requires_model_fields
+from mjlab.managers.event_manager import RecomputeLevel, requires_model_fields
 from mjlab.utils.lab_api.math import matrix_from_quat, wrap_to_pi, quat_apply, quat_from_angle_axis
 from rsl_rl.algorithms.ppo import PPO as _PPO
 
@@ -393,6 +393,31 @@ def joint_accelerations_l2(
 
     # Return L2 squared norm
     return torch.sum(torch.square(joint_acc), dim=1)
+
+
+def adaptive_action_rate_l2(
+    env: ManagerBasedRlEnv, command_name: str = "twist"
+) -> torch.Tensor:
+    """Keep canonical smoothing except for an active pure-yaw relief window.
+
+    This is a nonnegative cost with a negative reward weight. The manager keeps
+    its canonical weight; scaling only pure-yaw costs avoids relaxing recovery
+    and gait regularization for the other command buckets. Actions are unchanged.
+    """
+    cost = torch.sum(torch.square(env.action_manager.action - env.action_manager.prev_action), dim=1)
+    override = getattr(env, "_adaptive_action_rate_weight", None)
+    scope = getattr(env, "_adaptive_action_rate_scope", "all")
+    if override is None or scope != "pure_yaw":
+        return cost
+    weight = env.reward_manager.get_term_cfg("action_rate_l2").weight
+    if weight >= 0.0:
+        return cost
+    command = env.command_manager.get_command(command_name)
+    pure_yaw = (torch.linalg.vector_norm(command[:, :2], dim=1) <= 1e-6) & (
+        command[:, 2].abs() > 1e-6
+    )
+    scale = max(weight, float(override)) / weight
+    return torch.where(pure_yaw, cost * scale, cost)
 
 
 def leg_action_rate_l2(
@@ -3285,6 +3310,36 @@ def apply_mouth_payload_force(
 # ==============================================================================
 
 
+@requires_model_fields("body_ipos", recompute=RecomputeLevel.set_const)
+def randomize_com_with_rehearsal(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    ranges: tuple[float, float],
+    final_ranges: tuple[float, float],
+    final_fraction: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    operation: str = "add",
+):
+    """Rehearse final CoM on a stable, bounded subset of training environments.
+
+    The first floor(num_envs * final_fraction) IDs share the final distribution
+    for trunk and head. Other IDs use the live adaptive ``ranges``. Both
+    disjoint subsets use stock DR's compile-time defaults, including on partial
+    resets; offsets never accumulate. The stock recomputation contract above
+    is necessary for the changed CoM to affect the dynamics.
+    """
+    from mjlab.envs.mdp import dr
+
+    if not 0.0 <= final_fraction <= 0.20:
+        raise ValueError("final CoM rehearsal fraction must be in [0, 0.20]")
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.int)
+    final_mask = env_ids < int(env.num_envs * final_fraction)
+    for ids, bounds in ((env_ids[~final_mask], ranges), (env_ids[final_mask], final_ranges)):
+        if ids.numel():
+            dr.body_ipos(env, ids, ranges=bounds, asset_cfg=asset_cfg, operation=operation)
+
+
 def randomize_delayed_actuator_gains(
     env: ManagerBasedRlEnv,
     env_ids: torch.Tensor,
@@ -3508,7 +3563,11 @@ def velocity_tracking_std_curriculum(
     current_std = std_stages[0]["std"]  # Default to first stage
 
     for stage in std_stages:
-        if env.common_step_counter > stage["step"]:
+        # Apply a stage at its exact cumulative boundary.  Adaptive resumes
+        # restore ``common_step_counter`` from the checkpoint; a run that ends
+        # exactly on a boundary must not spend the whole next segment using
+        # the previous reward width.
+        if env.common_step_counter >= stage["step"]:
             current_std = stage["std"]
 
     # Update the reward term's std parameter
@@ -3600,7 +3659,67 @@ def reward_weight(
     for stage in weight_stages:
         if env.common_step_counter > stage["step"]:
             term_cfg.weight = stage["weight"]
+    # The adaptive runner may install a bounded, checkpointed relief window
+    # for action-rate smoothing while a directional frontier is still being
+    # acquired.  Leave all other reward curricula untouched, and let the
+    # canonical stages resume automatically once the runner clears the
+    # override.
+    adaptive_override = getattr(env, "_adaptive_action_rate_weight", None)
+    if (
+        reward_name == "action_rate_l2"
+        and adaptive_override is not None
+        and getattr(env, "_adaptive_action_rate_scope", "all") == "all"
+    ):
+        # Relief can only soften the current schedule, including early stages
+        # whose canonical penalty is already smaller than the relief ceiling.
+        term_cfg.weight = max(term_cfg.weight, float(adaptive_override))
     return torch.tensor([term_cfg.weight])
+
+
+def adaptive_strictification_profile(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor,
+    profile_stages: list[dict],
+) -> torch.Tensor:
+    """Move a lateral acquisition diagnostic from an adapted basin to strict.
+
+    The live managers own deep-copied term configs, so this curriculum updates
+    the command, reward, and root-height termination through those managers.
+    The initial profile is deliberately bounded and diagnostic-only: it gives
+    lateral motion a dense early signal, then restores the production reward
+    balance in measured stages. It does not change the actor ABI or evaluator
+    thresholds.
+    """
+    del env_ids
+    if not profile_stages:
+        raise ValueError("strictification profile needs at least one stage")
+    values = profile_stages[0]
+    for stage in profile_stages:
+        if env.common_step_counter >= stage["step"]:
+            values = stage
+
+    command_cfg = env.command_manager.get_term_cfg("twist")
+    for name in ("rel_forward_envs", "rel_lateral_envs"):
+        if name in values and hasattr(command_cfg, name):
+            setattr(command_cfg, name, float(values[name]))
+
+    reward_names = (
+        "track_linear_velocity",
+        "track_angular_velocity",
+        "pose",
+        "air_time",
+        "action_rate_l2",
+    )
+    for name in reward_names:
+        if name in values:
+            term_cfg = env.reward_manager.get_term_cfg(name)
+            term_cfg.weight = float(values[name])
+
+    if "root_height" in values:
+        term_cfg = env.termination_manager.get_term_cfg("root_height")
+        term_cfg.params["min_height"] = float(values["root_height"])
+
+    return torch.tensor([float(values["step"])])
 
 
 def com_range_curriculum(
@@ -3676,6 +3795,21 @@ def terrain_levels_slope(env: ManagerBasedRlEnv, env_ids: torch.Tensor) -> torch
     )
     move_up, move_down = slope_move_masks(distance, terrain_generator.size[0])
     terrain.update_env_origins(env_ids, move_up, move_down)
+    return torch.mean(terrain.terrain_levels.float())
+
+
+def randomize_slope_terrain_levels(
+    env: ManagerBasedRlEnv, env_ids: torch.Tensor
+) -> torch.Tensor:
+    """Resample slope difficulty uniformly for every completed episode.
+
+    RollerSlope evaluation samples the full terrain difficulty range.  An
+    adaptive promote/demote curriculum concentrated training around a narrow
+    middle band, so the policy never became robust at either endpoint.
+    """
+    terrain = env.scene.terrain
+    assert terrain is not None
+    terrain.randomize_env_origins(env_ids)
     return torch.mean(terrain.terrain_levels.float())
 
 
@@ -3778,6 +3912,140 @@ def _imu_misalignment_quat(env: ManagerBasedRlEnv, max_angle_rad: float) -> torc
         q = quat_from_angle_axis(angle, axis)
         env._imu_misalign_quat = q
     return q
+
+
+def randomize_sensor_corners(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    fraction: float,
+    max_angle_deg: float,
+    bias_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> None:
+    """Reserve a bounded startup slice for coupled IMU/encoder DR corners.
+
+    The normal sensor randomizers draw each field independently.  That leaves
+    the joint tails of the fixed startup distribution sparsely represented,
+    even though the actor must handle the coupled realization on hardware.  A
+    small adaptive-only startup slice cycles through signed IMU axes and
+    encoder-bias patterns at the same physical limits.  Remaining environments
+    retain the ordinary random draws, so this is coverage, not a new range.
+
+    This is intentionally a startup event: a real robot's calibration error is
+    fixed for its lifetime.  It must not be registered on the canonical fixed
+    Velocity recipe unless a separate transfer contract adopts that semantics.
+    """
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("sensor corner fraction must be finite and in [0, 1]")
+    if not math.isfinite(max_angle_deg) or max_angle_deg < 0.0:
+        raise ValueError("sensor corner angle must be finite and nonnegative")
+    lo, hi = bias_range
+    if not math.isfinite(lo) or not math.isfinite(hi) or lo > hi:
+        raise ValueError("sensor corner bias range must be finite and ordered")
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.long)
+    else:
+        env_ids = env_ids.to(env.device, dtype=torch.long)
+    if env_ids.numel() == 0 or fraction == 0.0:
+        return
+
+    asset: Entity = env.scene[asset_cfg.name]
+    q = getattr(env, "_imu_misalign_quat", None)
+    if q is None:
+        n = env.num_envs
+        axis = torch.randn(n, 3, device=env.device)
+        axis = axis / (torch.norm(axis, dim=-1, keepdim=True) + 1e-8)
+        angle = torch.rand(n, device=env.device) * math.radians(max_angle_deg)
+        q = quat_from_angle_axis(angle, axis)
+        env._imu_misalign_quat = q
+
+    corner_count = min(env_ids.numel(), max(1, math.ceil(env_ids.numel() * fraction)))
+    corner_ids = env_ids[:corner_count]
+    axes = torch.tensor(
+        (
+            (1.0, 0.0, 0.0),
+            (-1.0, 0.0, 0.0),
+            (0.0, 1.0, 0.0),
+            (0.0, -1.0, 0.0),
+            (0.0, 0.0, 1.0),
+            (0.0, 0.0, -1.0),
+        ),
+        device=env.device,
+        dtype=q.dtype,
+    )
+    pattern_count = len(corner_ids)
+    pattern = torch.arange(pattern_count, device=env.device)
+    axis = axes[pattern % len(axes)]
+    angle = torch.full(
+        (pattern_count,), math.radians(max_angle_deg), device=env.device, dtype=q.dtype
+    )
+    q[corner_ids] = quat_from_angle_axis(angle, axis)
+
+    joint_count = asset.data.encoder_bias.shape[1]
+    signs = torch.ones(pattern_count, joint_count, device=env.device, dtype=q.dtype)
+    pattern_id = pattern % 6
+    signs[pattern_id == 1] = -1.0
+    signs[pattern_id == 2, ::2] = -1.0
+    signs[pattern_id == 3, 1::2] = -1.0
+    signs[pattern_id == 4, : joint_count // 2] = -1.0
+    signs[pattern_id == 5, joint_count // 2 :] = -1.0
+    magnitude = (hi - lo) / 2.0
+    midpoint = (hi + lo) / 2.0
+    asset.data.encoder_bias[corner_ids] = midpoint + magnitude * signs
+
+
+def randomize_sensor_realization(
+    env: ManagerBasedRlEnv,
+    env_ids: torch.Tensor | None,
+    fraction: float,
+    max_angle_deg: float,
+    bias_range: tuple[float, float],
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+) -> None:
+    """Resample the coupled sensor realization for reset environments.
+
+    The ordinary adaptive recipe samples IMU mounting error and encoder bias at
+    startup, which makes each environment carry one hidden realization for the
+    entire run.  This opt-in reset event keeps a realization constant between
+    resets while decorrelating it from the command and reset stream on every
+    episode.  It is an adaptive acquisition probe only; the canonical fixed
+    recipe and frozen evaluators do not register it.
+    """
+    if not math.isfinite(fraction) or not 0.0 <= fraction <= 1.0:
+        raise ValueError("sensor reset fraction must be finite and in [0, 1]")
+    if not math.isfinite(max_angle_deg) or max_angle_deg < 0.0:
+        raise ValueError("sensor reset angle must be finite and nonnegative")
+    lo, hi = bias_range
+    if not math.isfinite(lo) or not math.isfinite(hi) or lo > hi:
+        raise ValueError("sensor reset bias range must be finite and ordered")
+
+    if env_ids is None:
+        env_ids = torch.arange(env.num_envs, device=env.device, dtype=torch.long)
+    else:
+        env_ids = env_ids.to(env.device, dtype=torch.long)
+    if env_ids.numel() == 0 or fraction == 0.0:
+        return
+
+    count = min(env_ids.numel(), max(1, math.ceil(env_ids.numel() * fraction)))
+    if count == env_ids.numel():
+        selected = env_ids
+    else:
+        order = torch.randperm(env_ids.numel(), device=env.device)[:count]
+        selected = env_ids[order]
+
+    asset: Entity = env.scene[asset_cfg.name]
+    q = _imu_misalignment_quat(env, math.radians(max_angle_deg))
+    axis = torch.randn((count, 3), device=env.device, dtype=q.dtype)
+    axis = axis / (torch.norm(axis, dim=-1, keepdim=True) + 1e-8)
+    angle = torch.rand(count, device=env.device, dtype=q.dtype) * math.radians(max_angle_deg)
+    q[selected] = quat_from_angle_axis(angle, axis)
+
+    joint_count = asset.data.encoder_bias.shape[1]
+    bias = torch.rand(
+        (count, joint_count), device=env.device, dtype=asset.data.encoder_bias.dtype
+    ) * (hi - lo) + lo
+    asset.data.encoder_bias[selected] = bias
 
 
 def projected_gravity_imu_misaligned(
@@ -3936,6 +4204,123 @@ def standing_phase(
     phase = (time % phase_period) / phase_period
 
     return phase.unsqueeze(-1)  # Shape: (num_envs, 1)
+
+
+def _command_velocity_error_average(
+    env: ManagerBasedRlEnv,
+    command: torch.Tensor,
+    asset: Entity,
+    tau_s: float,
+    state_key: tuple[str, str, float],
+) -> torch.Tensor:
+    """Average signed tracking error once per step, isolating episodes/commands.
+
+    The instantaneous L1 cost can prefer standing to a lateral gait whose
+    mean velocity is closer to the command but whose sway crosses the target.
+    Average before taking the absolute value to price sustained error. This
+    state is reward-only; actor observations and actions remain unfiltered.
+    """
+    actual = torch.cat(
+        (asset.data.root_link_lin_vel_b[:, :2], asset.data.root_link_ang_vel_b[:, 2:3]), dim=-1
+    )
+    error = actual - command
+    if tau_s == 0.0:
+        return error
+    if not math.isfinite(tau_s) or tau_s < 0.0:
+        raise ValueError("velocity error averaging tau_s must be finite and nonnegative")
+    if not hasattr(env, "_command_velocity_averages"):
+        env._command_velocity_averages = {}
+    state = env._command_velocity_averages.get(state_key)
+    if state is None:
+        state = {"error": error.clone(), "command": command.clone(), "step": env.common_step_counter}
+        env._command_velocity_averages[state_key] = state
+    elif state["step"] != env.common_step_counter:
+        fresh = (env.episode_length_buf <= 1) | (command != state["command"]).any(dim=-1)
+        alpha = 1.0 - math.exp(-float(env.step_dt) / tau_s)
+        averaged = torch.lerp(state["error"], error, alpha)
+        # Initialize from the current error, not zero: stationary starts and
+        # command switches must not create an unearned low-cost grace period.
+        state["error"] = torch.where(fresh[:, None], error, averaged)
+        state["command"].copy_(command)
+        state["step"] = env.common_step_counter
+    return state["error"]
+
+
+def command_normalized_linear_velocity_l1(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    minimum_scale: float,
+    deadband: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    tau_s: float = 0.0,
+    yaw_deadband: float = 0.05,
+) -> torch.Tensor:
+    """Negative normalized command-aligned planar error; use a POSITIVE weight.
+
+    In body-frame m/s, let ``c = cmd_xy`` and ``v = actual_xy``. For an active
+    command (``||c|| > deadband``), return
+    ``-abs(dot(mean(v - c), c / ||c||)) / max(||c||, minimum_scale)``. This prices
+    only error along the requested direction, leaving orthogonal gait motion
+    free. ``tau_s > 0`` averages signed error before taking its magnitude,
+    so same-axis gait oscillation is not mistaken for sustained bias. For a
+    near-zero command, keep the instantaneous idle penalty. A pure-yaw command
+    has no planar target, so it returns zero for this linear term; turning sway
+    is handled by the yaw term and upright/impact stack instead of being priced
+    as translation failure. ``minimum_scale`` (m/s, > 0) keeps the
+    dimensionless signal finite at an exact-zero command. Vertical motion is
+    left to the existing Gaussian tracking reward.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    assert command is not None, f"Command '{command_name}' not found."
+    if not math.isfinite(yaw_deadband) or yaw_deadband < 0.0:
+        raise ValueError("yaw_deadband must be finite and nonnegative")
+    actual = asset.data.root_link_lin_vel_b[:, :2]
+    tracking_error = _command_velocity_error_average(
+        env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
+    )[:, :2]
+    commanded = command[:, :2]
+    command_norm = torch.linalg.vector_norm(commanded, dim=-1)
+    direction = commanded / command_norm.clamp_min(torch.finfo(command_norm.dtype).eps).unsqueeze(-1)
+    aligned_error = torch.abs(torch.sum(tracking_error * direction, dim=-1))
+    idle_error = (torch.linalg.vector_norm(actual, dim=-1) - deadband).clamp(min=0.0)
+    yaw_active = command[:, 2].abs() > yaw_deadband
+    # Pure yaw has no commanded planar velocity. Do not turn natural gait sway
+    # into a linear penalty; the yaw term prices the requested rotation.
+    idle_error = torch.where(yaw_active, torch.zeros_like(idle_error), idle_error)
+    error = torch.where(command_norm > deadband, aligned_error, idle_error)
+    scale = command_norm.clamp(min=minimum_scale)
+    return -error / scale
+
+
+def command_normalized_yaw_velocity_l1(
+    env: ManagerBasedRlEnv,
+    command_name: str,
+    minimum_scale: float,
+    deadband: float,
+    asset_cfg: SceneEntityCfg = _DEFAULT_ASSET_CFG,
+    tau_s: float = 0.0,
+) -> torch.Tensor:
+    """Negative normalized yaw tracking error; use a POSITIVE reward weight.
+
+    In body-frame rad/s, return
+    ``-relu(abs(mean(omega_z - cmd_z)) - deadband) / max(abs(cmd_z), minimum_scale)``
+    only when ``abs(cmd_z) > deadband``. It returns exactly zero for idle and
+    forward commands with no meaningful yaw request because the Gaussian yaw
+    term already handles their natural ripple. ``minimum_scale`` (rad/s, > 0)
+    keeps active low-rate commands finite; roll/pitch rates remain the
+    responsibility of the existing reward stack. ``tau_s > 0`` averages signed
+    error, sharing one update per step with the linear term.
+    """
+    asset: Entity = env.scene[asset_cfg.name]
+    command = env.command_manager.get_command(command_name)
+    assert command is not None, f"Command '{command_name}' not found."
+    error = _command_velocity_error_average(
+        env, command, asset, tau_s, (asset_cfg.name, command_name, tau_s)
+    )[:, 2].abs()
+    scale = command[:, 2].abs().clamp(min=minimum_scale)
+    active = command[:, 2].abs() > deadband
+    return -torch.where(active, (error - deadband).clamp(min=0.0) / scale, torch.zeros_like(error))
 
 
 def air_time_adaptive(
@@ -4716,24 +5101,59 @@ class VelocityCommandCommandOnly(UniformVelocityCommand):
         # spinning on the spot was effectively untrained → slow/unstable real-robot
         # turning. Mirrors the base rel_forward_envs mechanism.
         p = getattr(self.cfg, "rel_turn_in_place_envs", 0.0)
-        if p <= 0.0:
-            return
         r = torch.empty(len(env_ids), device=self.device)
-        turn_ids = env_ids[r.uniform_(0.0, 1.0) < p]
-        if len(turn_ids) == 0:
+        turn_mask = torch.zeros_like(self.is_standing_env)
+        if p > 0.0:
+            turn_ids = env_ids[r.uniform_(0.0, 1.0) < p]
+            if len(turn_ids) > 0:
+                turn_mask[turn_ids] = True
+                self.vel_command_b[turn_ids, 0] = 0.0
+                self.vel_command_b[turn_ids, 1] = 0.0
+                lo, hi = self.cfg.ranges.ang_vel_z
+                maxr = max(abs(lo), abs(hi))
+                rr = torch.empty(len(turn_ids), device=self.device)
+                sign = torch.where(rr.uniform_(0.0, 1.0) < 0.5, -1.0, 1.0)
+                mag = torch.empty(len(turn_ids), device=self.device).uniform_(0.4 * maxr, maxr)
+                self.vel_command_b[turn_ids, 2] = sign * mag
+                # These envs must actually turn — un-mark them as standing
+                # (which would zero the command) and refresh the world-frame copy.
+                self.is_standing_env[turn_ids] = False
+                self.vel_command_w[turn_ids] = self.vel_command_b[turn_ids]
+
+        # Opt-in pure lateral bucket for the adaptive recipe diagnostic. The
+        # ordinary independent x/y sampler rarely produces this command, so a
+        # policy can fail the runtime's lateral command while tracking diagonal
+        # motion acceptably. The canonical velocity recipe leaves this at 0.
+        p_lateral = getattr(self.cfg, "rel_lateral_envs", 0.0)
+        if p_lateral <= 0.0:
             return
-        self.vel_command_b[turn_ids, 0] = 0.0
-        self.vel_command_b[turn_ids, 1] = 0.0
-        lo, hi = self.cfg.ranges.ang_vel_z
-        maxr = max(abs(lo), abs(hi))
-        rr = torch.empty(len(turn_ids), device=self.device)
-        sign = torch.where(rr.uniform_(0.0, 1.0) < 0.5, -1.0, 1.0)
-        mag = torch.empty(len(turn_ids), device=self.device).uniform_(0.4 * maxr, maxr)
-        self.vel_command_b[turn_ids, 2] = sign * mag
-        # These envs must actually turn — un-mark them as standing (which would
-        # zero the command) and refresh the world-frame reference copy.
-        self.is_standing_env[turn_ids] = False
-        self.vel_command_w[turn_ids] = self.vel_command_b[turn_ids]
+        # Preserve canonical standing/turn/forward buckets. The diagnostic
+        # probability is conditional on the remaining ordinary-motion pool,
+        # so enabling lateral practice does not silently remove those lessons.
+        candidates = env_ids[
+            ~self.is_standing_env[env_ids]
+            & ~self.is_forward_env[env_ids]
+            & ~turn_mask[env_ids]
+        ]
+        if len(candidates) == 0:
+            return
+        conditional_p = min(1.0, p_lateral / max(1e-6, 1.0 - p))
+        lateral_ids = candidates[r[: len(candidates)].uniform_(0.0, 1.0) < conditional_p]
+        if len(lateral_ids) == 0:
+            return
+        self.vel_command_b[lateral_ids, 0] = 0.0
+        max_y = max(abs(self.cfg.ranges.lin_vel_y[0]), abs(self.cfg.ranges.lin_vel_y[1]))
+        magnitude = torch.empty(len(lateral_ids), device=self.device).uniform_(0.4 * max_y, max_y)
+        sign = torch.where(
+            torch.empty(len(lateral_ids), device=self.device).uniform_(0.0, 1.0) < 0.5,
+            -1.0,
+            1.0,
+        )
+        self.vel_command_b[lateral_ids, 1] = magnitude * sign
+        self.vel_command_b[lateral_ids, 2] = 0.0
+        self.is_standing_env[lateral_ids] = False
+        self.is_forward_env[lateral_ids] = False
+        self.vel_command_w[lateral_ids] = self.vel_command_b[lateral_ids]
 
     def _debug_vis_impl(self, visualizer: "DebugVisualizer") -> None:
         batch = visualizer.env_idx
@@ -4771,9 +5191,245 @@ class VelocityCommandCommandOnlyCfg(UniformVelocityCommandCfg):
     # Fraction of envs commanded to turn in place (lin=0, |ang| forced to
     # [0.4·max, max]) each resample. 0 = disabled (base uniform sampling only).
     rel_turn_in_place_envs: float = 0.0
+    # Fraction of envs receiving pure lateral commands. Opt-in diagnostic only.
+    rel_lateral_envs: float = 0.0
 
     def build(self, env: ManagerBasedRlEnv) -> "VelocityCommandCommandOnly":
         return VelocityCommandCommandOnly(self, env)
+
+
+class AdaptiveVelocityCommand(VelocityCommandCommandOnly):
+    """Disjoint capability buckets plus a nominal continuous command pool.
+
+    The runner owns allocation updates. Sampling only consumes the live cfg,
+    so checkpoint restoration does not require another controller in the MDP.
+    Bucket order matches evaluation.capability.BUCKETS.
+    """
+
+    def __init__(self, cfg, env: ManagerBasedRlEnv):
+        super().__init__(cfg, env)
+        probability = float(getattr(cfg, "transition_probability", 0.0))
+        duration = tuple(
+            float(value) for value in getattr(cfg, "transition_duration_s", (1.0, 2.0))
+        )
+        forward_fraction = tuple(
+            float(value)
+            for value in getattr(cfg, "transition_forward_fraction", (0.25, 0.75))
+        )
+        if not math.isfinite(probability) or not 0.0 <= probability <= 0.40:
+            raise ValueError("transition_probability must be finite and in [0, 0.40]")
+        bootstrap_mode = str(getattr(cfg, "transition_bootstrap_mode", "forward"))
+        if bootstrap_mode not in ("forward", "zero"):
+            raise ValueError("transition_bootstrap_mode must be 'forward' or 'zero'")
+        if (
+            len(duration) != 2
+            or not all(math.isfinite(value) for value in duration)
+            or not 0.0 < duration[0] <= duration[1]
+        ):
+            raise ValueError("transition_duration_s must be a positive increasing pair")
+        if (
+            len(forward_fraction) != 2
+            or not all(math.isfinite(value) for value in forward_fraction)
+            or not 0.0 < forward_fraction[0] <= forward_fraction[1] <= 1.0
+        ):
+            raise ValueError("transition_forward_fraction must be within (0, 1]")
+        self._transition_active = torch.zeros(
+            self.num_envs, dtype=torch.bool, device=self.device
+        )
+        self._transition_elapsed = torch.zeros(self.num_envs, device=self.device)
+        self._transition_duration = torch.zeros(self.num_envs, device=self.device)
+        self._transition_target = torch.zeros(
+            (self.num_envs, 3), device=self.device
+        )
+        self._transition_bootstrap = torch.zeros(
+            (self.num_envs, 3), device=self.device
+        )
+        self._transition_target_bucket = torch.full(
+            (self.num_envs,), -1, dtype=torch.long, device=self.device
+        )
+        self._transition_start_step = torch.full(
+            (self.num_envs,), -1, dtype=torch.long, device=self.device
+        )
+
+    def compute(self, dt: float) -> None:
+        """Advance command timing without consuming transition time on reset."""
+        self._update_metrics()
+        self.time_left -= dt
+        resample_env_ids = (self.time_left <= 0.0).nonzero().flatten()
+        if len(resample_env_ids) > 0:
+            self._resample(resample_env_ids)
+        if dt > 0.0 and self._transition_active.any():
+            step = int(getattr(self._env, "common_step_counter", -1))
+            eligible = self._transition_active & (self._transition_start_step < step)
+            self._transition_elapsed[eligible] += float(dt)
+        self._update_command()
+
+    def _set_transition_state(self, env_ids: torch.Tensor, buckets: torch.Tensor) -> None:
+        """Start bounded ramps and attribute acquisition to the bootstrap bucket."""
+        if not hasattr(self, "_transition_active"):
+            with torch.inference_mode(False):
+                self._transition_active = torch.zeros(
+                    self.num_envs, dtype=torch.bool, device=self.device
+                )
+                self._transition_elapsed = torch.zeros(self.num_envs, device=self.device)
+                self._transition_duration = torch.zeros(self.num_envs, device=self.device)
+                self._transition_target = torch.zeros(
+                    (self.num_envs, 3), device=self.device
+                )
+                self._transition_bootstrap = torch.zeros(
+                    (self.num_envs, 3), device=self.device
+                )
+                self._transition_target_bucket = torch.full(
+                    (self.num_envs,), -1, dtype=torch.long, device=self.device
+                )
+                self._transition_start_step = torch.full(
+                    (self.num_envs,), -1, dtype=torch.long, device=self.device
+                )
+        elif not hasattr(self, "_transition_bootstrap"):
+            # Keep objects constructed from a pre-slew command state usable in
+            # lightweight tests and evaluator-side command wrappers.
+            self._transition_bootstrap = torch.zeros_like(self._transition_target)
+        probability = float(getattr(self.cfg, "transition_probability", 0.0))
+        bootstrap_mode = str(getattr(self.cfg, "transition_bootstrap_mode", "forward"))
+        if bootstrap_mode not in ("forward", "zero"):
+            raise ValueError("transition_bootstrap_mode must be 'forward' or 'zero'")
+        self._transition_active[env_ids] = False
+        self._transition_elapsed[env_ids] = 0.0
+        self._transition_target[env_ids] = self.vel_command_b[env_ids]
+        self._transition_target_bucket[env_ids] = buckets
+        step = int(getattr(self._env, "common_step_counter", -1))
+        self._transition_start_step[env_ids] = step
+        if probability <= 0.0:
+            return
+        eligible = (buckets >= 3) & (buckets <= 5)
+        if not torch.any(eligible):
+            return
+        eligible_ids = env_ids[eligible]
+        selected = torch.rand(len(eligible_ids), device=self.device) < probability
+        selected_ids = eligible_ids[selected]
+        if len(selected_ids) == 0:
+            return
+        duration_lo, duration_hi = getattr(self.cfg, "transition_duration_s", (1.0, 2.0))
+        frac_lo, frac_hi = getattr(self.cfg, "transition_forward_fraction", (0.25, 0.75))
+        duration = torch.empty(len(selected_ids), device=self.device).uniform_(
+            duration_lo, duration_hi
+        )
+        forward_fraction = torch.empty(len(selected_ids), device=self.device).uniform_(
+            frac_lo, frac_hi
+        )
+        target = self._transition_target[selected_ids].clone()
+        bootstrap = target.clone()
+        pure_yaw = buckets[eligible][selected] == 3
+        if bootstrap_mode == "forward":
+            if torch.any(pure_yaw):
+                max_forward = max(abs(float(value)) for value in self.cfg.ranges.lin_vel_x)
+                bootstrap[pure_yaw, 0] = max_forward * forward_fraction[pure_yaw]
+            bootstrap[:, 1:] = 0.0
+        else:
+            # Start at exact idle, then slew toward the sampled yaw/turn target.
+            bootstrap.zero_()
+        self._transition_bootstrap[selected_ids] = bootstrap
+        self.vel_command_b[selected_ids] = bootstrap
+        self.vel_command_w[selected_ids] = bootstrap
+        self._transition_target[selected_ids] = target
+        self._transition_duration[selected_ids] = duration
+        self._transition_elapsed[selected_ids] = 0.0
+        self._transition_active[selected_ids] = True
+        # Attribute the ramp to its bootstrap bucket until the exact target is
+        # reached, then return attribution to the sampled yaw/turn bucket.
+        if hasattr(self, "bucket_ids"):
+            self.bucket_ids[selected_ids] = 1 if bootstrap_mode == "forward" else 0
+        self.is_forward_env[selected_ids] = bootstrap_mode == "forward"
+        self.is_standing_env[selected_ids] = bootstrap_mode == "zero"
+
+    def _update_command(self) -> None:
+        super()._update_command()
+        if not hasattr(self, "_transition_active") or not self._transition_active.any():
+            return
+        active_ids = self._transition_active.nonzero(as_tuple=False).flatten()
+        duration = self._transition_duration[active_ids]
+        progress = torch.where(
+            duration > 0.0,
+            self._transition_elapsed[active_ids] / duration,
+            torch.ones_like(duration),
+        ).clamp_(0.0, 1.0)
+        # Keep the command continuous throughout acquisition. Previously the
+        # bootstrap was written at reset and the target appeared only when the
+        # timer completed, so the policy saw a discontinuous jump exactly at
+        # the transition boundary. The evaluator never enables this path; it
+        # is a training-only acquisition aid.
+        interpolated = self._transition_bootstrap[active_ids] + progress.unsqueeze(-1) * (
+            self._transition_target[active_ids] - self._transition_bootstrap[active_ids]
+        )
+        self.vel_command_b[active_ids] = interpolated
+        self.vel_command_w[active_ids] = interpolated
+        complete = self._transition_active & (
+            self._transition_elapsed >= self._transition_duration
+        )
+        ids = complete.nonzero(as_tuple=False).flatten()
+        if len(ids) == 0:
+            return
+        self.vel_command_b[ids] = self._transition_target[ids]
+        self.vel_command_w[ids] = self._transition_target[ids]
+        if hasattr(self, "bucket_ids"):
+            self.bucket_ids[ids] = self._transition_target_bucket[ids]
+        self.is_forward_env[ids] = False
+        self.is_standing_env[ids] = False
+        self._transition_active[ids] = False
+
+    def _resample_command(self, env_ids: torch.Tensor) -> None:
+        super()._resample_command(env_ids)
+        if len(env_ids) == 0:
+            return
+        probabilities = self.cfg.bucket_probabilities
+        weights = torch.tensor((*probabilities, 1.0 - sum(probabilities)), device=self.device)
+        buckets = torch.multinomial(weights, len(env_ids), replacement=True)
+        # Keep the sampled bucket alongside the command.  The adaptive runner
+        # consumes this before each physics step so reward mass is attributed to
+        # the command that actually produced it, even when a reset resamples a
+        # command during ``env.step``.
+        if not hasattr(self, "bucket_ids") or self.bucket_ids.shape[0] != self.num_envs:
+            self.bucket_ids = torch.full(
+                (self.num_envs,), -1, dtype=torch.long, device=self.device
+            )
+        self.bucket_ids[env_ids] = buckets
+        for bucket in range(6):
+            ids = env_ids[buckets == bucket]
+            if len(ids) == 0:
+                continue
+            self.vel_command_b[ids] = 0.0
+            self.is_standing_env[ids] = bucket == 0
+            self.is_forward_env[ids] = bucket == 1
+            self.is_heading_env[ids] = False
+            self.is_world_env[ids] = False
+            if bucket in (1, 4, 5):
+                self.vel_command_b[ids, 0] = torch.empty(len(ids), device=self.device).uniform_(
+                    0.1 * self.cfg.ranges.lin_vel_x[1], self.cfg.ranges.lin_vel_x[1]
+                )
+            if bucket == 2:
+                max_y = max(abs(v) for v in self.cfg.ranges.lin_vel_y)
+                sign = torch.where(torch.rand(len(ids), device=self.device) < 0.5, -1.0, 1.0)
+                self.vel_command_b[ids, 1] = sign * torch.empty(len(ids), device=self.device).uniform_(0.2 * max_y, max_y)
+            if bucket in (3, 4, 5):
+                max_yaw = max(abs(v) for v in self.cfg.ranges.ang_vel_z)
+                sign = (torch.where(torch.rand(len(ids), device=self.device) < 0.5, -1.0, 1.0)
+                        if bucket == 3 else (1.0 if bucket == 4 else -1.0))
+                self.vel_command_b[ids, 2] = sign * torch.empty(len(ids), device=self.device).uniform_(0.4 * max_yaw, max_yaw)
+            self.vel_command_w[ids] = self.vel_command_b[ids]
+        self._set_transition_state(env_ids, buckets)
+
+
+@_dataclass(kw_only=True)
+class AdaptiveVelocityCommandCfg(VelocityCommandCommandOnlyCfg):
+    bucket_probabilities: tuple[float, ...] = (0.8 / 6,) * 6
+    # Opt-in acquisition aid. Zero preserves the previous command stream.
+    transition_probability: float = 0.0
+    transition_bootstrap_mode: str = "forward"
+    transition_duration_s: tuple[float, float] = (1.0, 2.0)
+    transition_forward_fraction: tuple[float, float] = (0.25, 0.75)
+
+    def build(self, env: ManagerBasedRlEnv) -> AdaptiveVelocityCommand:
+        return AdaptiveVelocityCommand(self, env)
 
 
 class RelativeHeadingVelocityCommand(VelocityCommandCommandOnly):

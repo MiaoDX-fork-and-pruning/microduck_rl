@@ -1,0 +1,44 @@
+{
+  "policy_id": "roulade_flat",
+  "task": "Mjlab-Roulade-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "07b2cf7898395679c16f6217c6e71850703c77867a84fb0ad51eeb0070d560ef",
+  "onnx_sha256": "5706e2a994ec0b98371a9f048c72c79406ee4cb04fe08df528532b261c2860bc",
+  "parity_report_sha256": "81710d9196a8d1b5c0ad3d6e9e4b49d9dd5a71b5d6270e313fae2fab81645315",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "canonical",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        0.3957588240560541,
+        0.3889926251503846,
+        0.01615547985056867
+      ],
+      "max_tilt_rad": 3.0132724995163764,
+      "final_tilt_rad": 0.002366927214900926,
+      "final_height_m": 0.11615547985056868,
+      "max_abs_raw_action": 2.768953323364258,
+      "max_abs_applied_action": 2.768953323364258,
+      "contact_geoms": [
+        "floor",
+        "geom_26",
+        "geom_49",
+        "geom_9",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": true,
+      "passed": true,
+      "failure_reason": null,
+      "trace": "artifacts/generalist-v0/p0-action-battery-final/roulade_flat/canonical.npz"
+    }
+  ]
+}

@@ -1,0 +1,145 @@
+{
+  "schema_version": 1,
+  "official_repository": "https://github.com/pollen-robotics/microduck.git",
+  "official_commit": "590b986bd8c0d50ae02cb3ea2f59c463b6828168",
+  "recovery_contract": [
+    "fall_predictor",
+    "limp_until_landed",
+    "pose_to_standing",
+    "hand_back_to_standing_policy"
+  ],
+  "official_defaults": {
+    "predictor_tilt_z": -0.9,
+    "predictor_predicted_z": -0.5,
+    "predictor_lookahead_ms": 300,
+    "predictor_debounce_ms": 60,
+    "landed_still_rate_rad_s": 1.0,
+    "landed_still_ms": 200,
+    "limp_max_ms": 1500,
+    "pose_ms": 600,
+    "pose_gain": 160
+  },
+  "tests": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "duck-control",
+        "fall::tests",
+        "--",
+        "--nocapture"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "stdout_tail": "\nrunning 8 tests\ntest fall::tests::a_fall_fires_once_after_the_debounce ... ok\ntest fall::tests::a_footfall_on_an_upright_robot_never_fires ... ok\ntest fall::tests::a_slow_lean_waits ... ok\ntest fall::tests::a_static_tilt_is_not_a_fall ... ok\ntest fall::tests::recovering_from_a_lean_never_fires ... ok\ntest fall::tests::it_rearms_when_the_fall_stops ... ok\ntest fall::tests::reset_drops_a_debounce_in_progress ... ok\ntest fall::tests::the_rate_is_the_analytic_derivative ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 52 filtered out; finished in 0.00s\n\n",
+      "stderr_tail": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.07s\n     Running unittests src/lib.rs (target/debug/deps/duck_control-fd3bd6e0fea6e7e7)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "robotd",
+        "the_limp_fall_pose_ramp_ends_at_the_standing_pose",
+        "--",
+        "--nocapture"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "stdout_tail": "\nrunning 1 test\ntest tests::the_limp_fall_pose_ramp_ends_at_the_standing_pose ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 95 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s\n\n",
+      "stderr_tail": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.14s\n     Running unittests src/main.rs (target/debug/deps/robotd-dc71297e88c87a4a)\n     Running tests/updater_gate.rs (target/debug/deps/updater_gate-1e36e919f1340467)\n"
+    },
+    {
+      "command": [
+        "cargo",
+        "test",
+        "-p",
+        "robotd",
+        "limp_fall_ships_on_and_refuses_nothing",
+        "--",
+        "--nocapture"
+      ],
+      "returncode": 0,
+      "passed": true,
+      "stdout_tail": "\nrunning 1 test\ntest tests::limp_fall_ships_on_and_refuses_nothing ... ok\n\ntest result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 95 filtered out; finished in 0.00s\n\n\nrunning 0 tests\n\ntest result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s\n\n",
+      "stderr_tail": "    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.11s\n     Running unittests src/main.rs (target/debug/deps/robotd-dc71297e88c87a4a)\n     Running tests/updater_gate.rs (target/debug/deps/updater_gate-1e36e919f1340467)\n"
+    }
+  ],
+  "mujoco_policy_evidence": {
+    "standup_primary": {
+      "id": "sit_to_stand",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.03258619791462627,
+        -0.007416651944949136,
+        0.05632442237113429
+      ],
+      "max_tilt_rad": 0.12047779304220187,
+      "final_tilt_rad": 0.004884296881971538,
+      "final_height_m": 0.11632442237113429,
+      "max_abs_raw_action": 1.8898147344589233,
+      "max_abs_applied_action": 1.8898147344589233,
+      "contact_geoms": [
+        "floor",
+        "geom_26",
+        "geom_67",
+        "geom_76",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-deadband-final/standup_flat/sit_to_stand.npz"
+    },
+    "prone_recovery_probe": {
+      "id": "prone_recovery_probe",
+      "seed": 43,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.15178294236085918,
+        0.004370384398977036,
+        -0.010893199795342694
+      ],
+      "max_tilt_rad": 3.0859222537664945,
+      "final_tilt_rad": 1.1116305699860656,
+      "final_height_m": 0.05910680020465731,
+      "max_abs_raw_action": 2.0151443481445312,
+      "max_abs_applied_action": 2.0151443481445312,
+      "contact_geoms": [
+        "floor",
+        "geom_49",
+        "geom_56",
+        "geom_58",
+        "geom_9",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "probe",
+      "passed_probe": false,
+      "trace": "artifacts/generalist-v0/p0-action-battery-deadband-final/standup_flat/prone_recovery_probe.npz"
+    }
+  },
+  "checks": {
+    "official_commit_pinned": true,
+    "official_fall_predictor_tests": true,
+    "official_pose_ramp_test": true,
+    "official_limp_fall_default_test": true,
+    "standup_primary_handoff_passed": true,
+    "persistent_sensor_injection_bridge": false
+  },
+  "p1_passed": false,
+  "blocker": "Pinned robotd has no persistent external sensor-frame injection seam; official decisions cannot yet be driven end-to-end by MuJoCo without duplicating the scheduler."
+}

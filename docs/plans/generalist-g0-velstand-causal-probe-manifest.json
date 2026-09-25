@@ -1,0 +1,146 @@
+{
+  "schema": "generalist-g0-velstand-causal-probe-manifest",
+  "version": 2,
+  "probe_id": "g0-velstand-causal-probe",
+  "status": "paused-pending-direction-review",
+  "source_commit": "56cfcc95465bc6cd7d523c4a5d5bbe8ed4d8cf7d",
+  "dirty_tree_at_freeze": true,
+  "plan": "docs/plans/generalist-g0-velstand-causal-probe.md",
+  "contract": {
+    "task": "Mjlab-VelStand-Flat-MicroDuck",
+    "behavior": "VELSTAND",
+    "input_dim": 71,
+    "observation_dim": 61,
+    "action_dim": 14,
+    "control_hz": 50,
+    "observation_layout": "generalist_schema.v2",
+    "action_representation": "raw_14d",
+    "normalization_baked_into_onnx": true
+  },
+  "frozen_inputs": {
+    "teacher_manifest": {
+      "path": "docs/plans/generalist-g0-teacher-manifest.json",
+      "sha256": "efc0ca0d7646be4ea2178cbbf77773e09cb6609b45dd4778d4ccf63b7892253b",
+      "teacher_id": "velstand_flat"
+    },
+    "acceptance_report": {
+      "path": "cloudml/specialist-r2-velstand-acceptance-facd4f4.json",
+      "sha256": "5ca947bb90e989bf16cb89092fa7bb0d2cfba94d12d675009b654b6c6f061151",
+      "source_commit": "facd4f4"
+    },
+    "teacher_artifacts": {
+      "checkpoint": {
+        "path": "artifacts/specialists/velstand_flat/checkpoint.pt",
+        "sha256": "97fe0c728dffe36f2f2d414b19ee9fb8b9a4fa5742dd125e9fa19509a8c20bb5"
+      },
+      "onnx": {
+        "path": "artifacts/specialists/velstand_flat/policy.onnx",
+        "sha256": "1b7b6330121e62cf1c90c7303be48ceea62a5cb90d9c5608454abc2d16e7abde"
+      }
+    }
+  },
+  "battery": {
+    "seed": 42,
+    "episodes": 32,
+    "reset_buckets": [
+      "upright",
+      "seated",
+      "recovery_face_up",
+      "recovery_face_down",
+      "recovery_left_side",
+      "recovery_right_side",
+      "recovery_crouched",
+      "recovery_natural_fall",
+      "post_recovery_upright"
+    ],
+    "command_buckets": ["zero", "nominal_hold"],
+    "episode_horizon_seconds": 20,
+    "evaluator": "corrected_50hz_mujoco_rollout",
+    "per_bucket_required": true,
+    "same_initial_state_for_native_and_student": true,
+    "native_baseline_required_before_student": true
+  },
+  "thresholds": {
+    "teacher_action_parity": {
+      "max_abs": 0.0001,
+      "mean_abs": 0.00001
+    },
+    "closed_loop": {
+      "minimum_success_rate": 0.8,
+      "episodes": 32,
+      "seed": 42,
+      "minimum_main_task_metric": 18.0,
+      "teacher_per_episode_success_threshold": 15.0,
+      "aggregate_must_not_hide_bucket_failure": true,
+      "teacher_rate_tolerance_must_be_frozen_before_training": true,
+      "teacher_rate_tolerance_absolute": 0.10,
+      "minimum_bucket_success_floor": 0.50,
+      "case_list_must_be_hashed_before_student": true
+    },
+    "invariants": {
+      "finite_actions_required": true,
+      "abi_mismatch_allowed": false,
+      "penalties_non_positive_required": true,
+      "action_range_violation_allowed": false
+    }
+  },
+  "frontier_sampling": {
+    "definition": "first control tick crossing the declared upright/fall safety threshold",
+    "window_ticks_before": 8,
+    "window_ticks_after": 8,
+    "exclude_physically_unrecoverable_buckets": true
+  },
+  "budget": {
+    "bc_optimizer_epochs_max": 100,
+    "dagger_rounds_max": 3,
+    "dagger_new_student_state_samples_per_round_max": 10000,
+    "early_stop": {
+      "on_gate_pass": true,
+      "after_consecutive_no_primary_success_improvement": 2
+    }
+  },
+  "control_arms": [
+    "native_teacher_closed_loop",
+    "random_or_noop_lower_bound",
+    "teacher_initialized_student",
+    "trajectory_split_bc",
+    "cumulative_dagger"
+  ],
+  "student_contract": {
+    "architecture_frozen_across_arms": true,
+    "teacher_initialization_mapping_required": true,
+    "trajectory_split_before_oversampling": true,
+    "dagger_cumulative_dataset": true,
+    "same_state_command_previous_action_timer_for_relabel": true
+  },
+  "required_reports": {
+    "compatibility": "external/g0-velstand-probe/teacher-compatibility.json",
+    "closed_loop": "external/g0-velstand-probe/bc-dagger-closed-loop.json",
+    "diagnosis": "external/g0-velstand-probe/diagnosis.json",
+    "best_student_onnx": "external/g0-velstand-probe/best-student.onnx"
+  },
+  "output_hashes": {
+    "compatibility_report_sha256": "45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31",
+    "closed_loop_report_sha256": "f27f431a5ab826c8b97f176abbc43d0a8c2267347e9c5b8ee455b0dbdeef451c",
+    "diagnosis_report_sha256": "3724e8783b184d6d9800bb75a2b3db79b3fc260d6239cfd827685ce367e9f54e",
+    "best_student_onnx_sha256": ""
+  },
+  "current_evidence": {
+    "compatibility_report": "/tmp/g0-velstand-phase-a.json",
+    "native_baseline_report": "/tmp/g0-velstand-phase-a.json",
+    "native_baseline_report_sha256": "45eba29e12454f8bad2de724fd183c22b259eef945d859acd05be851ad831c31",
+    "native_baseline_success_rate": 0.375,
+    "native_baseline_main_task_metric": 18.764169493506913,
+    "closed_loop_report": "/tmp/g0-velstand-dagger2-battery.json",
+    "diagnosis_report": "/tmp/g0-velstand-causal-diagnosis-final.json",
+    "best_student_checkpoint": "/tmp/g0-velstand-bc-dagger1/model.pt",
+    "best_student_checkpoint_sha256": "283766b9749372a281b3fad39b70cc2af6681b3b0c2ef3c0c700c3a2bd658765",
+    "ephemeral": true
+  },
+  "evidence_gaps": [
+    "native recovery-bucket baseline uses hand-authored poses; exact specialist reset semantics require owner review",
+    "balanced nominal/recovery traces and cumulative frontier DAgger",
+    "teacher-initialized and random/no-op control arms",
+    "best-student ONNX export/parity and representative video review"
+  ]
+}

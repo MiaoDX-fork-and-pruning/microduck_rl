@@ -1,0 +1,443 @@
+# Velocity-Flat Backend Comparison
+
+Status: **T22 strict semantic closure accepted; solver/friction timing remain explicit backend deltas**
+
+This compares the corrected strict IsaacLab checkpoint with the accepted mjlab
+`velocity_flat` policy. The shared battery covers zero, forward, lateral, yaw,
+and both turn directions at 300 control steps / 6 s per case. It is a behavior
+gate rather than an exact trajectory-equality claim because MuJoCo and PhysX
+solver behavior remains a documented backend delta.
+
+The recorded 6000-iteration IsaacLab run predates the strict-parity plan lock
+(`5f4b206`).  The earlier plan explicitly allowed a useful backend result
+without complete feature parity.  That run is retained as diagnostic history;
+it is not evidence that the current strict Task H was executed or accepted.
+
+The current comparison experiment is `microduck_isaaclab_velocity_flat_mjlab_match`.
+Its 64-environment, 5-iteration IsaacLab smoke completed successfully on
+Isaac Sim 6.0.1 / IsaacLab 3.0.0. The default runner budget is now 6000
+iterations, matching the accepted mjlab training budget; no long run is
+considered valid until it uses the artifact and battery identity recorded here.
+
+## Recipe alignment
+
+Strictly aligned for the next cross-backend run:
+
+- physics timestep `0.005 s`, control timestep `0.020 s`, decimation `4`, and
+  20-second episodes;
+- 61D policy observation and 14D action ABI;
+- command ranges `lin_vel_x=(-0.4, 0.4)`, `lin_vel_y=(-0.3, 0.3)`,
+  `ang_vel_z=(-1.0, 1.0)`, resampling `(3.0, 8.0)`, and 2% standing commands;
+- XY+Z linear tracking, yaw+XY angular tracking, and flat-ground upright
+  Gaussian formulas (with mjlab-equivalent standard deviations);
+- actor MLP `[512, 256, 128]`, observation normalization, 24 steps per env;
+- critic MLP `[512, 256, 128]` and explicit `actor`/`critic` observation-group
+  mapping (the previous long run used an accidental `[128, 128, 128]` critic);
+- PPO entropy `0.01`, 5 learning epochs, 4 mini-batches, learning rate
+  `1e-3`, `gamma=0.99`, `lambda=0.95`, adaptive KL schedule, and 6000
+  iterations.
+
+Still excluded from a backend-only claim:
+
+- MuJoCo implicitfast versus PhysX GPU solver behavior;
+- same-step solved external-load friction timing, which PhysX does not expose
+  to the pre-step BAM callback;
+- hardware validation. T22 independently trained strictification now passes
+  both IsaacLab and headless MuJoCo batteries; actuator, runtime, and human
+  release gates remain separate.
+
+## Full parity inventory
+
+The following differences remain after the core recipe alignment. They are
+ordered roughly by expected effect on the learned behavior.
+
+| Area | mjlab Velocity-Flat | IsaacLab status | Impact |
+| --- | --- | --- | --- |
+| Actuator delay | mjlab `DelayBuffer` position-target delay `3..6`, with lag sampled each actuator call (`update_period=0`) and reset-row first-command backfill | per-environment `ControlStepDelay(sample_lag_each_push=True)` | aligned; seeded backend-neutral fixture matches lag/target step-for-step |
+| BAM voltage | per-environment `vin` plus previous-load voltage drop, floor `6.0 V` | startup `vin` range plus previous-effort sag and floor | aligned; actuator bench evidence |
+| BAM friction | friction budget written into solver friction/damping using solved external load | friction budget is only a bench helper; PhysX callback cannot see solved load | high / backend limit |
+| BAM gain DR | `kp`/`kd` randomization disabled; friction-scale hook enabled | no gain event; friction-scale state is wired but its PhysX dynamics effect is unproven | friction remains high impact |
+| Rewards | pose, body angular velocity, angular momentum, joint limits, action-rate, air-time, foot clearance/swing/slip, self-collision, head pose and bias | all 16 terms are wired; canonical foot-site terms and raw PhysX self-contact are runtime-finite in multiple environments | formula parity closed; solver trajectory remains a backend delta |
+| Head/body commands | sampled non-zero `head_pose` (4D) and `body_pose` (6D), with curricula | non-zero sampled 4D+6D command block, pose terms, and range curricula are wired and runtime-probed | aligned |
+| Turn-in-place | explicit 15% command bucket | explicit held 15% turn bucket | aligned; 13.11% seeded runtime sample |
+| Actor observations | IMU misalignment, noise, gyro/gravity delay, joint encoder bias, joint-velocity delay/noise | stateful adapter wired and seeded runtime-probed | aligned |
+| Critic observations | privileged base velocity plus foot height/air-time/contact/contact-force sensors | separate runtime-finite 76D critic group with real contact tensors and MJCF foot-site heights | aligned |
+| Events / DR | pushes, foot friction, reset action history, CoM/head-CoM, mass/inertia, armature, encoder bias, NaN guard | event terms wired with restore-then-apply adapters and seeded runtime probes | aligned |
+| Termination | timeout, 70-degree orientation, terrain bounds, NaN state | timeout, 70-degree orientation, terrain bounds, NaN state | aligned; runtime smoke |
+| Asset sensors | MJCF IMU/ang-momentum/foot sites are available to mjlab | canonical foot sites are reconstructed from MJCF constants and subtree momentum from rigid-body tensors; actor IMU remains a root-state adapter | seeded 12-step source trace closes gyro/gravity/joint/foot-position frames; foot velocity (`8.84e-3 m/s`) and angular momentum (`7.99e-6`) remain explicit source deltas |
+| Asset dynamics | MJCF default joint damping `0.053` and BAM solver-side friction path | USD damping is zero and PhysX joint friction is nominal-only; explicit BAM does not close the loop | high |
+| Physics solver | MuJoCo `implicitfast`, 10 iterations / LS 20 | PhysX GPU solver, articulation iterations 4/1 | intentional backend difference |
+| RL implementation | `rsl-rl-lib 5.0.1` | IsaacLab image bundles `rsl-rl-lib 5.4.1` | one synthetic 8-env/4-step update has identical hashes/metrics; PPO/storage source differs and 5.0.1 cannot run in the IsaacLab entrypoint |
+| Evaluation | historical accepted battery uses 300-step forward sweeps | shared spec and IsaacLab six-case harness use 300 steps, 16 envs, and deterministic reset instrumentation | harness and T22 trained response matched; hardware release remains separate |
+
+Concrete mismatches found by the runtime/config audit, with current disposition:
+
+- **Reset distribution (closed):** IsaacLab now samples
+  base height `0.12..0.13 m`, x/y and yaw from the mjlab ranges, restores HOME,
+  and resets actor history. The seeded multi-env parity report closes the
+  distribution row; the explicit BAM reset hook also clears delayed targets
+  and previous effort between episodes.
+- **Termination boundary (corrected):** the early `gravity_xy > 0.75` / root-z
+  rule was removed. The production manager now carries timeout, 70-degree
+  orientation, terrain-bounds, and NaN terms; seeded source proof remains.
+- **Sensor frame:** mjlab actor gyro/gravity use the named IMU sensor and apply
+  the same per-environment mounting misalignment, noise, and delay. IsaacLab
+  reads root-state tensors directly. The seeded raw-source trace measures the
+  resulting adapter error (`8.94e-8` gyro, `3.58e-7` gravity), while retaining
+  PhysX foot-velocity and subtree-momentum source differences explicitly.
+- **Friction duplication:** the converted USD report still shows
+  `joint_friction=0.0048` on all 14 joints. mjlab's BAM `edit_spec` zeroes
+  `dof_frictionloss` and injects its own solver-side budget. Until the PhysX
+  friction bridge exists, leaving the USD value active is an additional hidden
+  dynamics difference.
+- **Action path:** the production mjlab runner leaves `clip_actions=None`, so
+  raw policy actions reach the absolute HOME+scale target transform. IsaacLab
+  now follows that boundary and keeps the action term at `clip=None`; its clip
+  field would run after scale+offset and change the mjlab semantics. The
+  earlier strict run used an Isaac-only `clip_actions=1.0` and is therefore
+  diagnostic-invalid.
+- **Corrected HOME transcription:** an earlier IsaacLab-only ABI table put the
+  right-hip-pitch HOME value (`0.4579 rad`) in the right-hip-yaw slot. The mjlab
+  `HOME_FRAME` sets both hip-yaw joints to `0.0`; the IsaacLab table, spawn pose,
+  action offset, golden target, and direct cross-source regression test now use
+  that value. The authored right-hip-yaw limit `[-0.5236, 0.4363] rad` is therefore
+  not a HOME/limit conflict. Checkpoints trained before this correction are not
+  valid strict-parity baselines.
+- **Contact source (closed with explicit source choice):** foot height and
+  velocity use canonical MJCF site offsets, and raw concrete PhysX views now
+  preserve the mjlab three-body, ground-excluding self-collision count in four
+  environments. The filtered ContactSensor path remains disabled because its
+  nested USD expansion is not multi-environment safe.
+- **Software implementation:** the accepted mjlab run uses `rsl-rl-lib 5.0.1`;
+  the IsaacLab 3.0.0 image uses `rsl-rl-lib 5.4.1`. Even with matching scalar
+  PPO fields, optimizer/distribution implementation details are not byte-level
+  identical.
+
+## Historical diagnostics before T22
+
+The following bounded diagnostics are retained for provenance. They describe
+the state before T22 and do not override the accepted result recorded above.
+
+Asset geometry and canonical joint limits are currently close: the compiled
+MJCF and USD both contain 14 actuated revolute joints and 75 collision
+geometries. The remaining asset concern is dynamics and sensor authoring, not
+the joint-name mapping itself.
+
+The corrected strict-from-scratch checkpoint then failed the trained-policy
+forward/lateral response gate. A bounded warm-start continuation from adapted
+`model_750.pt` now passes the strict IsaacLab battery and the headless MuJoCo
+directional battery; it is a valid cross-backend candidate but not an
+independent strict-from-scratch baseline. At that point the next work was a
+focused training hypothesis, not an unbounded replacement run.
+
+As the independent-training check, strict-from-scratch `model_250.pt` was
+evaluated with the same six-case IsaacLab battery. It is finite but fails all
+cases, with approximately `0.16` resets per environment step and negative
+zero-command drift. This confirms that the remaining blocker is learned
+strict-from-scratch behavior, not an export or runtime-shape failure.
+Artifact: `.cache/isaaclab-assets/velocity_flat_command_battery_strict_model250.json`.
+
+The first bounded training calibration reduced only `air_time.weight` from
+`3.0` to `1.0` for `750` iterations. The endpoint remained finite and stable,
+but forward/lateral response stayed near zero and root height settled near
+`0.071 m`; the six-case artifact is
+`.cache/isaaclab-assets/velocity_flat_command_battery_strict_airtime1_model749.json`.
+The result rejects air-time dominance as the sole training cause.
+
+A second bounded calibration disabled only `env.terminations.root_height` for
+`750` iterations, then restored the guard for evaluation. Its finite endpoint
+failed all six cases: zero command had `776` resets (`0.1617` per env-step) and
+`-0.199 m/s` drift, while commanded translation/yaw also failed. Artifact:
+`.cache/isaaclab-assets/velocity_flat_command_battery_strict_rootbootstrap_model749.json`
+(SHA256 `3d764508b657d657346c990edd5f7cb882b8d6b28a31262c53e182773118c256`).
+This rejects low-height termination as the bootstrap explanation. Both
+bounded hypotheses are closed; the remaining blocker is independent
+strict-from-scratch training behavior, not a canonical task change.
+
+The action-rate-only diagnostic then froze `action_rate_l2` at `-0.1` for 750
+iterations. The run stayed finite and reset-free in training. Under the
+canonical strict battery, `model_250.pt` passed zero/forward/lateral/left-turn
+but failed yaw/right-turn; later `model_500.pt` and `model_749.pt` lost further
+directional response. Artifacts:
+`.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model250.json`,
+`.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model500.json`,
+and
+`.cache/isaaclab-assets/velocity_flat_command_battery_t13_action_rate_flat_model749.json`.
+This rejects action-rate freezing as the complete explanation, while retaining
+the early checkpoint as diagnostic evidence. The next isolated test is strict
+`track_ang_vel.weight=6.0`; no other profile changes are included.
+
+The angular-tracking-only diagnostic then raised strict
+`track_ang_vel.weight` from `2.0` to `6.0` for `750` iterations at `4096`
+environments. The run remained finite with no NaN terminations. Evaluated
+under the unchanged strict task, checkpoints `model_250.pt`, `model_500.pt`,
+and `model_749.pt` all pass zero/yaw/turn-left/turn-right but fail forward and
+lateral response (the endpoint has one negligible lateral reset). This rejects
+angular tracking weight as the complete explanation. Artifacts:
+`.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model250.json`,
+`.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model500.json`,
+and `.cache/isaaclab-assets/velocity_flat_command_battery_t14_angvel6_model749.json`.
+At that point the independent strict-from-scratch training gate remained
+blocked; the warm-start candidate was the only accepted cross-backend walking
+policy.
+
+The next linear-tracking-only diagnostic raised strict
+`track_lin_vel.weight` from `2.0` to `4.0` for `750` iterations at `4096`
+environments. It remained finite with no NaN terminations. Under the unchanged
+strict battery, checkpoints `model_250.pt`, `model_500.pt`, and `model_749.pt`
+all pass zero/forward/lateral/turn-left but fail yaw and turn-right. Evidence:
+`.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model250.json`,
+`.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model500.json`,
+and `.cache/isaaclab-assets/velocity_flat_command_battery_t15_linvel4_model749.json`.
+This is complementary to T14's angular-only result and motivates the bounded
+T16 tracking-pair test; no canonical task change is implied.
+
+The bounded T16 tracking-pair test changed only the strict tracking weights to
+`track_lin_vel=4.0` and `track_ang_vel=6.0`. Its `750`-iteration,
+`4096`-environment run remained finite with no NaN terminations. All saved
+checkpoints pass zero/forward/lateral; positive-yaw response is absent, while
+turn-left appears from `model_500.pt` onward. This rejects the pair alone as a
+complete independent-training solution.
+
+Run directory:
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-11_15-09-43_t16_tracking_pair_750/`
+
+Evidence artifacts:
+
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model250.json`
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model500.json`
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t16_tracking_pair_model749.json`
+
+The T17 symmetry diagnostic retained the T16 tracking pair and added the
+left-right 61D mirror transform/data augmentation. The dedicated runner and
+transform pass CPU involution/sign contracts and a five-iteration IsaacLab
+smoke. Its `750`-iteration strict run remained finite with no NaN terminations.
+`model_500.pt` passes zero/forward/lateral/turn-left but fails yaw/turn-right;
+`model_749.pt` passes zero/yaw/turn-left/turn-right but fails lateral. No
+checkpoint passes all six battery cases, so symmetry is retained only as a
+diagnostic surface and is not merged into the canonical strict task.
+
+Run directory:
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_symmetry/2026-09-11_15-51-08_t17_symmetry_tracking_pair_750/`
+
+Evidence artifacts:
+
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model250.json`
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model500.json`
+- `.cache/isaaclab-assets/velocity_flat_command_battery_t17_symmetry_model749.json`
+
+At that point the independent strict-from-scratch gate remained open. T16 and T17 are
+rejected as complete explanations; the warm-start `model_999.pt` remains the
+only accepted cross-backend walking candidate and must retain its warm-start
+provenance.
+
+T18 attempted a dense checkpoint window with `agent.save_interval=50`, but
+its manifest shows the default symmetry tracking weights (`2.0/2.0`) rather
+than T17's defining `4.0/6.0` pair. Although every checkpoint replay was
+finite, this is invalid provenance for the T17 window and is retained only as
+a default-pair diagnostic.
+
+Run directory:
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_symmetry/2026-09-11_16-34-04/`
+
+The 16 T18 battery reports are retained as
+`.cache/isaaclab-assets/velocity_flat_command_battery_t18_window_model{0,50,100,150,200,250,300,350,400,450,500,550,600,650,700,749}.json`.
+
+The corrected T19 continuation preserved the exact T17 `4.0/6.0` tracking pair
+and changed only checkpoint observability. Its dense battery found no all-six
+checkpoint: vectors were `FFFFFF`, `PPFFFF`, `PPPFFP`, `PPPPFP`, `PPPFFF`,
+`PPFPFF`, `PPPFPF`, `PPPFPP`, or `PPFPPP`. T19 is rejected and the independent
+strict-training gate remains blocked.
+
+T19 run directory:
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_symmetry/2026-09-11_17-26-30/`
+
+Reports:
+`.cache/isaaclab-assets/velocity_flat_command_battery_t19_exact_pair_model{0,50,100,150,200,250,300,350,400,450,500,550,600,650,700,749}.json`.
+
+## Accepted T22 strictification result
+
+The independently trained `IsaacLab-Velocity-Flat-MicroDuck-Strictification`
+run completed 1000 iterations from scratch. The final strict live-manager
+profile was explicitly applied before replay; `model_500.pt`, `model_750.pt`,
+and `model_999.pt` each pass all six battery cases with zero resets. The final
+checkpoint is
+`logs/rsl_rl/microduck_isaaclab_velocity_flat_strictification/2026-09-11_19-26-41/model_999.pt`
+(SHA256 `2034e7c3f6893f700de2d321746f1267e062aa3d3d29a8ceec4f3005e17e16ce`).
+
+The official IsaacLab play path exported
+`exported/policy.onnx` with finite `[1,61] -> [1,14]` inference (SHA256
+`371cb8d92300377363c89b5ada5c7c39683dd1464f93ea620c4c83859b3ce30e`). The
+same graph passes the headless CPU MuJoCo six-case rehearsal with zero resets
+and max tilt below `0.068 rad`:
+`.cache/isaaclab-assets/mujoco_onnx_battery_t22_strictification_model999.json`.
+This closes the strict trained-policy and simulator/runtime rehearsal gates;
+it does not authorize hardware testing.
+
+## Artifact identity
+
+| Backend | Task | Policy artifact | Artifact hash | Scene/runtime |
+| --- | --- | --- | --- | --- |
+| IsaacLab (corrected strict run) | `IsaacLab-Velocity-Flat-MicroDuck` | `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-52-35_strict_unclipped/model_5999.pt` | `db0cbd9cba9c3814c235674910206924b7e6a0bdcc2e0cccb2e8779cb7c52b04` | IsaacLab 3.0.0 / Isaac Sim 6.0.1 |
+| mjlab | `Mjlab-Velocity-Flat-MicroDuck` | `artifacts/specialists/velocity_flat/policy.onnx` | `a092ee993b691fab1fdc96206a7b3eab832d88c14248e205b3cd43f3c9e73317` | MuJoCo `scene.xml` |
+
+The mjlab artifact is the accepted policy from source commit `facd4f4`; its
+checkpoint hash is `a71c6c26ff369cb3c2a093649467d3a10bb2dd818dd75f21fb29918ae2cbae3c`.
+
+The earlier IsaacLab-only smoke checkpoint remains useful for debugging, but
+must not be compared as a matched baseline because it used a different command
+profile, reward kernel, network, and PPO budget.
+
+## Historical battery
+
+The table below is retained as the earlier diagnostic record and is not the
+corrected strict result. The current strict result is recorded immediately
+below it.
+
+The final IsaacLab checkpoint was evaluated with the same fixed command battery
+shape used for the runtime gate (250 control steps per case, 16 environments):
+
+| Command | Mean actual velocity | Mean tracking error | Resets | Max tilt | Mean absolute raw action |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| zero | `(-0.010, 0.003) m/s` | `0.087 m/s` | `0` | `0.665 rad` | `75.4` |
+| forward `0.20` | `(0.131, 0.002) m/s` | `0.121 m/s` | `0` | `1.526 rad` | `74.1` |
+| lateral `0.20` | `(-0.011, 0.129) m/s` | `0.112 m/s` | `0` | `1.877 rad` | `72.2` |
+| yaw `0.50` | `(-0.008, 0.006) m/s`, `0.004 rad/s` yaw | `0.088 m/s`, `1.201 rad/s` yaw | `0` | `0.888 rad` | `75.3` |
+
+Raw policy actions in the earlier checkpoint are large (p95 absolute action is
+about 125). That checkpoint was trained with the wrong Isaac-only clip and is
+not a strict-parity baseline; a post-fix raw-action replay becomes non-finite,
+so it cannot be used to infer behavior of the corrected recipe. The run is
+retained only for root-cause diagnosis, not acceptance.
+
+Battery artifact:
+`.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_match_5999.json`.
+
+## Corrected strict battery
+
+The corrected run uses `clip_actions=None`, seed `2026`, 16 environments, and
+300 steps per case. All tensors are finite and no environment reset occurred.
+Zero, yaw, turn-left, and turn-right pass; forward and lateral fail only the
+minimum command-response gate because the measured mean XY velocity remains
+near zero. This keeps the behavior gate open without treating the failure as a
+reward/PPO tuning request.
+
+Artifact: `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json`.
+Checkpoint SHA256: `db0cbd9cba9c3814c235674910206924b7e6a0bdcc2e0cccb2e8779cb7c52b04`.
+ONNX export: `logs/rsl_rl/microduck_isaaclab_velocity_flat_mjlab_match/2026-09-04_18-52-35_strict_unclipped/exported/policy.onnx`, checker passed, `[1,61] -> [1,14]`.
+Reset-fix regression battery: `.cache/isaaclab-assets/velocity_flat_command_battery_resetfix_strict.json`.
+Directional trace: `.cache/isaaclab-assets/velocity_flat_directional_trace_resetfix2_4x4.json`.
+
+## P0 policy A/B diagnosis
+
+To separate a strict-checkpoint behavior failure from command/action wiring or
+the PhysX runtime, the accepted mjlab `model_5999.pt` was loaded by the same
+IsaacLab 3.0.0 / rsl-rl-lib 5.4.1 runner and evaluated with the same seed,
+reset protocol, command freeze, 16 environments, and 300-step six-case
+battery. The accepted policy passes every case in IsaacLab, including positive
+forward and lateral response, while the corrected strict IsaacLab checkpoint
+fails only those two response gates. This is a policy/training behavior delta,
+not evidence of a command-slot, action-boundary, or BAM target-path mismatch.
+
+| Checkpoint evaluated in IsaacLab | Battery result | Forward mean XY velocity | Lateral mean XY velocity | Resets | Artifact |
+| --- | --- | ---: | ---: | ---: | --- |
+| accepted mjlab `model_5999.pt` | all six cases pass | `(0.118, 0.011) m/s` | `(-0.040, 0.068) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_mjlab_policy_p0.json` |
+| corrected strict IsaacLab `model_5999.pt` | forward/lateral blocked | `(-0.011, 0.004) m/s` | `(-0.014, -0.001) m/s` | `0` | `.cache/isaaclab-assets/velocity_flat_command_battery_strict_unclipped.json` |
+
+The bounded intermediate trace independently records exact command tails,
+raw actions, canonical-to-simulator action order, BAM delayed targets and
+efforts, and body-frame velocities for zero/forward/lateral/yaw:
+`.cache/isaaclab-assets/velocity_flat_directional_trace_p0.json`. It reports
+finite tensors, raw-action to action-manager equality, command tails exactly
+`[0.2,0,0]` and `[0,0.2,0]`, and delay lags in `3..6`. Therefore no reward/PPO
+or action-clipping change is justified by this failure. The known PhysX solver
+and same-step external-load friction timing limitation remains separately
+recorded as `BACKEND_DELTA`.
+
+## Common forward slice
+
+| Metric | IsaacLab smoke checkpoint | mjlab accepted policy |
+| --- | ---: | ---: |
+| Requested command | `0.20 m/s` | `0.20 m/s` |
+| Mean actual forward velocity | `0.0916 m/s` | `0.0786 m/s` equivalent from `0.4718 m / 6 s` |
+| Lateral velocity | `-0.0234 m/s` | `0.0320 m/s` equivalent from `0.1922 m / 6 s` |
+| Mean XY tracking error | `0.1421 m/s` | not reported by this MuJoCo battery |
+| Episode/reset evidence | `85` resets / `4000` env-steps (`0.0213`) | no reset; finite 300-step rollout |
+| Maximum tilt | `0.8514 rad` | `0.0818 rad` |
+| 61D/14D finite | yes | yes |
+
+The forward displacement values are not identical observables: IsaacLab resets
+individual environments during the slice, while MuJoCo records one continuous
+episode. The useful conclusion is qualitative: the accepted mjlab policy holds
+an upright continuous rollout, whereas the five-iteration IsaacLab checkpoint
+does not yet show that behavior. This is consistent with the IsaacLab PPO
+smoke metrics and is not evidence that either simulator is physically wrong.
+
+## PhysX force timing boundary
+
+The IsaacLab runtime probe confirms that the PhysX articulation view exposes
+both `get_dof_projected_joint_forces()` (`(envs, 14)`) and
+`get_link_incoming_joint_force()` (`(envs, 15, 6)`). They return finite buffers,
+but refresh after `sim.step()`: reads after `scene.write_data_to_sim()` still
+describe the previous solved state. The BAM actuator callback runs before that
+step, so a same-step external-load torque is not available to
+`BamActuator.compute()`. A one-step delayed feedback bridge would be a different
+controller and is not accepted as BAM parity. The current motor-only friction
+bridge therefore remains the honest boundary.
+
+Evidence: `.cache/isaaclab-assets/force_timing_probe.json`, generated by
+`scripts/isaaclab/force_timing_probe.py` in the pinned IsaacLab 3.0.0 / Isaac
+Sim 6.0.1 runtime.
+
+The bounded follow-up diagnostic is `scripts/isaaclab/lagged_friction_bridge_probe.py`.
+It samples projected minus actuation effort after `scene.update()` and applies
+that value on the next pre-step through a reset-safe
+`LaggedExternalEffort` buffer. The pinned runtime report
+`.cache/isaaclab-assets/lagged_friction_bridge_probe.json` is finite for all
+six fixed-root cases, reports the expected zero-reset/one-step warm-up, and
+shows distinct lagged friction coefficients at each scale.
+
+The walking regression was then run against T22 `model_999.pt`. Both the
+one-step-lag and production motor-only paths passed the six cases at 100 steps
+(artifacts `.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_one_step_lag_100.json`
+and `.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_production_100.json`).
+At the canonical 300 steps, the lagged path failed `turn_left` with one tilt
+reset and `max_tilt_rad=1.08818`; the other five cases passed. See
+`.cache/isaaclab-assets/velocity_flat_command_battery_t22_model999_one_step_lag_300.json`.
+This rejects the lagged controller as a production BAM parity solution. It
+remains a diagnostic-only controller, the parity row remains `BACKEND_DELTA`,
+and the accepted task stays motor-only. Do not tune the bridge to make this
+checkpoint pass.
+
+## Decision boundary
+
+Task H has a reproducible runtime battery, checkpoint manifest, and an
+explicitly matched core recipe. The 6000-iteration run completed normally, but
+it should not be marked accepted as a walking or backend-parity result: the
+final battery shows saturated actions, high tilt, and failed yaw tracking.
+The next engineering step is to close the remaining semantic evidence gaps
+(especially raw sensor-source comparison and the controlled RSL-RL compatibility
+probe) before attributing any difference to simulator backend behavior;
+the remaining model limitation is also explicit: USD `drive_configured=false`
+and BAM external-load friction parity is unavailable.
+
+Raw inputs:
+
+- `.cache/isaaclab-assets/velocity_flat_command_battery.json`
+- `.cache/mjlab_velocity_flat_command_battery/velocity_flat/report.json`
+
+## Fixed-root dynamics proof
+
+The bounded same-state comparison uses the walk MJCF HOME, a fixed root at
+`z=0.5 m`, `dt=0.005 s`, a three-step target delay, `7.5 V` nominal supply,
+and `0.1 V/Nm` previous-motor-effort sag. Task DR is pinned to neutral values.
+It records step and sine target cases for three paths: MuJoCo with BAM's native
+solver friction fields, MuJoCo motor-only, and IsaacLab PhysX. The merged report
+is `.cache/isaaclab-assets/fixed_root_dynamics_parity_1x12.json` (finite,
+SHA256 `009e205e65722a36a67e9c62a7eee7dbd2d1f88b03ea03813ec72f8e3bccdb26`).
+Delayed target start error is at most `2.98e-9`; IsaacLab's trajectory is
+materially closer to MuJoCo motor-only than MuJoCo's BAM-solver trajectory
+(step qdot errors `0.0818` vs `0.4020 rad/s`; sine `0.0060` vs `0.1503
+rad/s`). This is evidence for the explicit `BACKEND_DELTA`: PhysX cannot
+provide the same-step solved external load to the pre-step BAM callback, and
+solver integration is not expected to be byte-identical.

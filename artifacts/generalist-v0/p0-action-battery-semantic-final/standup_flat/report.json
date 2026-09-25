@@ -1,0 +1,78 @@
+{
+  "policy_id": "standup_flat",
+  "task": "Mjlab-StandUp-Flat-MicroDuck",
+  "profile": "walk_all_collisions",
+  "scene": "/home/mi/ws/gogo/microduck_rl/src/mjlab_microduck/robot/microduck/scene.xml",
+  "checkpoint_sha256": "3a87625b26592b891333fa72c4c7827301c02dcce6577c5ea0e04983f4032700",
+  "onnx_sha256": "f0594aaa581c9259c4e7c1e369f9d0fe6f23b962c55dc84a71df53b369d5ca1d",
+  "parity_report_sha256": "0f32d46b21fa31f5d0bff6e52eb61c9b39b120341c3873cb02e97dceab980d99",
+  "observation_dim": 61,
+  "action_dim": 14,
+  "passed": true,
+  "cases": [
+    {
+      "id": "sit_to_stand",
+      "seed": 42,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.03258619791462627,
+        -0.007416651944949136,
+        0.05632442237113429
+      ],
+      "max_tilt_rad": 0.12047779304220187,
+      "final_tilt_rad": 0.004884296881971538,
+      "final_height_m": 0.11632442237113429,
+      "max_abs_raw_action": 1.8898147344589233,
+      "max_abs_applied_action": 1.8898147344589233,
+      "contact_geoms": [
+        "floor",
+        "geom_26",
+        "geom_67",
+        "geom_76",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "primary",
+      "trace": "artifacts/generalist-v0/p0-action-battery-semantic-final/standup_flat/sit_to_stand.npz"
+    },
+    {
+      "id": "prone_recovery_probe",
+      "seed": 43,
+      "input_mode": "direct_step",
+      "requested_speed_m_s": null,
+      "steps": 300,
+      "finite_61d_14d": true,
+      "world_displacement_m": [
+        -0.15178294236085918,
+        0.004370384398977036,
+        -0.010893199795342694
+      ],
+      "max_tilt_rad": 3.0859222537664945,
+      "final_tilt_rad": 1.1116305699860656,
+      "final_height_m": 0.05910680020465731,
+      "max_abs_raw_action": 2.0151443481445312,
+      "max_abs_applied_action": 2.0151443481445312,
+      "contact_geoms": [
+        "floor",
+        "geom_49",
+        "geom_56",
+        "geom_58",
+        "geom_9",
+        "left_foot_collision",
+        "right_foot_collision"
+      ],
+      "recovered": false,
+      "passed": true,
+      "failure_reason": null,
+      "acceptance": "probe",
+      "passed_probe": false,
+      "trace": "artifacts/generalist-v0/p0-action-battery-semantic-final/standup_flat/prone_recovery_probe.npz"
+    }
+  ]
+}

@@ -1,0 +1,12 @@
+.git
+.venv
+.serena
+logs
+wandb
+artifacts
+data
+downloads
+*.onnx
+*.pt
+__pycache__
+*.pyc

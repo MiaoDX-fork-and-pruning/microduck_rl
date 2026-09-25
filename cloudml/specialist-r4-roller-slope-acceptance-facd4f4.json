@@ -1,0 +1,61 @@
+{
+  "schema_version": 1,
+  "task_id": "Mjlab-RollerSlope-Flat-MicroDuck",
+  "policy_id": "roller_slope",
+  "source_commit": "facd4f4",
+  "accepted": true,
+  "training": {
+    "origin": "local RTX 3090 remediation",
+    "bootstrap_lineage": "CloudML R3 t-20260831152607-wxmy9 model_10750.pt",
+    "bootstrap_sha256": "49dfcda507be25cefcdd96299785c9bbc13e2705e3c54e32075b51a8ace18f6d",
+    "continuations": 2,
+    "iterations_per_continuation": 500,
+    "num_envs": 4096,
+    "learning_rate": 0.0001,
+    "entropy_coefficient": 0.001
+  },
+  "checkpoint": {
+    "filename": "model_11748.pt",
+    "sha256": "044b8e20b9d7608f378fd5f0075d349d109cb02446696ba96affa9efd0feb241"
+  },
+  "evaluation": {
+    "seed": 42,
+    "episodes": 32,
+    "main_task_term": "wheel_glide",
+    "success_threshold": 5.0,
+    "minimum_success_rate": 0.8,
+    "minimum_main_task_metric": 7.0,
+    "success_rate": 0.84375,
+    "main_task_metric": 7.30036378896485,
+    "termination_counts": {
+      "time_out": 27,
+      "fell_over": 4,
+      "fell_into_void": 1
+    },
+    "finite": true,
+    "penalties_non_positive": true,
+    "report_sha256": "238c0744cc7cfeb2743ab948c7c4e545bd52dba8016026c517112e4e933f426e"
+  },
+  "video": {
+    "filename": "diagnostic-model-11748.mp4",
+    "duration_seconds": 15.0,
+    "sha256": "b6e0648a5ae44acf3aaaa0c7df3cdd3ea1a7cdc07b607e9b7d916d30da125ebf",
+    "review_passed": true,
+    "review": "Episode 0 remains upright and coherent throughout the full 15-second clip, visibly glides down the ramp, and reaches the flat runout without falling, prone parking, incoherent contact, or a reset. This matches its full 20-second time_out and wheel_glide=10.1691."
+  },
+  "onnx": {
+    "filename": "model_11748.onnx",
+    "sha256": "bfaa1c61f0809131cfd6e404c0e698f40092b458dc89ccb9c0038e20c92fd927",
+    "input_shape": [1, 61],
+    "output_shape": [1, 14],
+    "normalizer_baked": true,
+    "onnx_checker_passed": true,
+    "golden_sha256": "483ffb0cd0b32d4f96b85cb1a237b208af0bf72ecffe6daac0a5611d3dcee0e7",
+    "parity_report_sha256": "8088b3ee5e4964b21fedc444dc2db08c17db8eaf06cb090f691300b3c82107b3",
+    "parity_samples": 8,
+    "parity_failed_values": 0,
+    "parity_max_abs_error": 0.000026702880859375,
+    "parity_passed": true
+  },
+  "artifact_prefix": "/dongxu/microduck_rl/runs/specialist-r4/roller-slope-facd4f4-v1"
+}

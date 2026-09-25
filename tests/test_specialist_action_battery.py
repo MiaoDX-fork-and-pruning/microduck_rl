@@ -1,0 +1,136 @@
+import importlib.util
+from pathlib import Path
+import sys
+
+import numpy as np
+import pytest
+
+
+_SPEC = importlib.util.spec_from_file_location(
+    "run_specialist_action_battery",
+    Path(__file__).parents[1] / "scripts" / "run_specialist_action_battery.py",
+)
+assert _SPEC and _SPEC.loader
+_MODULE = importlib.util.module_from_spec(_SPEC)
+sys.modules[_SPEC.name] = _MODULE
+_SPEC.loader.exec_module(_MODULE)
+
+
+def test_velocity_battery_has_every_speed_and_both_input_modes():
+    cases = _MODULE.command_cases("velocity_flat", smoke=False)
+    assert len(cases) == 12
+    assert {case["speed"] for case in cases} == set(_MODULE.COMMAND_SPEEDS)
+    assert {case["input_mode"] for case in cases} == set(_MODULE.COMMAND_MODES)
+
+
+def test_adaptive_battery_has_six_frozen_capability_buckets():
+    cases = _MODULE.command_cases("adaptive_velocity", smoke=False)
+    assert [case["bucket"] for case in cases] == [
+        "zero", "forward", "lateral", "yaw", "turn-left", "turn-right"
+    ]
+    np.testing.assert_allclose(
+        _MODULE.requested_command("adaptive_velocity", cases[2], 0, 100).tolist()[:3],
+        [0.0, 0.12, 0.0],
+    )
+
+
+def test_smoke_battery_is_one_direct_step_case():
+    assert _MODULE.command_cases("velocity_rollers", smoke=True) == [
+        {"id": "vx_0.03_direct_step", "speed": 0.03, "input_mode": "direct_step"}
+    ]
+
+
+def test_profiles_keep_walk_all_collisions_and_rollers_separate():
+    assert _MODULE.POLICY_PROFILES["velocity_flat"] == "walk_all_collisions"
+    assert _MODULE.POLICY_PROFILES["standup_flat"] == "walk_all_collisions"
+    assert _MODULE.POLICY_PROFILES["velocity_rollers"] == "rollers"
+    assert len(set(_MODULE.PROFILE_SCENES.values())) == 2
+
+
+@pytest.mark.parametrize("yaw", [0.0, 0.7])
+def test_trunk_velocity_matches_command_axes_despite_rotated_inertia(yaw):
+    import mujoco
+
+    model = mujoco.MjModel.from_xml_path(str(_MODULE.PROFILE_SCENES["walk_all_collisions"]))
+    data = mujoco.MjData(model)
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "trunk_base")
+    joint_id = model.body_jntadr[body_id]
+    qadr = model.jnt_qposadr[joint_id]
+    vadr = model.jnt_dofadr[joint_id]
+    data.qpos[qadr:qadr + 3] = [0.0, 0.0, 0.5]
+    data.qpos[qadr + 3:qadr + 7] = [np.cos(yaw / 2), 0.0, 0.0, np.sin(yaw / 2)]
+    linear_body = np.array([0.12, -0.03, 0.01])
+    rotation = np.array([[np.cos(yaw), -np.sin(yaw), 0.0],
+                         [np.sin(yaw), np.cos(yaw), 0.0], [0.0, 0.0, 1.0]])
+    angular_body = np.array([0.1, -0.2, 0.8])
+    data.qvel[vadr:vadr + 3] = rotation @ linear_body
+    data.qvel[vadr + 3:vadr + 6] = angular_body
+    mujoco.mj_forward(model, data)
+
+    # The real trunk has both an offset CoM and rotated principal axes. A
+    # local inertial-frame query must not satisfy the body-command contract.
+    inertial_velocity = np.zeros(6)
+    mujoco.mj_objectVelocity(model, data, mujoco.mjtObj.mjOBJ_BODY, body_id, inertial_velocity, 1)
+    assert not np.allclose(inertial_velocity[3:], linear_body)
+    metrics = _MODULE.trunk_metrics(model, data, body_id)
+    np.testing.assert_allclose(metrics["linear_velocity_m_s"], linear_body, atol=1e-7)
+    np.testing.assert_allclose(metrics["angular_velocity_rad_s"], angular_body, atol=1e-7)
+
+
+def test_command_ema_is_distinct_from_direct_step():
+    requested = np.array([0.2, 0.0, 0.0], dtype=np.float32)
+    previous = np.zeros(3, dtype=np.float32)
+    direct = _MODULE.apply_command_input(requested, previous, "direct_step")
+    ema = _MODULE.apply_command_input(requested, previous, "command_ema", alpha=0.1)
+    np.testing.assert_allclose(direct, [0.2, 0.0, 0.0])
+    np.testing.assert_allclose(ema, [0.02, 0.0, 0.0])
+    with pytest.raises(ValueError, match="unsupported"):
+        _MODULE.apply_command_input(requested, previous, "scheduler")
+
+
+def test_failure_classification_is_per_case():
+    passed, reason = _MODULE.classify_case(
+        "velocity_flat", True, [0.1, 0.0, 0.0], 0.2, 0.1, False
+    )
+    assert passed and reason is None
+    passed, reason = _MODULE.classify_case(
+        "velocity_flat", True, [0.0, 0.0, 0.0], 0.2, 0.1, False
+    )
+    assert not passed and reason == "insufficient_forward_displacement"
+    passed, reason = _MODULE.classify_case(
+        "standup_flat", True, [0.0, 0.0, 0.0], 1.4, 1.3, False
+    )
+    assert not passed and reason == "ended_fallen"
+
+
+def test_low_speed_deadband_may_hold_still_but_higher_speed_must_move():
+    low = _MODULE.classify_case(
+        "velocity_flat", True, [0.0, 0.0, 0.0], 0.1, 0.1, False, 0.05
+    )
+    moving = _MODULE.classify_case(
+        "velocity_flat", True, [0.0, 0.0, 0.0], 0.1, 0.1, False, 0.08
+    )
+    assert low == (True, None)
+    assert moving == (False, "insufficient_forward_displacement")
+
+
+def test_sitstand_case_contains_a_commanded_rise():
+    case = _MODULE.command_cases("sitstand_flat", smoke=False)[0]
+    assert _MODULE.requested_command("sitstand_flat", case, 0, 100)[0] == 1.0
+    assert _MODULE.requested_command("sitstand_flat", case, 50, 100)[0] == 0.0
+
+
+def test_standup_separates_primary_sit_to_stand_from_recovery_probe():
+    cases = _MODULE.command_cases("standup_flat", smoke=False)
+    assert [case["id"] for case in cases] == ["sit_to_stand", "prone_recovery_probe"]
+    assert cases[0]["acceptance"] == "primary"
+    assert cases[1]["acceptance"] == "probe"
+    assert [case["id"] for case in _MODULE.command_cases("standup_flat", smoke=True)] == ["sit_to_stand"]
+
+
+def test_every_accepted_specialist_has_an_explicit_profile():
+    entries = _MODULE.load_manifest(
+        Path(__file__).parents[1] / "artifacts" / "specialist_artifact_manifest.json"
+    )
+    assert len(entries) == 13
+    assert {entry["id"] for entry in entries} == set(_MODULE.POLICY_PROFILES)

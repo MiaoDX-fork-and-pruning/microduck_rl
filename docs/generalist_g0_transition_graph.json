@@ -1,0 +1,15 @@
+{
+  "schema": "generalist-g0-transition-graph",
+  "version": 1,
+  "states": ["VELSTAND", "VELOCITY", "SITSTAND"],
+  "legal_edges": [
+    {"from": "VELSTAND", "to": "VELOCITY"},
+    {"from": "VELOCITY", "to": "VELSTAND"},
+    {"from": "VELSTAND", "to": "SITSTAND"},
+    {"from": "SITSTAND", "to": "VELSTAND"}
+  ],
+  "unsupported_edges": [
+    {"from": "VELOCITY", "to": "SITSTAND", "reason": "route through VELSTAND; direct edge is unproven"},
+    {"from": "SITSTAND", "to": "VELOCITY", "reason": "route through VELSTAND; direct edge is unproven"}
+  ]
+}

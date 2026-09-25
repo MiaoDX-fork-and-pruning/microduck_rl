@@ -1,0 +1,47 @@
+jobName: microduck-specialist-p0-velocity-652b7ce
+description: Specialist P0 Velocity calibration from commit 652b7ce1b19f
+accessType: PRIVATE
+imageConfig:
+  imageUrl: micr.cloud.mioffice.cn/cc-proxy/thelastfoot-openpi-g2-training:microduck-rl-cuda128-20260829-0503
+  imageCommand: |-
+    set -euo pipefail
+    export PYTHONUNBUFFERED=1
+    export PYTHONPATH=/mnt/cloudml/source/src
+    cd /mnt/cloudml/output
+    /opt/microduck_rl/.venv/bin/train Mjlab-Velocity-Flat-MicroDuck \
+      --env.scene.num-envs 4096 \
+      --agent.max_iterations 6000 \
+      --agent.logger tensorboard \
+      --agent.run_name p0-velocity-652b7ce
+juiceFsMountConfigs:
+  - volume: robot-intelligent-planning-data
+    juiceFsCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/source/652b7ce-20260829T140000Z
+    mountPath: /mnt/cloudml/source
+    readOnly: true
+  - volume: robot-intelligent-planning-data
+    juiceFsCluster: wlcb-cloudml
+    subPath: /dongxu/microduck_rl/runs/specialist-p0/velocity-652b7ce-v2
+    mountPath: /mnt/cloudml/output
+    readOnly: false
+queueId: "11759"
+priority: 5
+preemptible: false
+framework: pytorch
+resourceConfigs:
+  - nodeRole: worker
+    nodeNumber: 1
+    perNodeResourceSpec:
+      resourcePriority: GUARANTEED
+      resourceName: cloudml.ng1r49-8-8.13-107
+      resourceNumber: 1
+enableTensorboard: false
+enableMetrics: false
+retryConfig:
+  enableRetry: false
+  maxRetryTimes: 0
+  policySets:
+    - JobFailed
+diagOptions:
+  - name: HangDetection
+    enable: false

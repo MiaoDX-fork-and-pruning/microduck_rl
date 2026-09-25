@@ -1,0 +1,248 @@
+from __future__ import annotations
+
+import copy
+import random
+
+import numpy as np
+import pytest
+import torch
+
+from mjlab_microduck.tasks.adaptive_curriculum import AxisConfig, CapabilityGate
+from mjlab_microduck.tasks.adaptive_runner import AdaptiveMicroduckOnPolicyRunner
+
+
+class _EventCfg:
+    def __init__(self) -> None:
+        self.params = {"ranges": (-0.003, 0.003)}
+
+
+class _EventManager:
+    def __init__(self) -> None:
+        self.cfg = _EventCfg()
+
+    def get_term_cfg(self, name: str):
+        assert name == "randomize_com"
+        return self.cfg
+
+
+class _Env:
+    def __init__(self) -> None:
+        self.event_manager = _EventManager()
+        self.cfg = type("Cfg", (), {"adaptive_evaluator_schema_version": 2, "task_id": "fake"})()
+
+
+class _Alg:
+    def __init__(self) -> None:
+        self.state = {"weight": torch.tensor([1.0])}
+
+
+def _gate() -> CapabilityGate:
+    return CapabilityGate(
+        (AxisConfig("com_range", (0.003, 0.010), 0.8, 0.6, pass_windows=2),),
+        critical_buckets=("zero", "forward", "yaw"),
+        axis_mode="com",
+        ema_alpha=1.0,
+    )
+
+
+def _runner() -> AdaptiveMicroduckOnPolicyRunner:
+    runner = object.__new__(AdaptiveMicroduckOnPolicyRunner)
+    runner.env = _Env()
+    runner.cfg = {"num_steps_per_env": 24, "upload_model": False}
+    runner.alg = _Alg()
+    runner.current_learning_iteration = 0
+    runner.evaluation_events = []
+    runner.last_known_good_checkpoint = None
+    runner.capability_gate = _gate()
+    return runner
+
+
+@pytest.fixture
+def fake_parent_io(monkeypatch):
+    """Keep the test on CPU while retaining the runner's real metadata path."""
+
+    def save(self, path, infos=None):
+        torch.save(
+            {
+                "iter": self.current_learning_iteration,
+                "infos": infos,
+                "fake_alg_state": copy.deepcopy(self.alg.state),
+            },
+            path,
+        )
+
+    def load(self, path, load_cfg=None, strict=True, map_location=None):
+        payload = torch.load(path, map_location=map_location, weights_only=False)
+        self.current_learning_iteration = payload["iter"]
+        self.alg.state = copy.deepcopy(payload["fake_alg_state"])
+        return payload["infos"]
+
+    monkeypatch.setattr("mjlab_microduck.tasks.adaptive_runner.MicroduckOnPolicyRunner.save", save)
+    monkeypatch.setattr("mjlab_microduck.tasks.adaptive_runner.MicroduckOnPolicyRunner.load", load)
+
+
+def _good_metrics() -> dict[str, float]:
+    return {"zero": 0.95, "forward": 0.90, "yaw": 0.88}
+
+
+def test_save_load_replays_transition_live_range_and_rng(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "model_0.pt"
+
+    random.seed(11)
+    np.random.seed(11)
+    torch.manual_seed(11)
+    runner.save(str(checkpoint))
+    expected_random = (random.random(), float(np.random.rand()), float(torch.rand(1)))
+
+    # Advance the original branch and record the deterministic expected trace.
+    runner.current_learning_iteration = 1
+    runner.record_capability_metrics(_good_metrics(), step=1, checkpoint=str(checkpoint), seed=7)
+    runner.current_learning_iteration = 2
+    runner.record_capability_metrics(_good_metrics(), step=2, checkpoint=str(checkpoint), seed=7)
+    expected_state = runner.capability_gate.state_dict()
+    expected_range = runner.env.event_manager.cfg.params["ranges"]
+    expected_alg = copy.deepcopy(runner.alg.state)
+
+    # Corrupt every state source, then restore the one explicit checkpoint.
+    runner.current_learning_iteration = 99
+    runner.alg.state["weight"] = torch.tensor([99.0])
+    runner.capability_gate = _gate()
+    runner.env.event_manager.cfg.params["ranges"] = (-0.99, 0.99)
+    random.random()
+    np.random.rand()
+    torch.rand(1)
+    runner.load(str(checkpoint))
+
+    assert runner.current_learning_iteration == 0
+    assert runner.capability_gate.state_dict() == _gate().state_dict()
+    assert runner.env.event_manager.cfg.params["ranges"] == (-0.003, 0.003)
+    assert torch.equal(runner.alg.state["weight"], expected_alg["weight"])
+    replay_random = (random.random(), float(np.random.rand()), float(torch.rand(1)))
+    assert replay_random == pytest.approx(expected_random)
+
+    # Replaying the same validated windows from the restored checkpoint gives
+    # the same transition and live manager range as the original branch.
+    runner.current_learning_iteration = 1
+    runner.record_capability_metrics(_good_metrics(), step=1, checkpoint=str(checkpoint), seed=7)
+    transition = runner.record_capability_metrics(_good_metrics(), step=2, checkpoint=str(checkpoint), seed=7)
+    assert transition is not None
+    assert runner.capability_gate.state_dict() == expected_state
+    assert runner.env.event_manager.cfg.params["ranges"] == expected_range
+
+
+def test_load_restores_cpu_rng_when_checkpoint_loaded_on_cuda_map_location(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "cuda-map.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_rng_state"]["torch"] = payload["infos"]["adaptive_rng_state"]["torch"].cuda() if torch.cuda.is_available() else payload["infos"]["adaptive_rng_state"]["torch"]
+    torch.save(payload, checkpoint)
+    runner.load(str(checkpoint), map_location="cuda:0")
+    assert isinstance(torch.get_rng_state(), torch.Tensor)
+
+
+def test_load_rejects_incompatible_axis_state_without_partial_apply(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "bad.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_curriculum"]["axis_mode"] = "head_com"
+    torch.save(payload, checkpoint)
+
+    before = runner.capability_gate.state_dict()
+    with pytest.raises(ValueError, match="axis mode/allowlist"):
+        runner.load(str(checkpoint))
+    assert runner.capability_gate.state_dict() == before
+
+
+def test_load_treats_legacy_null_com_rehearsal_as_disabled(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "legacy-null-com.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, map_location="cpu", weights_only=False)
+    payload["infos"]["adaptive_curriculum"]["final_com_fraction"] = None
+    torch.save(payload, checkpoint)
+    runner.load(str(checkpoint))
+    assert runner.final_com_fraction == 0.0
+
+
+def test_full_resume_and_rollback_restore_live_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.0
+    # The live algorithm owns the value, even if a schedule changed it since launch.
+    runner.cfg["algorithm"] = {"entropy_coef": 0.01}
+    checkpoint = tmp_path / "consolidated.pt"
+    runner.save(str(checkpoint))
+
+    resumed = _runner()
+    resumed.alg.entropy_coef = 0.01
+    resumed.load(str(checkpoint))
+    assert resumed.alg.entropy_coef == 0.0
+    assert resumed.cfg["algorithm"]["entropy_coef"] == 0.0
+    assert resumed.adaptive_checkpoint_info()["adaptive_curriculum"]["entropy_coef"] == 0.0
+
+    resumed.last_known_good_checkpoint = str(checkpoint)
+    resumed.alg.entropy_coef = 0.02
+    resumed.rollback(str(checkpoint))
+    assert resumed.alg.entropy_coef == 0.0
+
+
+def test_actor_only_load_does_not_change_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.0
+    checkpoint = tmp_path / "inference.pt"
+    runner.save(str(checkpoint))
+    runner.alg.entropy_coef = 0.03
+    runner.env.cfg.adaptive_entropy_coef_override = 0.02
+    runner.load(str(checkpoint), load_cfg={"actor": True})
+    assert runner.alg.entropy_coef == 0.03
+
+
+def test_legacy_checkpoint_keeps_configured_entropy(tmp_path, fake_parent_io):
+    runner = _runner()
+    checkpoint = tmp_path / "legacy-entropy.pt"
+    runner.save(str(checkpoint))
+    runner.alg.entropy_coef = 0.02
+    runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.02
+
+
+def test_explicit_entropy_override_is_recorded_and_persisted(tmp_path, fake_parent_io):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.01
+    checkpoint = tmp_path / "exploration.pt"
+    runner.save(str(checkpoint))
+    runner.env.cfg.adaptive_entropy_coef_override = 0.0
+    runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.0
+    assert runner.evaluation_events[-1] == {
+        "kind": "entropy_override",
+        "previous_entropy_coef": 0.01,
+        "entropy_coef": 0.0,
+        "completed_iterations": 1,
+    }
+    consolidated = tmp_path / "consolidation.pt"
+    runner.save(str(consolidated))
+    resumed = _runner()
+    resumed.alg.entropy_coef = 0.01
+    resumed.load(str(consolidated))
+    assert resumed.alg.entropy_coef == 0.0
+
+
+@pytest.mark.parametrize("bad_entropy", [float("nan"), float("inf"), -0.01, True, None])
+def test_invalid_saved_entropy_is_rejected_before_curriculum_changes(
+    tmp_path, fake_parent_io, bad_entropy
+):
+    runner = _runner()
+    runner.alg.entropy_coef = 0.01
+    checkpoint = tmp_path / "invalid-entropy.pt"
+    runner.save(str(checkpoint))
+    payload = torch.load(checkpoint, weights_only=False)
+    payload["infos"]["adaptive_curriculum"]["entropy_coef"] = bad_entropy
+    torch.save(payload, checkpoint)
+    before = runner.capability_gate.state_dict()
+    with pytest.raises(ValueError, match="entropy coefficient"):
+        runner.load(str(checkpoint))
+    assert runner.alg.entropy_coef == 0.01
+    assert runner.capability_gate.state_dict() == before
